@@ -24,9 +24,21 @@ function handle_input()
 	game.player.x = new_x
 	game.player.y = new_y
 
-	-- Update facing direction
-	if dx ~= 0 then
-		game.player.facing_right = (dx < 0)
+	-- Update facing direction based on dominant velocity
+	-- When vertical > horizontal, use north/south; otherwise east/west
+	if dx ~= 0 or dy ~= 0 then
+		if abs(dy) > abs(dx) then
+			-- Vertical movement dominates
+			if dy < 0 then
+				game.player.facing_dir = "north"
+			else
+				game.player.facing_dir = "south"
+			end
+		else
+			-- Horizontal movement dominates (or equal)
+			game.player.facing_dir = "east"  -- east/west use same sprites with flip
+			game.player.facing_right = (dx < 0)
+		end
 	end
 
 	-- Update walking animation
@@ -34,9 +46,9 @@ function handle_input()
 	if is_moving then
 		walk_timer = walk_timer + 1
 		local anim_speed = PLAYER_CONFIG.animation_speed
-		-- Simple 2-frame walk cycle: idle -> walk1 -> walk2 -> walk1 -> ...
-		local frame_index = flr(walk_timer / anim_speed) % 3
-		game.player.walk_frame = frame_index  -- 0, 1, or 2
+		-- 2-frame walk cycle: alternate between 1 and 2 (not 0 which is idle)
+		local frame_index = flr(walk_timer / anim_speed) % 2 + 1
+		game.player.walk_frame = frame_index  -- 1 or 2
 	else
 		walk_timer = 0
 		game.player.walk_frame = 0  -- idle when not moving
@@ -47,14 +59,37 @@ function handle_input()
 	cam_y = game.player.y
 end
 
--- Get current player sprite based on walk frame
+-- Get current player sprite based on facing direction and walk frame
 function get_player_sprite()
 	local frame = game.player.walk_frame
-	if frame == 0 then
-		return SPRITES.PLAYER_IDLE.id
-	elseif frame == 1 then
-		return SPRITES.PLAYER_WALK1.id
+	local dir = game.player.facing_dir or "east"
+
+	if dir == "north" then
+		-- Facing away from camera (north)
+		if frame == 0 then
+			return SPRITES.PLAYER_NORTH_IDLE.id
+		elseif frame == 1 then
+			return SPRITES.PLAYER_NORTH_WALK1.id
+		else
+			return SPRITES.PLAYER_NORTH_WALK2.id
+		end
+	elseif dir == "south" then
+		-- Facing toward camera (south)
+		if frame == 0 then
+			return SPRITES.PLAYER_SOUTH_IDLE.id
+		elseif frame == 1 then
+			return SPRITES.PLAYER_SOUTH_WALK1.id
+		else
+			return SPRITES.PLAYER_SOUTH_WALK2.id
+		end
 	else
-		return SPRITES.PLAYER_WALK2.id
+		-- East/West (horizontal) - use original sprites with flip_x
+		if frame == 0 then
+			return SPRITES.PLAYER_IDLE.id
+		elseif frame == 1 then
+			return SPRITES.PLAYER_WALK1.id
+		else
+			return SPRITES.PLAYER_WALK2.id
+		end
 	end
 end

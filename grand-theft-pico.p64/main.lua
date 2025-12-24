@@ -17,6 +17,7 @@ include("src/building.lua")
 include("src/collision.lua")
 include("src/ground.lua")
 include("src/input.lua")
+include("src/npc.lua")
 
 -- ============================================
 -- PALETTE SETUP
@@ -68,6 +69,7 @@ game = {
 		x = 200,
 		y = 200,
 		facing_right = true,
+		facing_dir = "east",  -- "north", "south", "east" (east/west use flip_x)
 		walk_frame = 0,
 	}
 }
@@ -76,9 +78,15 @@ game = {
 SHADOW_RADIUS = 37
 shadow_coltab_mode = 56  -- current color table sprite (cycles 56, 57, 58)
 
--- Night mode
+-- Night mode / Day-night cycle
 night_mode = false
 night_mask = nil  -- userdata for night overlay mask
+street_lights_on = false  -- street lights only on at full night
+
+-- Day-night cycle state
+day_night_state = "day"  -- "day", "to_night", "night", "to_day"
+day_night_transition_index = 0  -- current index in transition sequence
+day_night_transition_timer = 0  -- frames until next step
 
 -- Buildings created from level data in config
 buildings = {}
@@ -87,19 +95,17 @@ buildings = {}
 -- MAIN CALLBACKS
 -- ============================================
 
--- Rendering mode: "tline3d" or "tri"
+-- Rendering mode: "tline3d" (batched scanlines, fastest) or "tri" (batched textri)
 render_mode = "tline3d"
 
--- Apply color table for shapes (circ, rect, etc.)
-function apply_color_table(color_table_sprite)
+-- Draw with color table applied - pass a function to draw inside
+function draw_with_colortable(color_table_sprite, draw_fn)
 	local sprite = get_spr(color_table_sprite)
 	memmap(0x8000, sprite)
 	poke(0x550b, 0x3f)  -- enable color table for shapes
-	local shadow_x = SCREEN_CX
-	local shadow_y = SCREEN_CY + 6  -- at player's feet
-	circfill(shadow_x, shadow_y, SHADOW_RADIUS)
-	unmap(sprite)  -- unmap the color table
-	poke(0x550b, 0x00)  -- disable color table for shapes
+	draw_fn()  -- call the drawing function
+	unmap(sprite)
+	poke(0x550b, 0x00)  -- disable color table
 end
 
 -- Apply just one row of a color table
@@ -118,27 +124,111 @@ function reset_colortable()
 	poke(0x550b, 0x00)
 end
 
+-- Update day-night cycle transitions
+function update_day_night_cycle()
+	if day_night_state == "to_night" then
+		-- Transitioning to night
+		day_night_transition_timer = day_night_transition_timer - 1
+		if day_night_transition_timer <= 0 then
+			day_night_transition_index = day_night_transition_index + 1
+			if day_night_transition_index > #NIGHT_CONFIG.day_to_night then
+				-- Transition complete - now it's night
+				day_night_state = "night"
+				street_lights_on = true  -- turn on street lights
+				printh("Night time! Street lights ON")
+			else
+				-- Apply next color in sequence
+				NIGHT_CONFIG.darken_color = NIGHT_CONFIG.day_to_night[day_night_transition_index]
+				day_night_transition_timer = NIGHT_CONFIG.transition_speed
+				printh("Transition to night: " .. NIGHT_CONFIG.darken_color)
+			end
+		end
+	elseif day_night_state == "to_day" then
+		-- Transitioning to day
+		day_night_transition_timer = day_night_transition_timer - 1
+		if day_night_transition_timer <= 0 then
+			day_night_transition_index = day_night_transition_index + 1
+			if day_night_transition_index > #NIGHT_CONFIG.night_to_day then
+				-- Transition complete - now it's day
+				day_night_state = "day"
+				night_mode = false  -- disable overlay completely
+				printh("Day time!")
+			else
+				-- Apply next color in sequence
+				NIGHT_CONFIG.darken_color = NIGHT_CONFIG.night_to_day[day_night_transition_index]
+				day_night_transition_timer = NIGHT_CONFIG.transition_speed
+				printh("Transition to day: " .. NIGHT_CONFIG.darken_color)
+			end
+		end
+	end
+end
+
+-- Start transitioning to night or day
+function toggle_day_night()
+	if day_night_state == "day" then
+		-- Start transition to night
+		day_night_state = "to_night"
+		day_night_transition_index = 1
+		day_night_transition_timer = NIGHT_CONFIG.transition_speed
+		night_mode = true  -- enable overlay
+		street_lights_on = false  -- lights off during transition
+		NIGHT_CONFIG.darken_color = NIGHT_CONFIG.day_to_night[1]
+		printh("Starting transition to night: " .. NIGHT_CONFIG.darken_color)
+	elseif day_night_state == "night" then
+		-- Start transition to day
+		day_night_state = "to_day"
+		day_night_transition_index = 1
+		day_night_transition_timer = NIGHT_CONFIG.transition_speed
+		street_lights_on = false  -- turn off street lights immediately
+		NIGHT_CONFIG.darken_color = NIGHT_CONFIG.night_to_day[1]
+		printh("Starting transition to day (lights OFF): " .. NIGHT_CONFIG.darken_color)
+	end
+	-- If already transitioning, ignore the press
+end
+
 -- Night mode settings (initialized from config in _init)
 
 -- Generate street lights along roads
+-- Lights are placed at street endpoints and evenly spaced between
 function generate_street_lights()
 	local lights = {}
 	local spacing = NIGHT_CONFIG.street_light_spacing
+	local light_set = {}  -- track unique positions to avoid duplicates
+
+	local function add_light(x, y)
+		local key = x .. "," .. y
+		if not light_set[key] then
+			light_set[key] = true
+			add(lights, { x = x, y = y })
+		end
+	end
 
 	for _, road in ipairs(ROADS) do
 		if road.direction == "horizontal" then
-			-- Place lights along horizontal road
 			local y = road.y
-			local x_start = flr(road.x1 / spacing) * spacing
-			for x = x_start, road.x2, spacing do
-				add(lights, { x = x, y = y })
+			-- Always place lights at start and end of street
+			add_light(road.x1, y)
+			add_light(road.x2, y)
+			-- Fill in between with evenly spaced lights
+			local length = road.x2 - road.x1
+			local num_segments = max(1, flr(length / spacing))
+			local actual_spacing = length / num_segments
+			for i = 1, num_segments - 1 do
+				local x = road.x1 + flr(i * actual_spacing)
+				add_light(x, y)
 			end
 		elseif road.direction == "vertical" then
-			-- Place lights along vertical road
 			local x = road.x
-			local y_start = flr(road.y1 / spacing) * spacing
-			for y = y_start, road.y2, spacing do
-				add(lights, { x = x, y = y })
+			-- Always place lights at start and end of street
+			add_light(x, road.y1)
+			add_light(x, road.y2)
+			-- Fill in between with evenly spaced lights
+			local length = road.y2 - road.y1
+			local num_segments = max(1, flr(length / spacing))
+			local actual_spacing = length / num_segments
+			for i = 1, num_segments - 1 do
+				local y = road.y1 + flr(i * actual_spacing)
+				add_light(x, y)
 			end
 		end
 	end
@@ -148,6 +238,11 @@ end
 
 -- Street light positions (generated from roads)
 STREET_LIGHTS = {}
+
+-- Pre-allocated userdata for batched circfill (x, y, r, color) x max lights on screen
+-- Assuming max ~20 lights visible at once
+local MAX_VISIBLE_LIGHTS = 32
+local light_batch = userdata("f64", 4, MAX_VISIBLE_LIGHTS)
 
 -- Draw night mode overlay - efficient method
 -- Draw to night_mask userdata, then render as sprite with color table
@@ -179,12 +274,31 @@ function draw_night_mode()
 	-- Player light at center
 	circfill(SCREEN_CX, SCREEN_CY, player_radius, 0)
 
-	-- Street lights (convert world to screen coords)
-	for _, light in ipairs(STREET_LIGHTS) do
-		local sx, sy = world_to_screen(light.x, light.y)
-		-- Only draw if on screen (with some margin for the radius)
-		if sx > -street_radius and sx < SCREEN_W + street_radius and sy > -street_radius and sy < SCREEN_H + street_radius then
-			circfill(sx, sy, street_radius, 0)
+	-- Street lights (only when fully night) - batched circfill
+	if street_lights_on then
+		local light_count = 0
+		local margin = street_radius
+
+		-- Build batch of visible lights
+		for _, light in ipairs(STREET_LIGHTS) do
+			local sx, sy = world_to_screen(light.x, light.y)
+			-- Only include if on screen (with margin for the radius)
+			if sx > -margin and sx < SCREEN_W + margin and sy > -margin and sy < SCREEN_H + margin then
+				if light_count < MAX_VISIBLE_LIGHTS then
+					-- Pack into userdata: x, y, radius, color (row = light_count)
+					local row = light_count * 4
+					light_batch[row] = sx
+					light_batch[row + 1] = sy
+					light_batch[row + 2] = street_radius
+					light_batch[row + 3] = 0  -- transparent color to punch holes
+					light_count = light_count + 1
+				end
+			end
+		end
+
+		-- Draw all lights in one batched call
+		if light_count > 0 then
+			circfill(light_batch, 0, light_count)
 		end
 	end
 
@@ -221,6 +335,9 @@ function _init()
 	STREET_LIGHTS = generate_street_lights()
 	printh("Generated " .. #STREET_LIGHTS .. " street lights")
 
+	-- Spawn NPCs on roads
+	spawn_npcs(NPC_CONFIG.spawn_count)
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -232,6 +349,9 @@ end
 
 function _update()
 	handle_input()
+
+	-- Update NPCs
+	update_npcs()
 
 	-- Toggle render mode with X button
 	if btnp(5) then
@@ -252,23 +372,13 @@ function _update()
 		printh("Shadow color table: " .. shadow_coltab_mode)
 	end
 
-	-- Toggle night mode with N key
+	-- Toggle day/night cycle with N key
 	if keyp("n") then
-		night_mode = not night_mode
-		printh("Night mode: " .. tostring(night_mode))
+		toggle_day_night()
 	end
 
-	-- Adjust night darken color with +/- keys
-	if night_mode then
-		if keyp("+") or keyp("=") then
-			NIGHT_DARKEN_COLOR = min(63, NIGHT_DARKEN_COLOR + 1)
-			printh("Night darken color: " .. NIGHT_DARKEN_COLOR)
-		end
-		if keyp("-") then
-			NIGHT_DARKEN_COLOR = max(0, NIGHT_DARKEN_COLOR - 1)
-			printh("Night darken color: " .. NIGHT_DARKEN_COLOR)
-		end
-	end
+	-- Update day-night cycle transitions
+	update_day_night_cycle()
 end
 
 -- Print text with drop shadow for legibility
@@ -305,23 +415,23 @@ function _draw()
 	draw_night_mode()
 	profile("night")
 
-	-- UI with drop shadows
+	-- UI with drop shadows (only when debug enabled)
 	profile("ui")
-	print_shadow("GTA PICOTRON", 4, 4, 7)
-	print_shadow("arrows: move  X: toggle renderer", 4, 14, 6)
-	print_shadow("pos: "..flr(game.player.x)..","..flr(game.player.y), 4, SCREEN_H - 20, 6)
-	print_shadow("mode: "..render_mode, 4, SCREEN_H - 10, 11)
 	if DEBUG_CONFIG.enabled then
-		print_shadow("coltab: "..shadow_coltab_mode.." (M to cycle)", SCREEN_W - 150, 24, 6)
+		print_shadow("GTA PICOTRON", 4, 4, 7)
+		print_shadow("arrows: move  X: toggle renderer", 4, 14, 7)
+		print_shadow("pos: "..flr(game.player.x)..","..flr(game.player.y), 4, SCREEN_H - 20, 7)
+		print_shadow("mode: "..render_mode, 4, SCREEN_H - 10, 7)
+		print_shadow("coltab: "..shadow_coltab_mode.." (M to cycle)", SCREEN_W - 150, 24, 7)
+
+		-- CPU stats
+		local cpu = stat(1)  -- CPU usage (0-1 range, where 1 = 100%)
+		local fps = stat(7)  -- current FPS
+		print_shadow("cpu: "..flr(cpu * 100).."%", SCREEN_W - 70, 4, 7)
+		print_shadow("fps: "..flr(fps), SCREEN_W - 70, 14, 7)
+
+		-- Draw profiler output
+		profile.draw()
 	end
-
-	-- CPU stats
-	local cpu = stat(1)  -- CPU usage (0-1 range, where 1 = 100%)
-	local fps = stat(7)  -- current FPS
-	print_shadow("cpu: "..flr(cpu * 100).."%", SCREEN_W - 70, 4, 7)
-	print_shadow("fps: "..flr(fps), SCREEN_W - 70, 14, 7)
-
-	-- Draw profiler output
-	profile.draw()
 	profile("ui")
 end

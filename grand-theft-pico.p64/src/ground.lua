@@ -36,7 +36,7 @@ end
 -- Draw ground using BATCHED tline3d with userdata ops
 function draw_ground()
 	local grass_spr = SPRITES.GRASS.id
-	local grass_tex_size = 8  -- grass sprite is 8x8
+	local grass_tex_size = SPRITES.GRASS.w  -- use sprite width from config
 
 	-- Calculate how many times to tile grass across screen width
 	local tiles_x = SCREEN_W / grass_tex_size
@@ -52,7 +52,7 @@ function draw_ground()
 	local tex_v_start = world_y_offset % grass_tex_size
 	local v_start = vec(grass_spr, 0, 0, SCREEN_W, 0, tex_u_start, tex_v_start, tex_u_start + tex_u_end, tex_v_start, 1, 1)
 
-	-- Slope per scanline: only y and v change (v wraps every 8 pixels)
+	-- Slope per scanline: only y and v change
 	-- y increases by 1, v increases by 1 (will wrap via texture sampling)
 	local slope = vec(0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0)
 
