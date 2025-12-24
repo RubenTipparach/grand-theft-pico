@@ -1,0 +1,14 @@
+CHICKEN SPRITES
+
+Stand L (Walk L0), WalkL 1, WalkL 2, Hit/Panic
+Face 1, Away 1, FaceWalk 1 (Flip for 2), AwayWalk 1 (flip for 2)
+Egg, Cracked Egg, Chick in Egg, Chick Stand
+Chick Walk R 1, Chick Walk R 2, ChickFaceWalk 1, ChickAwayWalk1
+Broke/FriedEgg, RoastedChicken, Drumstick, EggShellPieces/Boom
+
+The P8 contains chicken sounds! 
+
+Also, the 16x16 sprite sheets contain a nest! (In place of the second bell -- look by the white musical notes!)
+
+The Pico-8 one does too!
+

@@ -81,6 +81,24 @@ GROUND_CONFIG = {
 }
 
 -- ============================================
+-- DEBUG CONFIG
+-- ============================================
+DEBUG_CONFIG = {
+	enabled = true,  -- set to false to disable debug features
+}
+
+-- ============================================
+-- NIGHT MODE / LIGHTING CONFIG
+-- ============================================
+NIGHT_CONFIG = {
+	player_light_radius = 25,    -- radius of light around player
+	street_light_radius = 30,    -- radius of street lights
+	street_light_spacing = 78,   -- distance between street lights (world units)
+	darken_color = 16,           -- color index for dark areas (higher = darker)
+	ambient_color = 32,          -- color index for ambient tint (even in lit areas)
+}
+
+-- ============================================
 -- LEVEL DATA - ROADS
 -- ============================================
 -- Roads are defined as line segments with width
