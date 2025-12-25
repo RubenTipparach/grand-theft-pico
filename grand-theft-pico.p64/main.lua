@@ -16,6 +16,7 @@ include("src/wall_renderer.lua")
 include("src/building.lua")
 include("src/collision.lua")
 include("src/ground.lua")
+include("src/flora.lua")
 include("src/input.lua")
 include("src/npc.lua")
 
@@ -66,8 +67,8 @@ cam_x, cam_y = 0, 0  -- camera world position
 
 game = {
 	player = {
-		x = 200,
-		y = 200,
+		x = 480,
+		y = 480,
 		facing_right = true,
 		facing_dir = "east",  -- "north", "south", "east" (east/west use flip_x)
 		walk_frame = 0,
@@ -97,6 +98,9 @@ buildings = {}
 
 -- Rendering mode: "tline3d" (batched scanlines, fastest) or "tri" (batched textri)
 render_mode = "tline3d"
+
+-- Ground rendering mode: "scanline" (batched tline3d) or "tilemap" (pre-computed tilemap)
+ground_mode = "scanline"
 
 -- Draw with color table applied - pass a function to draw inside
 function draw_with_colortable(color_table_sprite, draw_fn)
@@ -188,15 +192,41 @@ end
 
 -- Night mode settings (initialized from config in _init)
 
+-- Check if a position is on any road surface (not sidewalk)
+function is_on_any_road_surface(x, y)
+	for _, road in ipairs(ROADS) do
+		local half_road = road.width / 2
+		if road.direction == "horizontal" then
+			if y >= road.y - half_road and y <= road.y + half_road and
+			   x >= road.x1 and x <= road.x2 then
+				return true
+			end
+		elseif road.direction == "vertical" then
+			if x >= road.x - half_road and x <= road.x + half_road and
+			   y >= road.y1 and y <= road.y2 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Generate street lights along roads
--- Lights are placed at street endpoints and evenly spaced between
+-- Lights are placed on both sidewalks, evenly spaced
+-- street_light_offset slides lights along the sidewalk path
 function generate_street_lights()
 	local lights = {}
 	local spacing = NIGHT_CONFIG.street_light_spacing
+	local offset = NIGHT_CONFIG.street_light_offset or 0
 	local light_set = {}  -- track unique positions to avoid duplicates
+	local sidewalk_w = ROAD_CONFIG.sidewalk_width
 
 	local function add_light(x, y)
-		local key = x .. "," .. y
+		-- Skip if this position is on a road surface
+		if is_on_any_road_surface(x, y) then
+			return
+		end
+		local key = flr(x) .. "," .. flr(y)
 		if not light_set[key] then
 			light_set[key] = true
 			add(lights, { x = x, y = y })
@@ -204,31 +234,42 @@ function generate_street_lights()
 	end
 
 	for _, road in ipairs(ROADS) do
+		local half_road = road.width / 2
+		-- Offset to place lights on sidewalks (center of sidewalk)
+		local sidewalk_offset = half_road + sidewalk_w / 2
+
 		if road.direction == "horizontal" then
-			local y = road.y
-			-- Always place lights at start and end of street
-			add_light(road.x1, y)
-			add_light(road.x2, y)
-			-- Fill in between with evenly spaced lights
+			-- North sidewalk (above road)
+			local y_north = road.y - sidewalk_offset
+			-- South sidewalk (below road)
+			local y_south = road.y + sidewalk_offset
+
+			-- Place lights along both sidewalks
 			local length = road.x2 - road.x1
 			local num_segments = max(1, flr(length / spacing))
 			local actual_spacing = length / num_segments
-			for i = 1, num_segments - 1 do
-				local x = road.x1 + flr(i * actual_spacing)
-				add_light(x, y)
+
+			for i = 0, num_segments do
+				local x = road.x1 + flr(i * actual_spacing) + offset
+				add_light(x, y_north)
+				add_light(x, y_south)
 			end
+
 		elseif road.direction == "vertical" then
-			local x = road.x
-			-- Always place lights at start and end of street
-			add_light(x, road.y1)
-			add_light(x, road.y2)
-			-- Fill in between with evenly spaced lights
+			-- West sidewalk (left of road)
+			local x_west = road.x - sidewalk_offset
+			-- East sidewalk (right of road)
+			local x_east = road.x + sidewalk_offset
+
+			-- Place lights along both sidewalks
 			local length = road.y2 - road.y1
 			local num_segments = max(1, flr(length / spacing))
 			local actual_spacing = length / num_segments
-			for i = 1, num_segments - 1 do
-				local y = road.y1 + flr(i * actual_spacing)
-				add_light(x, y)
+
+			for i = 0, num_segments do
+				local y = road.y1 + flr(i * actual_spacing) + offset
+				add_light(x_west, y)
+				add_light(x_east, y)
 			end
 		end
 	end
@@ -240,8 +281,8 @@ end
 STREET_LIGHTS = {}
 
 -- Pre-allocated userdata for batched circfill (x, y, r, color) x max lights on screen
--- Assuming max ~20 lights visible at once
-local MAX_VISIBLE_LIGHTS = 32
+-- Increased for double-sided sidewalk lights
+local MAX_VISIBLE_LIGHTS = 64
 local light_batch = userdata("f64", 4, MAX_VISIBLE_LIGHTS)
 
 -- Draw night mode overlay - efficient method
@@ -335,6 +376,12 @@ function _init()
 	STREET_LIGHTS = generate_street_lights()
 	printh("Generated " .. #STREET_LIGHTS .. " street lights")
 
+	-- Initialize ground tilemap for alternative rendering mode
+	init_ground_tilemap()
+
+	-- Generate countryside flora
+	generate_flora()
+
 	-- Spawn NPCs on roads
 	spawn_npcs(NPC_CONFIG.spawn_count)
 
@@ -348,10 +395,14 @@ function _init()
 end
 
 function _update()
+	profile("input")
 	handle_input()
+	profile("input")
 
-	-- Update NPCs
-	update_npcs()
+	-- Update NPCs (pass player position for scare behavior)
+	profile("npcs_update")
+	update_npcs(game.player.x, game.player.y)
+	profile("npcs_update")
 
 	-- Toggle render mode with X button
 	if btnp(5) then
@@ -377,6 +428,16 @@ function _update()
 		toggle_day_night()
 	end
 
+	-- Toggle ground rendering mode with G key
+	if keyp("g") then
+		if ground_mode == "scanline" then
+			ground_mode = "tilemap"
+		else
+			ground_mode = "scanline"
+		end
+		printh("Ground mode: " .. ground_mode)
+	end
+
 	-- Update day-night cycle transitions
 	update_day_night_cycle()
 end
@@ -393,8 +454,17 @@ function _draw()
 
 	-- Draw ground tiles (grass and dirt roads)
 	profile("ground")
-	draw_ground()
+	if ground_mode == "tilemap" then
+		draw_ground_tilemap()
+	else
+		draw_ground()
+	end
 	profile("ground")
+
+	-- Draw countryside flora (behind buildings/sprites)
+	profile("flora")
+	draw_flora()
+	profile("flora")
 
 	-- Get player sprite info
 	local player_spr = get_player_sprite()
@@ -421,8 +491,8 @@ function _draw()
 		print_shadow("GTA PICOTRON", 4, 4, 7)
 		print_shadow("arrows: move  X: toggle renderer", 4, 14, 7)
 		print_shadow("pos: "..flr(game.player.x)..","..flr(game.player.y), 4, SCREEN_H - 20, 7)
-		print_shadow("mode: "..render_mode, 4, SCREEN_H - 10, 7)
-		print_shadow("coltab: "..shadow_coltab_mode.." (M to cycle)", SCREEN_W - 150, 24, 7)
+		print_shadow("mode: "..render_mode.." ground: "..ground_mode, 4, SCREEN_H - 10, 7)
+		print_shadow("coltab: "..shadow_coltab_mode.." (M cycle, G ground)", SCREEN_W - 180, 24, 7)
 
 		-- CPU stats
 		local cpu = stat(1)  -- CPU usage (0-1 range, where 1 = 100%)
@@ -432,6 +502,9 @@ function _draw()
 
 		-- Draw profiler output
 		profile.draw()
+
+		-- Print profiler stats to console every 10 seconds
+		profile.printh_periodic()
 	end
 	profile("ui")
 end

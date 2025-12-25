@@ -10,8 +10,10 @@ local scanlines = userdata("f64", 11, 270)
 -- Uses vec() and userdata:copy/:add for true batching (no per-scanline loops)
 -- wx0,wy0 to wx1,wy1 are world coordinates of the wall base
 -- ox, oy = perspective offset for roof (passed from building center)
+-- wall_height can be negative for 3-point perspective (walls go down instead of up)
 function draw_wall_textured(sprite_idx, wx0, wy0, wx1, wy1, wall_height, ox, oy)
-	if wall_height < 1 then return end
+	local abs_wall_height = abs(wall_height)
+	if abs_wall_height < 1 then return end
 
 	-- Convert to screen coordinates
 	local sx0, sy0 = world_to_screen(wx0, wy0)
@@ -19,20 +21,21 @@ function draw_wall_textured(sprite_idx, wx0, wy0, wx1, wy1, wall_height, ox, oy)
 
 	-- Define the 4 corners of the wall quad
 	-- Bottom = on ground, Top = raised by wall_height with perspective offset
-	local bx0, by0 = sx0, sy0                           -- bottom-left
-	local bx1, by1 = sx1, sy1                           -- bottom-right
-	local tx0, ty0 = sx0 + ox, sy0 - wall_height + oy   -- top-left
-	local tx1, ty1 = sx1 + ox, sy1 - wall_height + oy   -- top-right
+	-- For negative wall_height, "top" is actually below the base (3-point perspective)
+	local bx0, by0 = sx0, sy0                           -- bottom-left (base)
+	local bx1, by1 = sx1, sy1                           -- bottom-right (base)
+	local tx0, ty0 = sx0 + ox, sy0 - wall_height + oy   -- top-left (roof edge)
+	local tx1, ty1 = sx1 + ox, sy1 - wall_height + oy   -- top-right (roof edge)
 
-	-- Calculate wall dimensions for texture tiling
+	-- Calculate wall dimensions for texture tiling based on WORLD coordinates
+	-- This ensures consistent UV scale regardless of screen position
 	local tex_size = 16
+	local wall_world_width = sqrt((wx1 - wx0) * (wx1 - wx0) + (wy1 - wy0) * (wy1 - wy0))
 	local wall_screen_width = sqrt((bx1 - bx0) * (bx1 - bx0) + (by1 - by0) * (by1 - by0))
-	local tiles_across = max(1, wall_screen_width / tex_size)
-	local tiles_down = max(1, wall_height / tex_size)
 
-	-- UV coordinates at corners
-	local u1 = tiles_across * tex_size
-	local v1 = tiles_down * tex_size
+	-- UV based on world dimensions (1 tile = 16 world units)
+	local u1 = wall_world_width
+	local v1 = abs_wall_height
 
 	-- Determine wall orientation
 	local dx = abs(bx1 - bx0)
@@ -210,24 +213,29 @@ end
 
 -- Fast wall quad renderer - avoids redundant calculations
 -- Draws a wall as a single operation instead of 2 separate triangles
+-- wall_height can be negative for 3-point perspective (walls go down instead of up)
 function draw_wall_quad(sprite_idx, wx0, wy0, wx1, wy1, wall_height, ox, oy)
-	if wall_height < 1 then return end
+	local abs_wall_height = abs(wall_height)
+	if abs_wall_height < 1 then return end
 
 	-- Convert to screen coordinates
 	local sx0, sy0 = world_to_screen(wx0, wy0)
 	local sx1, sy1 = world_to_screen(wx1, wy1)
 
 	-- Wall corners
-	local bx0, by0 = sx0, sy0                           -- bottom-left
-	local bx1, by1 = sx1, sy1                           -- bottom-right
-	local tx0, ty0 = sx0 + ox, sy0 - wall_height + oy   -- top-left
-	local tx1, ty1 = sx1 + ox, sy1 - wall_height + oy   -- top-right
+	-- For negative wall_height, "top" is actually below the base (3-point perspective)
+	local bx0, by0 = sx0, sy0                           -- bottom-left (base)
+	local bx1, by1 = sx1, sy1                           -- bottom-right (base)
+	local tx0, ty0 = sx0 + ox, sy0 - wall_height + oy   -- top-left (roof edge)
+	local tx1, ty1 = sx1 + ox, sy1 - wall_height + oy   -- top-right (roof edge)
 
-	-- Calculate UV tiling
-	local tex_size = 16
-	local wall_w = sqrt((sx1 - sx0) * (sx1 - sx0) + (sy1 - sy0) * (sy1 - sy0))
-	local u1 = max(1, wall_w / tex_size) * tex_size
-	local v1 = max(1, wall_height / tex_size) * tex_size
+	-- Calculate UV tiling based on WORLD coordinates
+	-- This ensures consistent UV scale regardless of screen position
+	local wall_world_width = sqrt((wx1 - wx0) * (wx1 - wx0) + (wy1 - wy0) * (wy1 - wy0))
+
+	-- UV based on world dimensions (1 tile = 16 world units)
+	local u1 = wall_world_width
+	local v1 = abs_wall_height
 
 	-- Draw as 2 triangles using optimized textri
 	textri(sprite_idx, tx0, ty0, 0, 0, bx0, by0, 0, v1, tx1, ty1, u1, 0)

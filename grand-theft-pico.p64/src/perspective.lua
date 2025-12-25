@@ -19,9 +19,10 @@ function get_wall_height(sx, sy)
 end
 
 -- Calculate wall top offset (walls lean outward from center)
--- This is the key to the GTA1/2 perspective effect:
--- - Buildings at screen center: offset is ~0, you see mostly roof
--- - Buildings at screen edges: offset pushes roof away, you see walls
+-- True 3-point perspective: roofs offset radially from screen center
+-- - Buildings above center: roof shifts up (negative oy)
+-- - Buildings below center: roof shifts down (positive oy)
+-- - Buildings left/right: roof shifts left/right
 function get_wall_offset(sx, sy, wall_height)
 	local p_scale = PERSPECTIVE_CONFIG.perspective_scale
 
@@ -29,8 +30,7 @@ function get_wall_offset(sx, sy, wall_height)
 	local dx = sx - SCREEN_CX
 	local dy = sy - SCREEN_CY
 
-	-- Offset increases with distance from center
-	-- This makes roofs "slide" outward, revealing walls
+	-- Radial offset - roofs shift AWAY from screen center in all directions
 	local ox = dx * p_scale
 	local oy = dy * p_scale
 

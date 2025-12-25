@@ -78,3 +78,25 @@ function profile.enabled(detailed, cpu)
 	profile.draw = detailed and (cpu and display_both or display_profiles)
 		or (cpu and draw_cpu or do_nothing)
 end
+
+-- Periodic console output
+local printh_timer = 0
+local printh_interval = 600  -- 10 seconds at 60fps
+
+-- Print profiler stats to console periodically
+function profile.printh_periodic()
+	printh_timer = printh_timer + 1
+	if printh_timer >= printh_interval then
+		printh_timer = 0
+		-- Print header
+		printh("=== PROFILER STATS ===")
+		printh("CPU: " .. string.sub(stat(1) * 100, 1, 5) .. "%")
+		printh("FPS: " .. flr(stat(7)))
+		-- Print each profile section
+		for prof in all(profiles) do
+			local usage = string.sub(prof.time * 100, 1, 5) .. "%"
+			printh("  " .. prof.name .. ": " .. usage)
+		end
+		printh("======================")
+	end
+end

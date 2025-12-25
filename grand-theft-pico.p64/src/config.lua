@@ -5,18 +5,45 @@
 -- SPRITE REGISTRY
 -- ============================================
 SPRITES = {
-	-- Walls
-	BRICK_WALL    = { id = 1, w = 16, h = 16 },
-	MARBLE_WALL   = { id = 2, w = 16, h = 16 },
+	-- Walls (16x16)
+	BRICK_WALL       = { id = 1, w = 16, h = 16 },
+	MARBLE_WALL      = { id = 2, w = 16, h = 16 },
+	CRACKED_BRICK    = { id = 128, w = 16, h = 16 },
+	CRACKED_CONCRETE = { id = 129, w = 16, h = 16 },
+	METALLIC_PIPES   = { id = 48, w = 16, h = 16 },
+	LARGE_BRICK      = { id = 49, w = 16, h = 16 },
+	GREEN_BLOCK      = { id = 51, w = 16, h = 16 },
+	TECHNO           = { id = 52, w = 16, h = 16 },
+	ZINC             = { id = 53, w = 16, h = 16 },
+	GLASS            = { id = 119, w = 16, h = 16 },
+	BULKHEAD         = { id = 118, w = 16, h = 16 },
 
-	-- Roofs
-	ROOF          = { id = 3, w = 16, h = 16 },
+	-- Walls (16x32 tall)
+	TALL_BRICK       = { id = 50, w = 16, h = 32 },
+
+	-- Roofs/Ceilings
+	ROOF             = { id = 3, w = 16, h = 16 },
+	ROOF_CHIMNEY     = { id = 131, w = 16, h = 16 },
+	ROOF_CIRCULAR    = { id = 40, w = 16, h = 16 },
+	ROOF_POINTY      = { id = 41, w = 16, h = 16 },
+	ROOF_FLAT        = { id = 42, w = 16, h = 16 },
 
 	-- Ground textures
 	DIRT_MEDIUM   = { id = 4, w = 16, h = 16 },
 	DIRT_HEAVY    = { id = 5, w = 16, h = 16 },
 	DIRT_LIGHT    = { id = 6, w = 16, h = 16 },
 	GRASS         = { id = 7, w = 16,  h = 16  },
+
+	-- Sidewalks (16x16)
+	SIDEWALK_NS   = { id = 132, w = 16, h = 16 },  -- north-south oriented
+	SIDEWALK_EW   = { id = 133, w = 16, h = 16 },  -- east-west oriented
+
+	-- Flora (16x16)
+	FLOWER_1      = { id = 139, w = 16, h = 16 },
+	FLOWER_2      = { id = 140, w = 16, h = 16 },
+	GRASS_BLADE   = { id = 141, w = 16, h = 16 },
+	TREE_1        = { id = 142, w = 16, h = 16 },
+	TREE_2        = { id = 143, w = 16, h = 16 },
 
 	-- Player (facing east/west - flip_x for direction)
 	PLAYER_IDLE   = { id = 8,  w = 16, h = 16 },  -- idle, facing left
@@ -86,22 +113,77 @@ SPRITES = {
 -- ============================================
 -- BUILDING TYPES
 -- ============================================
+-- wall_height: multiplier for PERSPECTIVE_CONFIG.max_wall_height (1 = normal, 2 = double, etc.)
 BUILDING_TYPES = {
+	-- === PRIMITIVE / LOW-RISE (outer city) ===
 	BRICK = {
 		wall_sprite = SPRITES.BRICK_WALL.id,
-		roof_color = 5,  -- dark gray
+		roof_sprite = SPRITES.ROOF_CHIMNEY.id,
+		wall_height = 1,
 	},
-	MARBLE = {
-		wall_sprite = SPRITES.MARBLE_WALL.id,
-		roof_color = 6,  -- light gray
+	CRACKED_BRICK = {
+		wall_sprite = SPRITES.CRACKED_BRICK.id,
+		roof_sprite = SPRITES.ROOF_FLAT.id,
+		wall_height = 1,
+	},
+	LARGE_BRICK = {
+		wall_sprite = SPRITES.LARGE_BRICK.id,
+		roof_sprite = SPRITES.ROOF_POINTY.id,
+		wall_height = 1,
+	},
+	CONCRETE = {
+		wall_sprite = SPRITES.CRACKED_CONCRETE.id,
+		roof_sprite = SPRITES.ROOF_FLAT.id,
+		wall_height = 1,
 	},
 	WAREHOUSE = {
-		wall_sprite = SPRITES.BRICK_WALL.id,
-		roof_color = 4,  -- brown
+		wall_sprite = SPRITES.ZINC.id,
+		roof_sprite = SPRITES.ROOF_FLAT.id,
+		wall_height = 1,
+	},
+
+	-- === MID-RISE (transition zone) ===
+	MARBLE = {
+		wall_sprite = SPRITES.MARBLE_WALL.id,
+		roof_sprite = SPRITES.ROOF_CIRCULAR.id,
+		wall_height = 1,
 	},
 	OFFICE = {
 		wall_sprite = SPRITES.MARBLE_WALL.id,
-		roof_color = 13, -- blue-gray
+		roof_sprite = SPRITES.ROOF_POINTY.id,
+		wall_height = 2,
+	},
+	INDUSTRIAL = {
+		wall_sprite = SPRITES.METALLIC_PIPES.id,
+		roof_sprite = SPRITES.ROOF_FLAT.id,
+		wall_height = 1,
+	},
+	GREEN = {
+		wall_sprite = SPRITES.GREEN_BLOCK.id,
+		roof_sprite = SPRITES.ROOF_CIRCULAR.id,
+		wall_height = 1,
+	},
+
+	-- === HIGH-RISE / SKYSCRAPERS (city center) ===
+	TECHNO_TOWER = {
+		wall_sprite = SPRITES.TECHNO.id,
+		roof_sprite = SPRITES.ROOF_CIRCULAR.id,
+		wall_height = 3,
+	},
+	GLASS_TOWER = {
+		wall_sprite = SPRITES.GLASS.id,
+		roof_sprite = SPRITES.ROOF_FLAT.id,
+		wall_height = 3,
+	},
+	BULKHEAD_TOWER = {
+		wall_sprite = SPRITES.BULKHEAD.id,
+		roof_sprite = SPRITES.ROOF_POINTY.id,
+		wall_height = 3,
+	},
+	CORPORATE_HQ = {
+		wall_sprite = SPRITES.GLASS.id,
+		roof_sprite = SPRITES.ROOF_CIRCULAR.id,
+		wall_height = 4,
 	},
 }
 
@@ -133,36 +215,51 @@ CAMERA_CONFIG = {
 -- ============================================
 NPC_CONFIG = {
 	walk_speed = 0.25,           -- slower than player
+	run_speed = 1,  
+	run_animation_speed = 20,
 	animation_speed = 10,     -- frames per sprite change
 	direction_change_time = { min = 60, max = 180 },  -- frames before changing direction
 	idle_time = { min = 30, max = 90 },               -- frames to stand still
 	collision_radius = 4,     -- hitbox radius for building collision
-	spawn_count = 20,          -- number of NPCs to spawn
+	spawn_count = 120,          -- number of NPCs to spawn (larger city)
 	shadow_color = 25,
 	shadow_radius = 4,
 	shadow_height = 2,
 	shadow_x_offset = 0,
 	shadow_y_offset = 6,
+	-- Freaked out behavior
+	scare_radius = 32,           -- distance at which NPCs get scared of player
+	surprise_duration = 60,      -- frames to show surprised reaction (~1 second at 60fps)
+	flee_duration = 900,         -- frames to flee (~15 seconds at 60fps)
+	surprise_sprite = 135,       -- UI sprite to show above head when surprised
 }
 
 -- NPC type definitions (sprite sets)
 NPC_TYPES = {
 	{
-		name = "NPC1",
+		name = "MALE_NPC",
 		south = { idle = SPRITES.NPC1_SOUTH_IDLE.id, walk = { SPRITES.NPC1_SOUTH_WALK1.id, SPRITES.NPC1_SOUTH_WALK2.id, SPRITES.NPC1_SOUTH_WALK3.id } },
 		east  = { idle = SPRITES.NPC1_EAST_IDLE.id,  walk = { SPRITES.NPC1_EAST_WALK1.id,  SPRITES.NPC1_EAST_WALK2.id,  SPRITES.NPC1_EAST_WALK3.id } },
 		north = { idle = SPRITES.NPC1_NORTH_IDLE.id, walk = { SPRITES.NPC1_NORTH_WALK1.id, SPRITES.NPC1_NORTH_WALK2.id, SPRITES.NPC1_NORTH_WALK3.id } },
 		west  = { idle = SPRITES.NPC1_WEST_IDLE.id,  walk = { SPRITES.NPC1_WEST_WALK1.id,  SPRITES.NPC1_WEST_WALK2.id,  SPRITES.NPC1_WEST_WALK3.id } },
-		damaged = SPRITES.NPC1_DAMAGED.id,
+		-- Expressions
+		mouth_open = 80,
+		surprised = 81,
+		look_up = 82,
+		look_down = 83,
 		w = 8, h = 16,
 	},
 	{
-		name = "NPC2",
+		name = "FEMALE_NPC",
 		south = { idle = SPRITES.NPC2_SOUTH_IDLE.id, walk = { SPRITES.NPC2_SOUTH_WALK1.id, SPRITES.NPC2_SOUTH_WALK2.id, SPRITES.NPC2_SOUTH_WALK3.id } },
 		east  = { idle = SPRITES.NPC2_EAST_IDLE.id,  walk = { SPRITES.NPC2_EAST_WALK1.id,  SPRITES.NPC2_EAST_WALK2.id,  SPRITES.NPC2_EAST_WALK3.id } },
 		north = { idle = SPRITES.NPC2_NORTH_IDLE.id, walk = { SPRITES.NPC2_NORTH_WALK1.id, SPRITES.NPC2_NORTH_WALK2.id, SPRITES.NPC2_NORTH_WALK3.id } },
 		west  = { idle = SPRITES.NPC2_WEST_IDLE.id,  walk = { SPRITES.NPC2_WEST_WALK1.id,  SPRITES.NPC2_WEST_WALK2.id,  SPRITES.NPC2_WEST_WALK3.id } },
-		damaged = SPRITES.NPC2_DAMAGED.id,
+		-- Expressions
+		mouth_open = 100,
+		surprised = 101,
+		look_up = 102,
+		look_down = 103,
 		w = 8, h = 16,
 	},
 }
@@ -172,7 +269,7 @@ NPC_TYPES = {
 -- ============================================
 PERSPECTIVE_CONFIG = {
 	max_wall_height = 24,           -- fixed height of all building walls
-	perspective_scale = 0.15,       -- how much roofs offset from center (higher = more 3D)
+	perspective_scale = 0.12,       -- how much roofs offset from center (higher = more 3D, was 0.15)
 	wall_visibility_threshold = 0,  -- pixels from center before walls show (0 = always show walls)
 }
 
@@ -195,8 +292,9 @@ DEBUG_CONFIG = {
 -- ============================================
 NIGHT_CONFIG = {
 	player_light_radius = 25,    -- radius of light around player
-	street_light_radius = 30,    -- radius of street lights
-	street_light_spacing = 128,  -- distance between street lights (world units)
+	street_light_radius = 20,    -- radius of street lights
+	street_light_spacing = 64,   -- distance between street lights (world units)
+	street_light_offset = 0,     -- offset along sidewalk path (slide lights forward/back)
 	darken_color = 16,           -- color index for dark areas (higher = darker)
 	ambient_color = 31,          -- color index for ambient tint (even in lit areas)
 	transition_speed = 16,        -- frames per transition step
@@ -206,76 +304,244 @@ NIGHT_CONFIG = {
 }
 
 -- ============================================
+-- ROAD/SIDEWALK CONFIG
+-- ============================================
+ROAD_CONFIG = {
+	road_width = 64,       -- width of road surface (doubled from 32)
+	sidewalk_width = 16,   -- width of sidewalk on each side (1 tile)
+	-- Total street width = road_width + 2*sidewalk_width = 96
+}
+
+-- ============================================
 -- LEVEL DATA - ROADS
 -- ============================================
 -- Roads are defined as line segments with width
 -- tile_type: 2=medium dirt (only using medium for consistency)
--- width = 32 (2 tiles * 16 pixels)
--- NOTE: All coordinates should be multiples of 32 for even street light spacing
+-- Coordinates are doubled for larger scale
+-- Each road has sidewalks on both sides (16px each)
+-- Street lights placed on sidewalks (both sides)
 ROADS = {
-	-- Main horizontal road through the middle
-	{ direction = "horizontal", y = 192, x1 = -192, x2 = 576, width = 32, tile_type = 2 },
+	-- === MAJOR ARTERIAL ROADS (form the main grid) ===
+	-- Main horizontal roads (y positions doubled, street width 64)
+	{ direction = "horizontal", y = 0,    x1 = -640, x2 = 1600, width = 64, tile_type = 2 },
+	{ direction = "horizontal", y = 384,  x1 = -640, x2 = 1600, width = 64, tile_type = 2 },
+	{ direction = "horizontal", y = 768,  x1 = -640, x2 = 1600, width = 64, tile_type = 2 },
+	{ direction = "horizontal", y = 1152, x1 = -640, x2 = 1600, width = 64, tile_type = 2 },
 
-	-- Main vertical road
-	{ direction = "vertical", x = 192, y1 = -96, y2 = 480, width = 32, tile_type = 2 },
+	-- Main vertical roads (x positions doubled, street width 64)
+	{ direction = "vertical", x = -256, y1 = -256, y2 = 1408, width = 64, tile_type = 2 },
+	{ direction = "vertical", x = 256,  y1 = -256, y2 = 1408, width = 64, tile_type = 2 },
+	{ direction = "vertical", x = 768,  y1 = -256, y2 = 1408, width = 64, tile_type = 2 },
+	{ direction = "vertical", x = 1216, y1 = -256, y2 = 1408, width = 64, tile_type = 2 },
 
-	-- Secondary horizontal roads
-	{ direction = "horizontal", y = 64, x1 = 0, x2 = 512, width = 32, tile_type = 2 },
-	{ direction = "horizontal", y = 352, x1 = -96, x2 = 448, width = 32, tile_type = 2 },
+	-- === SECONDARY STREETS (subdivide blocks) ===
+	-- Inner city horizontal streets
+	{ direction = "horizontal", y = 192,  x1 = -256, x2 = 1216, width = 64, tile_type = 2 },
+	{ direction = "horizontal", y = 576,  x1 = -256, x2 = 1216, width = 64, tile_type = 2 },
+	{ direction = "horizontal", y = 960,  x1 = -256, x2 = 1216, width = 64, tile_type = 2 },
 
-	-- Secondary vertical roads
-	{ direction = "vertical", x = 64, y1 = 0, y2 = 384, width = 32, tile_type = 2 },
-	{ direction = "vertical", x = 384, y1 = 0, y2 = 352, width = 32, tile_type = 2 },
+	-- Inner city vertical streets
+	{ direction = "vertical", x = 0,    y1 = 0, y2 = 1152, width = 64, tile_type = 2 },
+	{ direction = "vertical", x = 512,  y1 = 0, y2 = 1152, width = 64, tile_type = 2 },
+	{ direction = "vertical", x = 960,  y1 = 0, y2 = 1152, width = 64, tile_type = 2 },
+}
+
+-- ============================================
+-- COUNTRYSIDE ROADS (no sidewalks, no street lights)
+-- ============================================
+-- Organic road segments outside the city grid
+-- tile_type: 3 = dense dirt (DIRT_HEAVY)
+-- countryside = true marks these as rural roads
+COUNTRYSIDE_ROADS = {
+	-- === WEST COUNTRYSIDE ===
+	-- Main road heading west from city
+	{ direction = "horizontal", y = 576, x1 = -640, x2 = -256, width = 32, tile_type = 3, countryside = true },
+	-- Branch north
+	{ direction = "vertical", x = -512, y1 = 200, y2 = 576, width = 32, tile_type = 3, countryside = true },
+	-- Branch south
+	{ direction = "vertical", x = -480, y1 = 576, y2 = 900, width = 32, tile_type = 3, countryside = true },
+	-- Curved path northwest
+	{ direction = "horizontal", y = 200, x1 = -700, x2 = -512, width = 32, tile_type = 3, countryside = true },
+	{ direction = "vertical", x = -700, y1 = -100, y2 = 200, width = 32, tile_type = 3, countryside = true },
+
+	-- === EAST COUNTRYSIDE ===
+	-- Main road heading east from city
+	{ direction = "horizontal", y = 576, x1 = 1296, x2 = 1800, width = 32, tile_type = 3, countryside = true },
+	-- Branch northeast
+	{ direction = "vertical", x = 1600, y1 = 300, y2 = 576, width = 32, tile_type = 3, countryside = true },
+	{ direction = "horizontal", y = 300, x1 = 1600, x2 = 1900, width = 32, tile_type = 3, countryside = true },
+	-- Branch southeast
+	{ direction = "vertical", x = 1700, y1 = 576, y2 = 1000, width = 32, tile_type = 3, countryside = true },
+
+	-- === NORTH COUNTRYSIDE ===
+	-- Road heading north from city
+	{ direction = "vertical", x = 480, y1 = -256, y2 = -100, width = 32, tile_type = 3, countryside = true },
+	{ direction = "vertical", x = 480, y1 = -400, y2 = -256, width = 32, tile_type = 3, countryside = true },
+	-- Branch west
+	{ direction = "horizontal", y = -300, x1 = 100, x2 = 480, width = 32, tile_type = 3, countryside = true },
+	-- Branch east
+	{ direction = "horizontal", y = -350, x1 = 480, x2 = 900, width = 32, tile_type = 3, countryside = true },
+
+	-- === SOUTH COUNTRYSIDE ===
+	-- Road heading south from city
+	{ direction = "vertical", x = 600, y1 = 1216, y2 = 1500, width = 32, tile_type = 3, countryside = true },
+	-- Branch southwest
+	{ direction = "horizontal", y = 1400, x1 = 200, x2 = 600, width = 32, tile_type = 3, countryside = true },
+	{ direction = "vertical", x = 200, y1 = 1400, y2 = 1600, width = 32, tile_type = 3, countryside = true },
+	-- Branch southeast
+	{ direction = "horizontal", y = 1350, x1 = 600, x2 = 1100, width = 32, tile_type = 3, countryside = true },
+}
+
+-- ============================================
+-- FLORA CONFIG
+-- ============================================
+FLORA_CONFIG = {
+	-- Region-based procedural generation
+	-- Each region_size x region_size area gets items_per_region flora items
+	region_size = 160,       -- 10 tiles x 16 pixels = 160 pixel regions
+	items_per_region = 8,   -- 20 flora items per 160x160 region
+
+	-- Probability weights for flora types (relative chances)
+	tree_weight = 0.15,      -- 15% chance for trees (only on eligible spots)
+	flower_weight = 0.40,    -- 40% chance for flowers
+	-- Remaining chance = grass blades
+
+	-- Flora sprite IDs
+	tree_sprites = { SPRITES.TREE_1.id, SPRITES.TREE_2.id },
+	flower_sprites = { SPRITES.FLOWER_1.id, SPRITES.FLOWER_2.id },
+	grass_sprite = SPRITES.GRASS_BLADE.id,
+
+	-- Shadow settings
+	shadow_color = 25,
+	shadow_y_offset = 6,
+	tree_shadow_radius = 5,
+	tree_shadow_height = 3,
+	flower_shadow_radius = 3,
+	flower_shadow_height = 2,
+	grass_shadow_radius = 2,
+	grass_shadow_height = 1,
 }
 
 -- ============================================
 -- LEVEL DATA - BUILDINGS
 -- ============================================
--- City blocks are defined by road intersections:
--- Horizontal roads: y=64, y=192, y=352
--- Vertical roads: x=64, x=192, x=384
--- Road width is 32, so block edges are at road_pos +/- 16
--- Block margin = 8 pixels from road edge
+-- Layout calculation:
+-- Road corridor = 96 (64 road + 16 sidewalk each side)
+-- Road spacing = 192 (between horizontal roads)
+-- Block interior = 192 - 96 = 96px available
+-- Building zone with 16px padding = starts at road_center + 48, height ~64px max
+--
+-- Horizontal roads: y=0, 192, 384, 576, 768, 960, 1152
+-- Vertical roads: x=-256, 0, 256, 512, 768, 960, 1216
 
 LEVEL_BUILDINGS = {
 	-- Format: { x, y, w, h, type }
 
-	-- === BLOCK A: Top-left (x=80 to x=176, y=80 to y=176) ===
-	-- Between roads x=64 and x=192, y=64 and y=192
-	{ x = 88,  y = 88,  w = 80, h = 80, type = "BRICK" },
+	-- =============================================
+	-- OUTER RING: PRIMITIVE BUILDINGS (brick, concrete, cracked)
+	-- =============================================
 
-	-- === BLOCK B: Top-middle (x=208 to x=368, y=80 to y=176) ===
-	-- Between roads x=192 and x=384, y=64 and y=192
-	{ x = 216, y = 88,  w = 64, h = 72, type = "MARBLE" },
-	{ x = 296, y = 88,  w = 64, h = 72, type = "OFFICE" },
+	-- === FAR WEST COLUMN - Left of x=-256 road ===
+	{ x = -480, y = 64,  w = 80, h = 64, type = "CRACKED_BRICK" },
+	{ x = -384, y = 64,  w = 64, h = 64, type = "BRICK" },
+	{ x = -480, y = 256, w = 96, h = 64, type = "CRACKED_CONCRETE" },
+	{ x = -368, y = 256, w = 64, h = 64, type = "LARGE_BRICK" },
+	{ x = -480, y = 448, w = 80, h = 64, type = "BRICK" },
+	{ x = -384, y = 448, w = 72, h = 64, type = "ZINC" },
+	{ x = -480, y = 640, w = 88, h = 64, type = "CRACKED_BRICK" },
+	{ x = -376, y = 640, w = 64, h = 64, type = "CONCRETE" },
+	{ x = -480, y = 832, w = 160, h = 64, type = "WAREHOUSE" },
+	{ x = -480, y = 1024, w = 80, h = 64, type = "LARGE_BRICK" },
+	{ x = -384, y = 1024, w = 72, h = 64, type = "BRICK" },
 
-	-- === BLOCK C: Top-right (x=400 to x=496, y=80 to y=176) ===
-	-- Right of road x=384, above road y=192
-	{ x = 400, y = 88,  w = 88, h = 80, type = "WAREHOUSE" },
+	-- === FAR EAST COLUMN - Right of x=1216 road ===
+	{ x = 1296, y = 64,  w = 80, h = 64, type = "BRICK" },
+	{ x = 1392, y = 64,  w = 64, h = 64, type = "CRACKED_CONCRETE" },
+	{ x = 1296, y = 256, w = 64, h = 64, type = "ZINC" },
+	{ x = 1376, y = 256, w = 80, h = 64, type = "LARGE_BRICK" },
+	{ x = 1296, y = 448, w = 96, h = 64, type = "CRACKED_BRICK" },
+	{ x = 1408, y = 448, w = 56, h = 64, type = "CONCRETE" },
+	{ x = 1296, y = 640, w = 72, h = 64, type = "BRICK" },
+	{ x = 1384, y = 640, w = 72, h = 64, type = "CRACKED_CONCRETE" },
+	{ x = 1296, y = 832, w = 160, h = 64, type = "WAREHOUSE" },
+	{ x = 1296, y = 1024, w = 80, h = 64, type = "LARGE_BRICK" },
+	{ x = 1392, y = 1024, w = 64, h = 64, type = "CRACKED_BRICK" },
 
-	-- === BLOCK D: Middle-left (x=80 to x=176, y=208 to y=336) ===
-	-- Between roads x=64 and x=192, y=192 and y=352
-	{ x = 88,  y = 216, w = 80, h = 56, type = "WAREHOUSE" },
-	{ x = 88,  y = 280, w = 80, h = 56, type = "BRICK" },
+	-- === TOP ROW - Above y=0 road ===
+	{ x = -160, y = -112, w = 96, h = 64, type = "CRACKED_CONCRETE" },
+	{ x = 80,   y = -112, w = 80, h = 64, type = "BRICK" },
+	{ x = 336,  y = -112, w = 80, h = 64, type = "ZINC" },
+	{ x = 592,  y = -112, w = 80, h = 64, type = "LARGE_BRICK" },
+	{ x = 848,  y = -112, w = 64, h = 64, type = "CRACKED_BRICK" },
+	{ x = 1040, y = -112, w = 80, h = 64, type = "CONCRETE" },
 
-	-- === BLOCK E: Middle-center (x=208 to x=368, y=208 to y=336) ===
-	-- Between roads x=192 and x=384, y=192 and y=352
-	{ x = 216, y = 216, w = 72, h = 56, type = "OFFICE" },
-	{ x = 296, y = 216, w = 64, h = 56, type = "MARBLE" },
-	{ x = 216, y = 280, w = 140, h = 56, type = "WAREHOUSE" },
+	-- === BOTTOM ROW - Below y=1152 road ===
+	{ x = -160, y = 1216, w = 96, h = 64, type = "BRICK" },
+	{ x = 80,   y = 1216, w = 80, h = 64, type = "CRACKED_BRICK" },
+	{ x = 336,  y = 1216, w = 80, h = 64, type = "ZINC" },
+	{ x = 592,  y = 1216, w = 80, h = 64, type = "LARGE_BRICK" },
+	{ x = 848,  y = 1216, w = 64, h = 64, type = "CRACKED_CONCRETE" },
+	{ x = 1040, y = 1216, w = 80, h = 64, type = "CONCRETE" },
 
-	-- === BLOCK F: Middle-right (x=400 to x=496, y=208 to y=336) ===
-	-- Right of road x=384, between y=192 and y=352
-	{ x = 400, y = 216, w = 80, h = 112, type = "OFFICE" },
+	-- =============================================
+	-- MIDDLE RING: MIXED DEVELOPMENT (office, marble, warehouse)
+	-- =============================================
 
-	-- === BLOCK G: Bottom-left (x=80 to x=176, y=368 to y=464) ===
-	-- Between roads x=64 and x=192, below y=352
-	{ x = 88,  y = 368, w = 80, h = 64, type = "MARBLE" },
+	-- === WEST COLUMN - Between x=-256 and x=0 roads ===
+	{ x = -160, y = 64,  w = 96, h = 64, type = "CONCRETE" },
+	{ x = -160, y = 256, w = 96, h = 64, type = "OFFICE" },
+	{ x = -160, y = 448, w = 96, h = 64, type = "MARBLE" },
+	{ x = -160, y = 640, w = 96, h = 64, type = "WAREHOUSE" },
+	{ x = -160, y = 832, w = 96, h = 64, type = "GREEN" },
+	{ x = -160, y = 1024, w = 96, h = 64, type = "OFFICE" },
 
-	-- === BLOCK H: Left of leftmost road (x=-176 to x=48) ===
-	-- Left of road x=64
-	{ x = -160, y = 216, w = 72, h = 80, type = "BRICK" },
-	{ x = -80,  y = 216, w = 64, h = 80, type = "WAREHOUSE" },
+	-- === EAST COLUMN - Between x=960 and x=1216 roads ===
+	{ x = 1040, y = 64,  w = 96, h = 64, type = "CONCRETE" },
+	{ x = 1040, y = 256, w = 96, h = 64, type = "OFFICE" },
+	{ x = 1040, y = 448, w = 96, h = 64, type = "BULKHEAD_TOWER" },
+	{ x = 1040, y = 640, w = 96, h = 64, type = "WAREHOUSE" },
+	{ x = 1040, y = 832, w = 96, h = 64, type = "MARBLE" },
+	{ x = 1040, y = 1024, w = 96, h = 64, type = "GREEN" },
+
+	-- === ROW ABOVE CENTER - Inner blocks ===
+	{ x = 80,  y = 64,  w = 96, h = 64, type = "MARBLE" },
+	{ x = 336, y = 64,  w = 96, h = 64, type = "OFFICE" },
+	{ x = 592, y = 64,  w = 96, h = 64, type = "BULKHEAD_TOWER" },
+	{ x = 848, y = 64,  w = 64, h = 64, type = "CONCRETE" },
+
+	-- === ROW BELOW CENTER ===
+	{ x = 80,  y = 832, w = 96, h = 64, type = "OFFICE" },
+	{ x = 336, y = 832, w = 96, h = 64, type = "MARBLE" },
+	{ x = 592, y = 832, w = 96, h = 64, type = "GREEN" },
+	{ x = 848, y = 832, w = 64, h = 64, type = "BULKHEAD_TOWER" },
+
+	-- === BOTTOM INNER ROW ===
+	{ x = 80,  y = 1024, w = 96, h = 64, type = "WAREHOUSE" },
+	{ x = 336, y = 1024, w = 96, h = 64, type = "OFFICE" },
+	{ x = 592, y = 1024, w = 96, h = 64, type = "MARBLE" },
+	{ x = 848, y = 1024, w = 64, h = 64, type = "CONCRETE" },
+
+	-- =============================================
+	-- CITY CENTER: TALL TECHNO SKYSCRAPERS
+	-- =============================================
+
+	-- === DOWNTOWN CORE ROW 1 (between y=192 and y=384) ===
+	{ x = 80,  y = 256, w = 96, h = 64, type = "METALLIC_PIPES" },
+	{ x = 336, y = 256, w = 96, h = 64, type = "TECHNO_TOWER" },
+	{ x = 592, y = 256, w = 96, h = 64, type = "GLASS_TOWER" },
+	{ x = 848, y = 256, w = 64, h = 64, type = "BULKHEAD_TOWER" },
+
+	-- === DOWNTOWN CORE ROW 2 (between y=384 and y=576) - THE HEART ===
+	{ x = 80,  y = 448, w = 96, h = 64, type = "GLASS_SKYSCRAPER" },
+	{ x = 336, y = 448, w = 96, h = 64, type = "CORPORATE_HQ" },
+	{ x = 592, y = 448, w = 96, h = 64, type = "TECHNO_TOWER" },
+	{ x = 848, y = 448, w = 64, h = 64, type = "METALLIC_PIPES" },
+
+	-- === DOWNTOWN CORE ROW 3 (between y=576 and y=768) ===
+	{ x = 80,  y = 640, w = 96, h = 64, type = "TECHNO" },
+	{ x = 336, y = 640, w = 96, h = 64, type = "GLASS_TOWER" },
+	{ x = 592, y = 640, w = 96, h = 64, type = "GLASS_SKYSCRAPER" },
+	{ x = 848, y = 640, w = 64, h = 64, type = "BULKHEAD_TOWER" },
 }
 
 -- ============================================
@@ -291,7 +557,8 @@ function create_buildings_from_level()
 			w = b.w,
 			h = b.h,
 			wall_sprite = btype.wall_sprite,
-			roof_color = btype.roof_color,
+			roof_sprite = btype.roof_sprite or SPRITES.ROOF.id,
+			wall_height = btype.wall_height or 1,
 		})
 	end
 	return buildings
