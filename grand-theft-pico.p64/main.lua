@@ -20,6 +20,7 @@ include("src/worldgen.lua")
 include("src/flora.lua")
 include("src/input.lua")
 include("src/npc.lua")
+include("src/vehicle.lua")
 
 -- ============================================
 -- PALETTE SETUP
@@ -689,6 +690,9 @@ function _init()
 		spawn_npcs(NPC_CONFIG.spawn_count)
 	end
 
+	-- Spawn vehicles on roads and boats on water
+	spawn_vehicles()
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -713,6 +717,17 @@ function _update()
 	profile("npcs_update")
 	update_npcs(game.player.x, game.player.y)
 	profile("npcs_update")
+
+	-- Update vehicles
+	profile("vehicles_update")
+	update_vehicles()
+	profile("vehicles_update")
+
+	-- If player is in a vehicle, sync player position to vehicle
+	if player_vehicle then
+		game.player.x = player_vehicle.x
+		game.player.y = player_vehicle.y
+	end
 
 	-- Toggle render mode with X button
 	if btnp(5) then
@@ -771,6 +786,9 @@ function _draw()
 	draw_buildings_and_player(buildings, game.player, player_spr, flip_x)
 	profile("buildings")
 
+	-- Draw collision effects (explosion feedback)
+	draw_collision_effects()
+
 	-- Draw player shadow overlay using color table (only when not in night mode)
 	-- if not night_mode then
 	-- 	apply_color_table(shadow_coltab_mode)
@@ -788,6 +806,12 @@ function _draw()
 
 	-- Draw minimap
 	draw_minimap()
+
+	-- Draw vehicle health bar (if in vehicle)
+	draw_vehicle_health_bar()
+
+	-- Draw steal prompt (if near a vehicle)
+	draw_steal_prompt()
 
 	-- UI with drop shadows (only when debug enabled)
 	profile("ui")

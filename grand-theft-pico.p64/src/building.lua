@@ -185,6 +185,26 @@ profile("cull")
 		end
 	end
 
+	-- Add visible vehicles to the list (frustum cull)
+	for _, vehicle in ipairs(vehicles) do
+		local sx, sy = world_to_screen(vehicle.x, vehicle.y)
+		local vw, vh = get_vehicle_dimensions(vehicle)
+		local margin = max(vw, vh)
+		-- Only add if on screen
+		if sx > -margin and sx < SCREEN_W + margin and sy > -margin and sy < SCREEN_H + margin then
+			local vehicle_depth_y = vehicle.y + vh / 2
+			add(visible, {
+				type = "vehicle",
+				y = vehicle_depth_y,
+				cx = vehicle.x,
+				cy = vehicle.y,
+				sx = sx,
+				sy = sy,
+				data = vehicle
+			})
+		end
+	end
+
 	-- Add visible street lamps to the list (frustum cull)
 	local lamp_cfg = NIGHT_CONFIG
 	local lamp_w = lamp_cfg.lamp_width
@@ -238,11 +258,14 @@ profile("cull")
 
 	for _, obj in ipairs(visible) do
 		if obj.type == "player" then
-			local sr = PLAYER_CONFIG.shadow_radius
-			local sh = PLAYER_CONFIG.shadow_height
-			local sx_off = PLAYER_CONFIG.shadow_x_offset
-			local sy_off = PLAYER_CONFIG.shadow_y_offset
-			ovalfill(obj.sx - sr + sx_off, obj.sy + sy_off, obj.sx + sr + sx_off, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+			-- Don't draw player shadow if in vehicle
+			if not player_vehicle then
+				local sr = PLAYER_CONFIG.shadow_radius
+				local sh = PLAYER_CONFIG.shadow_height
+				local sx_off = PLAYER_CONFIG.shadow_x_offset
+				local sy_off = PLAYER_CONFIG.shadow_y_offset
+				ovalfill(obj.sx - sr + sx_off, obj.sy + sy_off, obj.sx + sr + sx_off, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+			end
 		elseif obj.type == "npc" then
 			local sr = NPC_CONFIG.shadow_radius
 			local sh = NPC_CONFIG.shadow_height
@@ -250,6 +273,7 @@ profile("cull")
 			local sy_off = NPC_CONFIG.shadow_y_offset
 			ovalfill(obj.sx - sr + sx_off, obj.sy + sy_off, obj.sx + sr + sx_off, obj.sy + sy_off + sh, NPC_CONFIG.shadow_color)
 		end
+		-- No shadow for vehicles (doesn't look great)
 	end
 
 	unmap(coltab_sprite)
@@ -274,7 +298,42 @@ profile("cull")
 		if obj.type == "building" then
 			draw_building_front(obj.data)
 		elseif obj.type == "player" then
-			spr(obj.spr, obj.sx - 8, obj.sy - 8, obj.flip_x)
+			-- Don't draw player sprite if in vehicle
+			if not player_vehicle then
+				spr(obj.spr, obj.sx - 8, obj.sy - 8, obj.flip_x)
+			end
+		elseif obj.type == "vehicle" then
+			local vehicle = obj.data
+			local vw, vh = get_vehicle_dimensions(vehicle)
+			local vehicle_spr = get_vehicle_sprite(vehicle)
+			local flip_x, flip_y = get_vehicle_flip(vehicle)
+			local draw_x = obj.sx - vw / 2
+			local draw_y = obj.sy - vh / 2
+
+			-- Offset N/S facing vehicles down 8 pixels so Y center aligns with E/W bottom
+			if vehicle.facing_dir == "north" or vehicle.facing_dir == "south" then
+				draw_y = draw_y + 8
+			end
+
+			-- Draw vehicle sprite
+			spr(vehicle_spr, draw_x, draw_y, flip_x, flip_y)
+
+			-- Draw fire effect if damaged
+			if vehicle.state ~= "destroyed" and vehicle.state ~= "exploding" then
+				if vehicle.health <= VEHICLE_CONFIG.fire_threshold and vehicle.health > 0 then
+					local fire_spr = VEHICLE_CONFIG.fire_sprites[vehicle.fire_frame]
+					-- Draw fire on top of vehicle
+					spr(fire_spr, draw_x + vw/2 - 4, draw_y - 8)
+				end
+			end
+
+			-- Draw explosion effect
+			if vehicle.state == "exploding" then
+				local exp_spr = VEHICLE_CONFIG.explosion_sprites[vehicle.explosion_frame]
+				if exp_spr then
+					spr(exp_spr, draw_x + vw/2 - 8, draw_y - 8)
+				end
+			end
 		elseif obj.type == "npc" then
 			local npc = obj.data
 			local npc_spr = get_npc_sprite(npc)

@@ -20,6 +20,10 @@ end
 -- Uses region-based generation: each region_size x region_size area gets items_per_region flora items
 function draw_flora()
 	local cfg = FLORA_CONFIG
+
+	-- Early exit if flora is disabled
+	if not cfg.enabled then return end
+
 	local region_size = cfg.region_size
 	local items_per_region = cfg.items_per_region
 	local tree_sprites = cfg.tree_sprites

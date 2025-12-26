@@ -621,6 +621,9 @@ COUNTRYSIDE_ROADS = {
 -- FLORA CONFIG
 -- ============================================
 FLORA_CONFIG = {
+	-- Master toggle
+	enabled = false,          -- set to false to disable flora rendering
+
 	-- Region-based procedural generation
 	-- Each region_size x region_size area gets items_per_region flora items
 	region_size = 160,       -- 10 tiles x 16 pixels = 160 pixel regions
@@ -768,6 +771,84 @@ LEVEL_BUILDINGS = {
 	{ x = 336, y = 640, w = 96, h = 64, type = "GLASS_TOWER" },
 	{ x = 592, y = 640, w = 96, h = 64, type = "GLASS_SKYSCRAPER" },
 	{ x = 848, y = 640, w = 64, h = 64, type = "BULKHEAD_TOWER" },
+}
+
+-- ============================================
+-- VEHICLE CONFIG
+-- ============================================
+VEHICLE_CONFIG = {
+	-- Vehicle types with their sprites
+	types = {
+		truck = {
+			name = "truck",
+			sprite_e = 201,  -- facing east
+			sprite_n = 202,  -- facing north
+			w = 32, h = 16,  -- sprite dimensions (east-facing)
+			speed = 40,      -- pixels per second
+			health = 100,
+		},
+		van = {
+			name = "van",
+			sprite_e = 203,  -- facing east
+			sprite_n = 204,  -- facing north
+			w = 24, h = 16,  -- sprite dimensions (east-facing)
+			speed = 50,
+			health = 80,
+		},
+		boat = {
+			name = "boat",
+			sprite_e = 205,  -- facing east (only water vehicle)
+			sprite_n = nil,  -- boats only face E/W
+			w = 32, h = 16,
+			speed = 35,
+			health = 60,
+			water_only = true,  -- can only travel on water
+		},
+	},
+
+	-- Spawn limits
+	max_vehicles = 100,       -- maximum cars/trucks/vans on roads
+	max_boats = 50,           -- maximum boats on water
+
+	-- Player vehicle bonuses
+	player_health_multiplier = 4,  -- player's stolen vehicle has 4x health
+	player_speed_multiplier = 2.0, -- player vehicle is 2x faster than AI (faster than fleeing 1.8x)
+
+	-- Acceleration settings
+	acceleration = 80,             -- pixels per second^2 (how fast to reach max speed)
+	deceleration = 120,            -- pixels per second^2 (how fast to slow down when not pressing)
+
+	-- AI flee behavior
+	flee_speed_multiplier = 1.5,   -- speed multiplier when AI vehicles are fleeing (after being hit)
+
+	-- Damage and effects
+	damage_per_collision = 20,      -- damage when vehicles collide
+	fire_threshold = 30,            -- health below this = on fire
+	fire_sprites = { 198, 199, 206, 207 },  -- fire animation frames
+	fire_animation_speed = 0.1,     -- seconds per fire frame
+
+	-- Explosion
+	explosion_sprites = { 104, 105, 106, 107 },  -- explosion animation frames
+	explosion_animation_speed = 0.1,  -- seconds per explosion frame
+	destroyed_sprite = 200,           -- wreckage sprite after explosion
+
+	-- Interaction
+	steal_prompt_distance = 24,  -- distance to show "E to steal" prompt
+	steal_key = "e",             -- key to steal vehicle
+
+	-- NPC collision
+	npc_push_force = 60,         -- how fast NPCs get pushed aside
+
+	-- Respawn settings (when vehicles are destroyed)
+	respawn_enabled = true,              -- set to false to disable respawning
+	min_respawn_distance = 300,          -- minimum distance from player to spawn replacement
+	respawn_delay = 2.0,                 -- seconds to wait after destruction before respawning
+
+	-- Shadow settings
+	shadow_color = 25,
+	shadow_radius = 10,
+	shadow_height = 4,
+	shadow_y_offset = 6,
 }
 
 -- ============================================

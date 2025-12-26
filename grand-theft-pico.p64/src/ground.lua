@@ -452,10 +452,18 @@ function is_on_grass(wx, wy)
 end
 
 -- Check if world position is on a road surface (tilemap-based)
+-- Includes both main roads and dirt roads
 function is_on_road_surface(wx, wy)
 	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
 	local tile = get_map_tile_at_world(wx, wy)
 	return tile == MAP_TILE_MAIN_ROAD or tile == MAP_TILE_DIRT_ROAD
+end
+
+-- Check if world position is on a MAIN road only (for vehicles - no dirt roads)
+function is_on_main_road(wx, wy)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
+	local tile = get_map_tile_at_world(wx, wy)
+	return tile == MAP_TILE_MAIN_ROAD
 end
 
 -- Check if world position is walkable for NPCs (sidewalk or grass)
