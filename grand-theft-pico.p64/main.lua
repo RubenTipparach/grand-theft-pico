@@ -383,7 +383,12 @@ function _init()
 	generate_flora()
 
 	-- Spawn NPCs on roads
-	spawn_npcs(NPC_CONFIG.spawn_count)
+	-- Mode 1 uses spawn_count at random roads, mode 2 spawns target_npc_count near player
+	if NPC_CONFIG.update_mode == 2 then
+		spawn_npcs(NPC_CONFIG.target_npc_count, game.player.x, game.player.y)
+	else
+		spawn_npcs(NPC_CONFIG.spawn_count)
+	end
 
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
@@ -470,7 +475,7 @@ function _draw()
 	local player_spr = get_player_sprite()
 	local flip_x = not game.player.facing_right
 
-	-- Draw buildings and player with proper depth sorting
+	-- Draw buildings, player, NPCs, and lamps with proper depth sorting
 	profile("buildings")
 	draw_buildings_and_player(buildings, game.player, player_spr, flip_x)
 	profile("buildings")

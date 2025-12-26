@@ -179,6 +179,27 @@ profile("cull")
 		end
 	end
 
+	-- Add visible street lamps to the list (frustum cull)
+	local lamp_cfg = NIGHT_CONFIG
+	local lamp_w = lamp_cfg.lamp_width
+	local lamp_h = lamp_cfg.lamp_height
+	local lamp_margin = max(lamp_w, lamp_h)
+	for _, light in ipairs(STREET_LIGHTS) do
+		local sx, sy = world_to_screen(light.x, light.y)
+		-- Only add if on screen (with margin for sprite size)
+		if sx > -lamp_margin and sx < SCREEN_W + lamp_margin and sy > -lamp_margin and sy < SCREEN_H + lamp_margin then
+			-- Depth sort by the lamp's base position (light source = bottom of sprite)
+			add(visible, {
+				type = "lamp",
+				y = light.y,  -- base of lamp for depth sorting
+				cx = light.x,
+				cy = light.y,
+				sx = sx,
+				sy = sy
+			})
+		end
+	end
+
 	-- Phase 2: Sort for painter's algorithm
 	-- Primary: Y position (lower Y = further back = draw first)
 	-- Secondary: X distance from player - buildings further from player in X draw first
@@ -257,6 +278,11 @@ profile("cull")
 				-- Sprite 135 is 8x8, center it above head
 				spr(NPC_CONFIG.surprise_sprite, draw_x, draw_y - 10)
 			end
+		elseif obj.type == "lamp" then
+			-- Draw lamp sprite with bottom-center anchored at light position
+			local draw_x = obj.sx - lamp_w / 2
+			local draw_y = obj.sy - lamp_h
+			spr(lamp_cfg.lamp_sprite, draw_x, draw_y)
 		end
 	end
 	profile("sprites")

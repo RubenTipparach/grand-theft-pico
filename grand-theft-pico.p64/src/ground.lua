@@ -16,6 +16,12 @@ local ground_scanlines = userdata("f64", 11, 270)
 -- Pre-allocated slope vector (reused across all ground drawing)
 local ground_slope = vec(0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0)
 
+-- Batched sprite buffer for tilemap rendering
+-- Format per row: sprite_id, x, y (no flip needed for ground tiles)
+-- Max tiles visible: ~20x17 = 340 tiles, round up to 400
+local MAX_VISIBLE_TILES = 400
+local tile_batch = userdata("f64", 3, MAX_VISIBLE_TILES)
+
 -- Tilemap-based rendering (alternative approach)
 -- World is divided into 16x16 tiles, stored in a 2D userdata grid
 local TILE_SIZE = 16
@@ -149,6 +155,7 @@ function paint_rect_to_tilemap(wx1, wy1, wx2, wy2, tile_type)
 end
 
 -- Draw ground using tilemap (alternative to batched tline3d)
+-- Uses batched spr() for better performance
 function draw_ground_tilemap()
 	if not tilemap_ready then return end
 
@@ -168,20 +175,36 @@ function draw_ground_tilemap()
 	tx_end = min(TILEMAP_W - 1, tx_end)
 	ty_end = min(TILEMAP_H - 1, ty_end)
 
-	-- Draw visible tiles
+	-- Pre-calculate screen offset for first tile
+	local base_world_x = WORLD_MIN_X + tx_start * TILE_SIZE
+	local base_world_y = WORLD_MIN_Y + ty_start * TILE_SIZE
+	local base_sx = base_world_x - cam_x + SCREEN_CX
+	local base_sy = base_world_y - cam_y + SCREEN_CY
+
+	-- Build batch of visible tiles
+	local tile_count = 0
+	local grass_spr = tile_sprites[TILE_GRASS]
+
 	for ty = ty_start, ty_end do
+		local sy = base_sy + (ty - ty_start) * TILE_SIZE
 		for tx = tx_start, tx_end do
+			if tile_count >= MAX_VISIBLE_TILES then break end
+
 			local tile_type = ground_tilemap:get(tx, ty)
-			local spr_id = tile_sprites[tile_type] or tile_sprites[TILE_GRASS]
+			local spr_id = tile_sprites[tile_type] or grass_spr
+			local sx = base_sx + (tx - tx_start) * TILE_SIZE
 
-			-- Calculate screen position
-			local world_x = WORLD_MIN_X + tx * TILE_SIZE
-			local world_y = WORLD_MIN_Y + ty * TILE_SIZE
-			local sx, sy = world_to_screen(world_x, world_y)
-
-			-- Draw tile sprite
-			spr(spr_id, sx, sy)
+			-- Pack into batch: sprite_id, x, y
+			tile_batch:set(0, tile_count, spr_id)
+			tile_batch:set(1, tile_count, sx)
+			tile_batch:set(2, tile_count, sy)
+			tile_count = tile_count + 1
 		end
+	end
+
+	-- Draw all tiles in one batched call
+	if tile_count > 0 then
+		spr(tile_batch, 0, tile_count)
 	end
 end
 
@@ -404,5 +427,15 @@ function is_on_road(wx, wy, road)
 		end
 	end
 
+	return false
+end
+
+-- Check if world position is on any road
+function is_on_any_road(wx, wy)
+	for _, road in ipairs(ROADS) do
+		if is_on_road(wx, wy, road) then
+			return true
+		end
+	end
 	return false
 end

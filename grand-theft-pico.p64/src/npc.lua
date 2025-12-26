@@ -16,21 +16,24 @@ local DIR_VECTORS = {
 -- Create a new NPC at a given position
 function create_npc(x, y, npc_type_index)
 	local npc_type = NPC_TYPES[npc_type_index] or NPC_TYPES[1]
+	local now = time()
 	return {
 		x = x,
 		y = y,
 		npc_type = npc_type,
 		facing_dir = "south",
 		walk_frame = 0,
-		walk_timer = 0,
-		state = "idle",  -- "idle", "walking", "surprised", or "fleeing"
-		state_timer = 0,
+		walk_time = now,          -- last animation frame change time
+		state = "idle",           -- "idle", "walking", "surprised", or "fleeing"
+		state_end_time = now,     -- when current state ends (seconds)
 		damaged = false,
 		-- Freaked out state
-		prev_state = nil,        -- state to return to after calming down
-		prev_facing_dir = nil,   -- direction to restore
-		flee_dir = nil,          -- direction fleeing away from player
-		show_surprise = false,   -- show exclamation sprite above head
+		prev_state = nil,         -- state to return to after calming down
+		prev_facing_dir = nil,    -- direction to restore
+		flee_dir = nil,           -- direction fleeing away from player
+		show_surprise = false,    -- show exclamation sprite above head
+		flee_recheck_time = now,  -- last flee direction check time
+		last_update_time = now,   -- for delta time calculation
 	}
 end
 
@@ -68,12 +71,22 @@ function get_valid_spawn_point()
 end
 
 -- Spawn NPCs on roads, avoiding buildings
-function spawn_npcs(count)
+-- If player_x/player_y provided, spawns near player (for streaming mode)
+function spawn_npcs(count, player_x, player_y)
 	npcs = {}
 	for i = 1, count do
-		local x, y = get_valid_spawn_point()
-		local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
-		add(npcs, create_npc(x, y, npc_type_index))
+		local npc = nil
+		if player_x and player_y then
+			-- Mode 2: spawn near player
+			npc = spawn_npc_near_player(player_x, player_y)
+		end
+		if not npc then
+			-- Mode 1 or fallback: spawn at random road points
+			local x, y = get_valid_spawn_point()
+			local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
+			npc = create_npc(x, y, npc_type_index)
+		end
+		add(npcs, npc)
 	end
 	printh("Spawned " .. #npcs .. " NPCs")
 end
@@ -175,9 +188,11 @@ function get_flee_direction(npc, player_x, player_y)
 	return pick_valid_direction(npc)
 end
 
--- Update a single NPC
+-- Update a single NPC (time-based, frame-independent)
 function update_npc(npc, player_x, player_y)
-	npc.state_timer = npc.state_timer - 1
+	local now = time()
+	local dt = now - npc.last_update_time
+	npc.last_update_time = now
 
 	-- Check if player is too close (trigger surprised state)
 	if npc.state ~= "surprised" and npc.state ~= "fleeing" and player_x and player_y then
@@ -190,7 +205,7 @@ function update_npc(npc, player_x, player_y)
 			npc.prev_facing_dir = npc.facing_dir
 			-- Enter surprised state (frozen with exclamation)
 			npc.state = "surprised"
-			npc.state_timer = NPC_CONFIG.surprise_duration
+			npc.state_end_time = now + NPC_CONFIG.surprise_duration
 			npc.show_surprise = true
 			npc.walk_frame = 0  -- freeze animation
 			-- Store player position to calculate flee direction when fleeing starts
@@ -202,26 +217,25 @@ function update_npc(npc, player_x, player_y)
 	if npc.state == "idle" then
 		-- Standing still
 		npc.walk_frame = 0
-		npc.walk_timer = 0
 
-		if npc.state_timer <= 0 then
+		if now >= npc.state_end_time then
 			-- Time to start walking
 			local new_dir = pick_valid_direction(npc)
 			if new_dir then
 				npc.facing_dir = new_dir
 				npc.state = "walking"
 				local cfg = NPC_CONFIG.direction_change_time
-				npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
 				-- Can't move, stay idle longer
 				local cfg = NPC_CONFIG.idle_time
-				npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			end
 		end
 	elseif npc.state == "walking" then
-		-- Moving
+		-- Moving (pixels per second * delta time)
 		local vec = DIR_VECTORS[npc.facing_dir]
-		local speed = NPC_CONFIG.walk_speed
+		local speed = NPC_CONFIG.walk_speed * dt
 		local radius = NPC_CONFIG.collision_radius
 
 		local new_x = npc.x + vec.dx * speed
@@ -232,50 +246,52 @@ function update_npc(npc, player_x, player_y)
 			-- Hit a building, stop and go idle
 			npc.state = "idle"
 			local cfg = NPC_CONFIG.idle_time
-			npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 		else
 			-- Move
 			npc.x = new_x
 			npc.y = new_y
 
-			-- Update walk animation (3-frame cycle)
-			npc.walk_timer = npc.walk_timer + 1
+			-- Update walk animation (time-based)
 			local anim_speed = NPC_CONFIG.animation_speed
-			npc.walk_frame = flr(npc.walk_timer / anim_speed) % 3 + 1
+			if now >= npc.walk_time + anim_speed then
+				npc.walk_frame = (npc.walk_frame % 3) + 1
+				npc.walk_time = now
+			end
 		end
 
-		if npc.state_timer <= 0 then
+		if now >= npc.state_end_time then
 			-- Time to change direction or stop
 			if rnd(1) < 0.3 then
 				-- Stop and idle
 				npc.state = "idle"
 				local cfg = NPC_CONFIG.idle_time
-				npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
 				-- Pick a new direction
 				local new_dir = pick_valid_direction(npc)
 				if new_dir then
 					npc.facing_dir = new_dir
 					local cfg = NPC_CONFIG.direction_change_time
-					npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+					npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 				else
 					-- Can't move, go idle
 					npc.state = "idle"
 					local cfg = NPC_CONFIG.idle_time
-					npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+					npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 				end
 			end
 		end
 	elseif npc.state == "surprised" then
 		-- Frozen in place, showing exclamation sprite
 		npc.walk_frame = 0
-		npc.walk_timer = 0
 
 		-- When surprise duration ends, start fleeing
-		if npc.state_timer <= 0 then
+		if now >= npc.state_end_time then
 			npc.state = "fleeing"
-			npc.state_timer = NPC_CONFIG.flee_duration
+			npc.state_end_time = now + NPC_CONFIG.flee_duration
 			npc.show_surprise = false
+			npc.flee_recheck_time = now
 			-- Calculate flee direction NOW based on current player position
 			-- Use stored scare position as fallback if player moved offscreen
 			local flee_from_x = player_x or npc.scare_player_x or npc.x
@@ -287,17 +303,13 @@ function update_npc(npc, player_x, player_y)
 			npc.scare_player_y = nil
 		end
 	elseif npc.state == "fleeing" then
-		-- Running away from player using run_speed
-		local speed = NPC_CONFIG.run_speed
+		-- Running away from player (pixels per second * delta time)
+		local speed = NPC_CONFIG.run_speed * dt
 		local radius = NPC_CONFIG.collision_radius
 
-		-- Periodically re-evaluate flee direction (every 30 frames = 0.5 seconds)
-		if not npc.flee_recheck_timer then
-			npc.flee_recheck_timer = 0
-		end
-		npc.flee_recheck_timer = npc.flee_recheck_timer + 1
-		if npc.flee_recheck_timer >= 30 and player_x and player_y then
-			npc.flee_recheck_timer = 0
+		-- Periodically re-evaluate flee direction (time-based)
+		if now >= npc.flee_recheck_time + NPC_CONFIG.flee_recheck_interval and player_x and player_y then
+			npc.flee_recheck_time = now
 			npc.flee_dir = get_flee_direction(npc, player_x, player_y)
 			npc.facing_dir = npc.flee_dir or npc.facing_dir
 		end
@@ -318,65 +330,178 @@ function update_npc(npc, player_x, player_y)
 				npc.y = new_y
 			end
 
-			-- Update walk animation using run_animation_speed
-			npc.walk_timer = npc.walk_timer + 1
+			-- Update walk animation (time-based, faster for running)
 			local anim_speed = NPC_CONFIG.run_animation_speed
-			npc.walk_frame = flr(npc.walk_timer / anim_speed) % 3 + 1
+			if now >= npc.walk_time + anim_speed then
+				npc.walk_frame = (npc.walk_frame % 3) + 1
+				npc.walk_time = now
+			end
 		end
 
 		-- Check if calmed down
-		if npc.state_timer <= 0 then
+		if now >= npc.state_end_time then
 			-- Return to previous state
 			npc.state = npc.prev_state or "idle"
 			npc.facing_dir = npc.prev_facing_dir or npc.facing_dir
 			npc.prev_state = nil
 			npc.prev_facing_dir = nil
 			npc.flee_dir = nil
-			npc.flee_recheck_timer = nil
 			npc.show_surprise = false
 			-- Reset timer for restored state
 			if npc.state == "idle" then
 				local cfg = NPC_CONFIG.idle_time
-				npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
 				local cfg = NPC_CONFIG.direction_change_time
-				npc.state_timer = cfg.min + flr(rnd(cfg.max - cfg.min))
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			end
 		end
 	end
 end
 
 -- Throttle settings for offscreen NPCs
-local OFFSCREEN_UPDATE_INTERVAL = 30  -- frames (0.5 seconds at 60fps)
 local OFFSCREEN_MARGIN = 64  -- pixels beyond screen edge to consider "offscreen"
 
--- Check if NPC is visible on screen
-function is_npc_visible(npc)
-	local sx, sy = world_to_screen(npc.x, npc.y)
-	return sx > -OFFSCREEN_MARGIN and sx < SCREEN_W + OFFSCREEN_MARGIN and
-	       sy > -OFFSCREEN_MARGIN and sy < SCREEN_H + OFFSCREEN_MARGIN
+-- Spawn a single NPC near the player (for streaming mode)
+function spawn_npc_near_player(player_x, player_y)
+	local cfg = NPC_CONFIG
+	local min_dist = cfg.spawn_distance_min
+	local max_dist = cfg.despawn_distance  -- spawn up to despawn distance
+	local radius = cfg.collision_radius
+
+	-- Try to find a valid spawn point
+	for attempt = 1, 10 do
+		-- Random angle and distance
+		local angle = rnd(1) * 6.28318  -- 2*PI
+		local dist = min_dist + rnd(max_dist - min_dist)
+		local x = player_x + cos(angle) * dist
+		local y = player_y + sin(angle) * dist
+
+		-- Check if on a road and not colliding with buildings
+		if is_on_any_road(x, y) and not npc_collides_with_building(x, y, radius) then
+			local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
+			return create_npc(x, y, npc_type_index)
+		end
+	end
+
+	return nil
 end
 
--- Update all NPCs (throttle offscreen ones)
-function update_npcs(player_x, player_y)
+-- Mode 1: Persistent NPCs with distance-based throttling
+local function update_npcs_persistent(player_x, player_y)
+	local now = time()
+
+	-- Cache config values
+	local cfg = NPC_CONFIG
+	local offscreen_interval = cfg.offscreen_update_interval
+	local update_dist = cfg.offscreen_update_distance
+	local update_dist_sq = update_dist * update_dist  -- avoid sqrt
+
+	-- Cache screen constants for inline visibility
+	local cx, cy = SCREEN_CX, SCREEN_CY
+	local sw, sh = SCREEN_W, SCREEN_H
+	local margin = OFFSCREEN_MARGIN
+
 	for _, npc in ipairs(npcs) do
-		-- Initialize throttle counter if not present
-		if not npc.offscreen_timer then
-			npc.offscreen_timer = 0
+		-- Distance check from player (squared to avoid sqrt)
+		local dx = npc.x - player_x
+		local dy = npc.y - player_y
+		local dist_sq = dx * dx + dy * dy
+
+		-- Initialize offscreen update time if not present
+		if not npc.offscreen_update_time then
+			npc.offscreen_update_time = now
 		end
 
-		if is_npc_visible(npc) then
-			-- Visible: update every frame, pass player position for scare check
-			update_npc(npc, player_x, player_y)
-			npc.offscreen_timer = 0
+		-- Check if within update distance
+		local within_distance = dist_sq <= update_dist_sq
+
+		if within_distance then
+			-- Within distance: check visibility for throttling
+			local sx = npc.x - cam_x + cx
+			local sy = npc.y - cam_y + cy
+			local is_visible = sx > -margin and sx < sw + margin and
+			                   sy > -margin and sy < sh + margin
+
+			if is_visible then
+				-- Visible and within distance: update every frame
+				update_npc(npc, player_x, player_y)
+				npc.offscreen_update_time = now
+			else
+				-- Offscreen but within distance: throttled update
+				if now >= npc.offscreen_update_time + offscreen_interval then
+					update_npc(npc, nil, nil)
+					npc.offscreen_update_time = now
+				end
+			end
 		else
-			-- Offscreen: update once per interval (no player scare check)
-			npc.offscreen_timer = npc.offscreen_timer + 1
-			if npc.offscreen_timer >= OFFSCREEN_UPDATE_INTERVAL then
+			-- Beyond distance: only update when interval elapses
+			if now >= npc.offscreen_update_time + offscreen_interval then
 				update_npc(npc, nil, nil)
-				npc.offscreen_timer = 0
+				npc.offscreen_update_time = now
 			end
 		end
+	end
+end
+
+-- Mode 2: Streaming NPCs - despawn far, respawn near
+local function update_npcs_streaming(player_x, player_y)
+	local cfg = NPC_CONFIG
+	local despawn_dist = cfg.despawn_distance
+	local despawn_dist_sq = despawn_dist * despawn_dist
+	local target_count = cfg.target_npc_count
+
+	-- Cache screen constants for inline visibility
+	local cx, cy = SCREEN_CX, SCREEN_CY
+	local sw, sh = SCREEN_W, SCREEN_H
+	local margin = OFFSCREEN_MARGIN
+
+	-- Pass 1: Update visible NPCs, mark distant ones for removal
+	local to_remove = {}
+	for i, npc in ipairs(npcs) do
+		local dx = npc.x - player_x
+		local dy = npc.y - player_y
+		local dist_sq = dx * dx + dy * dy
+
+		if dist_sq > despawn_dist_sq then
+			-- Too far, mark for removal
+			add(to_remove, i)
+		else
+			-- Check visibility
+			local sx = npc.x - cam_x + cx
+			local sy = npc.y - cam_y + cy
+			local is_visible = sx > -margin and sx < sw + margin and
+			                   sy > -margin and sy < sh + margin
+
+			if is_visible then
+				-- Visible: update every frame
+				update_npc(npc, player_x, player_y)
+			end
+			-- Offscreen NPCs within despawn distance: don't update (frozen)
+		end
+	end
+
+	-- Pass 2: Remove distant NPCs (iterate backwards to preserve indices)
+	for i = #to_remove, 1, -1 do
+		deli(npcs, to_remove[i])
+	end
+
+	-- Pass 3: Spawn new NPCs if below target count
+	local spawn_needed = target_count - #npcs
+	for i = 1, spawn_needed do
+		local new_npc = spawn_npc_near_player(player_x, player_y)
+		if new_npc then
+			add(npcs, new_npc)
+		end
+	end
+end
+
+-- Update all NPCs using the configured mode
+function update_npcs(player_x, player_y)
+	if NPC_CONFIG.update_mode == 2 then
+		update_npcs_streaming(player_x, player_y)
+	else
+		update_npcs_persistent(player_x, player_y)
 	end
 end
 

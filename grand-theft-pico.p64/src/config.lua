@@ -191,7 +191,7 @@ BUILDING_TYPES = {
 -- PLAYER CONFIG
 -- ============================================
 PLAYER_CONFIG = {
-	walk_speed = 1,
+	walk_speed = 1.2,
 	run_speed = 2,
 	animation_speed = 8,  -- frames per sprite change
 	shadow_color = 25,    -- shadow color during daytime
@@ -214,24 +214,45 @@ CAMERA_CONFIG = {
 -- NPC CONFIG
 -- ============================================
 NPC_CONFIG = {
-	walk_speed = 0.25,           -- slower than player
-	run_speed = 1,  
-	run_animation_speed = 20,
-	animation_speed = 10,     -- frames per sprite change
-	direction_change_time = { min = 60, max = 180 },  -- frames before changing direction
-	idle_time = { min = 30, max = 90 },               -- frames to stand still
-	collision_radius = 4,     -- hitbox radius for building collision
-	spawn_count = 120,          -- number of NPCs to spawn (larger city)
+	-- Movement speeds (pixels per second)
+	walk_speed = 15,
+	run_speed = 60,
+	-- Animation timing (seconds per sprite change)
+	run_animation_speed = 0.05,
+	animation_speed = 0.1,
+	-- AI behavior timing (seconds)
+	direction_change_time = { min = 1.0, max = 3.0 },
+	idle_time = { min = 0.5, max = 1.5 },
+	-- Collision
+	collision_radius = 4,
+	-- Spawning
+	spawn_count = 200,
+	-- NPC update mode:
+	-- 1 = persistent: NPCs exist everywhere, throttled updates for distant ones
+	-- 2 = streaming: NPCs despawn when far, respawn nearby to maintain target count
+	update_mode = 1,
+	-- Shadows
 	shadow_color = 25,
 	shadow_radius = 4,
 	shadow_height = 2,
 	shadow_x_offset = 0,
 	shadow_y_offset = 6,
+
+	-- Performance tuning (mode 1: persistent)
+	offscreen_update_interval = 2,  -- seconds between AI updates for offscreen NPCs
+	offscreen_update_distance = 400,  -- pixels from player; NPCs beyond this are frozen
+
+	-- Performance tuning (mode 2: streaming)
+	despawn_distance = 400,    -- pixels from player; NPCs beyond this despawn (also max spawn distance)
+	spawn_distance_min = 10,   -- min pixels from player for new spawns
+	target_npc_count = 50,     -- target number of NPCs to maintain in streaming mode
+
 	-- Freaked out behavior
-	scare_radius = 32,           -- distance at which NPCs get scared of player
-	surprise_duration = 60,      -- frames to show surprised reaction (~1 second at 60fps)
-	flee_duration = 900,         -- frames to flee (~15 seconds at 60fps)
-	surprise_sprite = 135,       -- UI sprite to show above head when surprised
+	flee_recheck_interval = 0.75,
+	scare_radius = 32,
+	surprise_duration = 1.0,     -- seconds
+	flee_duration = 15.0,        -- seconds
+	surprise_sprite = 135,
 }
 
 -- NPC type definitions (sprite sets)
@@ -284,7 +305,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = true,  -- set to false to disable debug features
+	enabled = false,  -- set to false to disable debug features
 }
 
 -- ============================================
@@ -301,6 +322,10 @@ NIGHT_CONFIG = {
 	-- Transition sequences (darken_color values)
 	day_to_night = { 33, 30, 20, 25, 11 },  -- day gets darker
 	night_to_day = { 11, 25, 20, 30, 33 },  -- night gets lighter
+	-- Lamp sprite (visual representation of street lights)
+	lamp_sprite = 192,           -- sprite ID for lamp
+	lamp_width = 24,             -- lamp sprite width
+	lamp_height = 24,            -- lamp sprite height
 }
 
 -- ============================================
