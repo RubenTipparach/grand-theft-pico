@@ -193,8 +193,9 @@ function update_npc(npc, player_x, player_y)
 			npc.state_timer = NPC_CONFIG.surprise_duration
 			npc.show_surprise = true
 			npc.walk_frame = 0  -- freeze animation
-			-- Pre-calculate flee direction
-			npc.flee_dir = get_flee_direction(npc, player_x, player_y)
+			-- Store player position to calculate flee direction when fleeing starts
+			npc.scare_player_x = player_x
+			npc.scare_player_y = player_y
 		end
 	end
 
@@ -275,12 +276,31 @@ function update_npc(npc, player_x, player_y)
 			npc.state = "fleeing"
 			npc.state_timer = NPC_CONFIG.flee_duration
 			npc.show_surprise = false
+			-- Calculate flee direction NOW based on current player position
+			-- Use stored scare position as fallback if player moved offscreen
+			local flee_from_x = player_x or npc.scare_player_x or npc.x
+			local flee_from_y = player_y or npc.scare_player_y or npc.y
+			npc.flee_dir = get_flee_direction(npc, flee_from_x, flee_from_y)
 			npc.facing_dir = npc.flee_dir or npc.facing_dir
+			-- Clear stored scare position
+			npc.scare_player_x = nil
+			npc.scare_player_y = nil
 		end
 	elseif npc.state == "fleeing" then
 		-- Running away from player using run_speed
 		local speed = NPC_CONFIG.run_speed
 		local radius = NPC_CONFIG.collision_radius
+
+		-- Periodically re-evaluate flee direction (every 30 frames = 0.5 seconds)
+		if not npc.flee_recheck_timer then
+			npc.flee_recheck_timer = 0
+		end
+		npc.flee_recheck_timer = npc.flee_recheck_timer + 1
+		if npc.flee_recheck_timer >= 30 and player_x and player_y then
+			npc.flee_recheck_timer = 0
+			npc.flee_dir = get_flee_direction(npc, player_x, player_y)
+			npc.facing_dir = npc.flee_dir or npc.facing_dir
+		end
 
 		if npc.flee_dir then
 			local vec = DIR_VECTORS[npc.flee_dir]
@@ -312,6 +332,7 @@ function update_npc(npc, player_x, player_y)
 			npc.prev_state = nil
 			npc.prev_facing_dir = nil
 			npc.flee_dir = nil
+			npc.flee_recheck_timer = nil
 			npc.show_surprise = false
 			-- Reset timer for restored state
 			if npc.state == "idle" then

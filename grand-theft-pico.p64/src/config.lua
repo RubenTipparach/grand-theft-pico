@@ -284,7 +284,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = false,  -- set to false to disable debug features
+	enabled = true,  -- set to false to disable debug features
 }
 
 -- ============================================
@@ -411,7 +411,8 @@ FLORA_CONFIG = {
 	flower_sprites = { SPRITES.FLOWER_1.id, SPRITES.FLOWER_2.id },
 	grass_sprite = SPRITES.GRASS_BLADE.id,
 
-	-- Shadow settings
+	-- Shadow toggle and settings
+	shadows_enabled = false,  -- set to true to enable flora shadows
 	shadow_color = 25,
 	shadow_y_offset = 6,
 	tree_shadow_radius = 5,
