@@ -213,6 +213,7 @@ function pick_valid_direction(npc, allow_crossing)
 end
 
 -- Pick direction for NPC that ignores traffic rules (for fleeing/returning)
+-- Still avoids buildings and water
 function pick_valid_direction_ignore_traffic(npc)
 	local valid_dirs = {}
 	local speed = NPC_CONFIG.walk_speed
@@ -223,7 +224,8 @@ function pick_valid_direction_ignore_traffic(npc)
 		local test_x = npc.x + vec.dx * speed * 8
 		local test_y = npc.y + vec.dy * speed * 8
 
-		if not npc_collides_with_building(test_x, test_y, radius) then
+		-- Avoid buildings and water
+		if not npc_collides_with_building(test_x, test_y, radius) and not is_water(test_x, test_y) then
 			add(valid_dirs, dir)
 		end
 	end
@@ -281,12 +283,12 @@ function get_flee_direction(npc, player_x, player_y)
 		if dx > 0 then add(primary_dirs, "west") else add(primary_dirs, "east") end
 	end
 
-	-- Try each direction in priority order
+	-- Try each direction in priority order (avoid buildings and water)
 	for _, dir in ipairs(primary_dirs) do
 		local vec = DIR_VECTORS[dir]
 		local test_x = npc.x + vec.dx * speed * 4
 		local test_y = npc.y + vec.dy * speed * 4
-		if not npc_collides_with_building(test_x, test_y, radius) then
+		if not npc_collides_with_building(test_x, test_y, radius) and not is_water(test_x, test_y) then
 			return dir
 		end
 	end
@@ -537,13 +539,13 @@ function update_npc(npc, player_x, player_y)
 			local new_x = npc.x + vec.dx * speed
 			local new_y = npc.y + vec.dy * speed
 
-			-- Check for collision
-			if npc_collides_with_building(new_x, new_y, radius) then
-				-- Hit a building, pick new flee direction
+			-- Check for collision with buildings or water
+			if npc_collides_with_building(new_x, new_y, radius) or is_water(new_x, new_y) then
+				-- Hit a building or water, pick new flee direction
 				npc.flee_dir = get_flee_direction(npc, player_x or npc.x, player_y or npc.y)
 				npc.facing_dir = npc.flee_dir or npc.facing_dir
 			else
-				-- Move (anywhere - ignoring roads/sidewalks)
+				-- Move (anywhere - ignoring roads/sidewalks but not water)
 				npc.x = new_x
 				npc.y = new_y
 			end
@@ -593,8 +595,8 @@ function update_npc(npc, player_x, player_y)
 			local new_x = npc.x + vec.dx * speed
 			local new_y = npc.y + vec.dy * speed
 
-			if npc_collides_with_building(new_x, new_y, radius) then
-				-- Hit building, just go idle wherever we are
+			if npc_collides_with_building(new_x, new_y, radius) or is_water(new_x, new_y) then
+				-- Hit building or water, just go idle wherever we are
 				npc.state = "idle"
 				npc.target_x = nil
 				npc.target_y = nil

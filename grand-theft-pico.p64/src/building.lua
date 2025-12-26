@@ -311,54 +311,54 @@ profile("cull")
 				local off2_y = TRAFFIC_CONFIG.signal_2_offset_y
 
 				-- Corner-specific signal arrangement
-				-- NE, SE, NW, SW corners as requested
+				-- E-W signals flipped horizontally on east side, N-S signals flipped vertically
 				if obj.corner == "ne" then
-					-- NE: Left=E-W, Right=N-S (flip_y on right)
-					add(pending_traffic_signals, {
-						ns_light = false, corner = obj.corner,
-						x = base_x + off1_x, y = base_y + off1_y,
-						flip_x = false, flip_y = false,  -- E-W no flip
-					})
+					-- NE: Left=N-S (no flip_y), Right=E-W (flip_x)
 					add(pending_traffic_signals, {
 						ns_light = true, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- N-S no flip (was flip_y)
+					})
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
 						x = base_x + off2_x, y = base_y + off2_y,
-						flip_x = false, flip_y = true,   -- N-S flipped vertically
+						flip_x = true, flip_y = false,   -- E-W flipped horizontally
 					})
 				elseif obj.corner == "se" then
-					-- SE: Left=E-W, Right=N-S
-					add(pending_traffic_signals, {
-						ns_light = false, corner = obj.corner,
-						x = base_x + off1_x, y = base_y + off1_y,
-						flip_x = false, flip_y = false,  -- E-W no flip
-					})
+					-- SE: Left=N-S (flip_y), Right=E-W (flip_x)
 					add(pending_traffic_signals, {
 						ns_light = true, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = true,   -- N-S flipped vertically (was no flip)
+					})
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
 						x = base_x + off2_x, y = base_y + off2_y,
-						flip_x = false, flip_y = false,  -- N-S no flip
+						flip_x = true, flip_y = false,   -- E-W flipped horizontally
 					})
 				elseif obj.corner == "nw" then
-					-- NW: Left=N-S (flip_y), Right=E-W (flip_x)
-					add(pending_traffic_signals, {
-						ns_light = true, corner = obj.corner,
-						x = base_x + off1_x, y = base_y + off1_y,
-						flip_x = false, flip_y = true,   -- N-S flipped vertically
-					})
+					-- NW: Left=E-W (no flip_x), Right=N-S (no flip_y)
 					add(pending_traffic_signals, {
 						ns_light = false, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- E-W no flip (faces west side)
+					})
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
 						x = base_x + off2_x, y = base_y + off2_y,
-						flip_x = true, flip_y = false,   -- E-W flipped horizontally
+						flip_x = false, flip_y = false,  -- N-S no flip (was flip_y)
 					})
 				elseif obj.corner == "sw" then
-					-- SW: Left=N-S, Right=E-W (flip_x)
-					add(pending_traffic_signals, {
-						ns_light = true, corner = obj.corner,
-						x = base_x + off1_x, y = base_y + off1_y,
-						flip_x = false, flip_y = false,  -- N-S no flip
-					})
+					-- SW: Left=E-W (no flip_x), Right=N-S (flip_y)
 					add(pending_traffic_signals, {
 						ns_light = false, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- E-W no flip (faces west side)
+					})
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
 						x = base_x + off2_x, y = base_y + off2_y,
-						flip_x = true, flip_y = false,   -- E-W flipped horizontally
+						flip_x = false, flip_y = true,   -- N-S flipped vertically (was no flip)
 					})
 				end
 			end

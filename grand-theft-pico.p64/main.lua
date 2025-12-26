@@ -285,6 +285,8 @@ function update_traffic_lights()
 	local cycle_time = TRAFFIC_CONFIG.cycle_time
 	local yellow_time = TRAFFIC_CONFIG.yellow_time
 
+	local all_red_time = TRAFFIC_CONFIG.all_red_time
+
 	if traffic_phase == "ns" then
 		-- N-S is green, check if time for yellow
 		if now >= traffic_timer + cycle_time then
@@ -292,8 +294,14 @@ function update_traffic_lights()
 			traffic_phase = "ns_yellow"
 		end
 	elseif traffic_phase == "ns_yellow" then
-		-- N-S is yellow, check if time to switch to E-W green
+		-- N-S is yellow, check if time for all-red
 		if now >= traffic_timer + yellow_time then
+			traffic_timer = now
+			traffic_phase = "all_red_ns_to_ew"
+		end
+	elseif traffic_phase == "all_red_ns_to_ew" then
+		-- All red (after N-S), check if time to switch to E-W green
+		if now >= traffic_timer + all_red_time then
 			traffic_timer = now
 			traffic_phase = "ew"
 		end
@@ -304,8 +312,14 @@ function update_traffic_lights()
 			traffic_phase = "ew_yellow"
 		end
 	elseif traffic_phase == "ew_yellow" then
-		-- E-W is yellow, check if time to switch to N-S green
+		-- E-W is yellow, check if time for all-red
 		if now >= traffic_timer + yellow_time then
+			traffic_timer = now
+			traffic_phase = "all_red_ew_to_ns"
+		end
+	elseif traffic_phase == "all_red_ew_to_ns" then
+		-- All red (after E-W), check if time to switch to N-S green
+		if now >= traffic_timer + all_red_time then
 			traffic_timer = now
 			traffic_phase = "ns"
 		end
@@ -329,11 +343,26 @@ end
 
 -- Get the signal sprite for a light based on which direction it controls
 -- ns_light = true means this light controls north-south traffic
+-- N-S lights show GREEN when N-S phase (N-S traffic can go)
+-- E-W lights show GREEN when E-W phase (E-W traffic can go)
+-- All-red phases show RED for both directions (safety buffer between switches)
 -- Sprite orientation is handled by flip_x/flip_y flags when drawing
 function get_signal_sprite(ns_light, corner)
 	local sprites
+
+	-- All-red phases: both directions show red
+	if traffic_phase == "all_red_ns_to_ew" or traffic_phase == "all_red_ew_to_ns" then
+		if ns_light then
+			return TRAFFIC_CONFIG.signal_sprites_ns.red
+		else
+			return TRAFFIC_CONFIG.signal_sprites_ew.red
+		end
+	end
+
 	if ns_light then
 		-- N-S traffic light uses N-S sprite set
+		-- Shows GREEN when N-S phase (N-S traffic can go)
+		-- Shows RED when E-W phase (E-W traffic has right of way)
 		sprites = TRAFFIC_CONFIG.signal_sprites_ns
 		if traffic_phase == "ns" then
 			return sprites.green
@@ -344,6 +373,8 @@ function get_signal_sprite(ns_light, corner)
 		end
 	else
 		-- E-W traffic light uses E-W sprite set
+		-- Shows GREEN when E-W phase (E-W traffic can go)
+		-- Shows RED when N-S phase (N-S traffic has right of way)
 		sprites = TRAFFIC_CONFIG.signal_sprites_ew
 		if traffic_phase == "ew" then
 			return sprites.green

@@ -361,6 +361,7 @@ DEBUG_CONFIG = {
 TRAFFIC_CONFIG = {
 	cycle_time = 15,        -- seconds per green phase
 	yellow_time = 2,        -- seconds for yellow before switching
+	all_red_time = 2,       -- seconds for all-red safety phase between switches
 	-- N-S traffic signals (controls north-south traffic flow)
 	signal_sprites_ns = {
 		yellow = 195,
@@ -391,8 +392,8 @@ TRAFFIC_CONFIG = {
 -- ============================================
 MINIMAP_CONFIG = {
 	enabled = true,          -- show minimap
-	x = 8,                   -- screen X position (top-left corner)
-	y = 8,                   -- screen Y position (top-left corner)
+	x = 8,                   -- screen X position (lower-left corner)
+	y = 270 - 60 - 8,        -- screen Y position (lower-left corner: screen_h - height - margin)
 	width = 80,              -- minimap width in pixels
 	height = 60,             -- minimap height in pixels
 	scale = 0.03,            -- world-to-minimap scale (smaller = more zoomed out)

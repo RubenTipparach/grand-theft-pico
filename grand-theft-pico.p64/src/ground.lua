@@ -145,7 +145,63 @@ function draw_roads_from_map(world_x_offset, world_y_offset)
 	end
 end
 
--- Draw water tiles based on parsed map data (center tiles only for now)
+-- Get water sprite for a tile based on neighboring tiles (9-slice)
+-- Uses Set 1 for outer corners/edges (grass surrounding water)
+-- Uses Set 2 for inner corners (water surrounding grass - diagonal notches)
+function get_water_tile_sprite(mx, my, tiles, map_w, map_h)
+	local frame = water_frame + 1  -- 1 or 2 for table index
+	local set1 = WATER_CONFIG.set1[frame]
+	local set2 = WATER_CONFIG.set2[frame]
+
+	-- Check which neighbors are water (outside bounds = water)
+	local function is_water_tile(x, y)
+		if x < 0 or x >= map_w or y < 0 or y >= map_h then
+			return true  -- outside map = water
+		end
+		return tiles:get(x, y) == MAP_TILE_WATER
+	end
+
+	-- Cardinal neighbors
+	local n = is_water_tile(mx, my - 1)  -- north
+	local s = is_water_tile(mx, my + 1)  -- south
+	local w = is_water_tile(mx - 1, my)  -- west
+	local e = is_water_tile(mx + 1, my)  -- east
+
+	-- Diagonal neighbors (for inner corner detection)
+	local nw = is_water_tile(mx - 1, my - 1)  -- northwest
+	local ne = is_water_tile(mx + 1, my - 1)  -- northeast
+	local sw = is_water_tile(mx - 1, my + 1)  -- southwest
+	local se = is_water_tile(mx + 1, my + 1)  -- southeast
+
+	-- Set 1: Outer corners/edges (grass border around water)
+	-- Corner cases (2 cardinal sides have grass)
+	if not n and not w and s and e then return set1.tl end  -- grass on top and left
+	if not n and not e and s and w then return set1.tr end  -- grass on top and right
+	if not s and not w and n and e then return set1.bl end  -- grass on bottom and left
+	if not s and not e and n and w then return set1.br end  -- grass on bottom and right
+
+	-- Edge cases (1 cardinal side has grass)
+	if not n and s and w and e then return set1.t end   -- grass on top
+	if not s and n and w and e then return set1.b end   -- grass on bottom
+	if not w and n and s and e then return set1.l end   -- grass on left
+	if not e and n and s and w then return set1.r end   -- grass on right
+
+	-- Set 2: Inner corners (all 4 cardinal neighbors are water, but diagonal has grass)
+	-- These create the "notch" effect for rounded coastlines
+	-- The corner sprite fills the opposite corner from where the grass is
+	if n and s and w and e then
+		-- All cardinal neighbors are water - check diagonals for inner corners
+		if not nw then return set2.br end  -- grass at NW diagonal = fill BR corner
+		if not ne then return set2.bl end  -- grass at NE diagonal = fill BL corner
+		if not sw then return set2.tr end  -- grass at SW diagonal = fill TR corner
+		if not se then return set2.tl end  -- grass at SE diagonal = fill TL corner
+	end
+
+	-- Center (all sides and diagonals are water)
+	return set1.c
+end
+
+-- Draw water tiles based on parsed map data with 9-slice borders
 -- Optimized: only draws water in visible area, uses direct userdata access
 -- Coordinate system: world (0,0) = map center (128,128)
 function draw_water_from_map(world_x_offset, world_y_offset)
@@ -158,7 +214,6 @@ function draw_water_from_map(world_x_offset, world_y_offset)
 	local map_h = MAP_CONFIG.map_height
 	local half_w = map_w / 2
 	local half_h = map_h / 2
-	local water_spr = get_water_sprite()
 
 	-- Calculate visible world bounds
 	local left_wx = cam_x - SCREEN_CX - tile_size
@@ -176,7 +231,7 @@ function draw_water_from_map(world_x_offset, world_y_offset)
 	local screen_ox = SCREEN_CX - cam_x
 	local screen_oy = SCREEN_CY - cam_y
 
-	-- Draw only water tiles in visible range
+	-- Draw water tiles with proper 9-slice borders
 	for my = my1, my2 do
 		-- Convert map Y to world Y
 		local wy = (my - half_h) * tile_size
@@ -186,6 +241,8 @@ function draw_water_from_map(world_x_offset, world_y_offset)
 				-- Convert map X to world X
 				local wx = (mx - half_w) * tile_size
 				local sx = wx + screen_ox
+				-- Get appropriate 9-slice sprite based on neighbors
+				local water_spr = get_water_tile_sprite(mx, my, tiles, map_w, map_h)
 				spr(water_spr, sx, sy)
 			end
 		end
