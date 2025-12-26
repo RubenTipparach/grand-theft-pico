@@ -54,9 +54,36 @@ function handle_input()
 		game.player.walk_frame = 0  -- idle when not moving
 	end
 
-	-- Camera follows player
-	cam_x = game.player.x
-	cam_y = game.player.y
+	-- Smooth follow camera with deadzone
+	-- Player can move within deadzone without camera moving
+	-- When outside deadzone, camera smoothly follows to keep player at edge
+	local dz_hw = CAMERA_CONFIG.deadzone_half_w
+	local dz_hh = CAMERA_CONFIG.deadzone_half_h
+	local smooth = CAMERA_CONFIG.follow_smoothing
+
+	-- Calculate player offset from camera center
+	local offset_x = game.player.x - cam_x
+	local offset_y = game.player.y - cam_y
+
+	-- Target camera position (only move if player outside deadzone)
+	local target_x = cam_x
+	local target_y = cam_y
+
+	if offset_x > dz_hw then
+		target_x = game.player.x - dz_hw
+	elseif offset_x < -dz_hw then
+		target_x = game.player.x + dz_hw
+	end
+
+	if offset_y > dz_hh then
+		target_y = game.player.y - dz_hh
+	elseif offset_y < -dz_hh then
+		target_y = game.player.y + dz_hh
+	end
+
+	-- Smooth interpolation towards target
+	cam_x = cam_x + (target_x - cam_x) * smooth
+	cam_y = cam_y + (target_y - cam_y) * smooth
 end
 
 -- Get current player sprite based on facing direction and walk frame

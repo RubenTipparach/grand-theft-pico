@@ -45,6 +45,53 @@ SPRITES = {
 	TREE_1        = { id = 142, w = 16, h = 16 },
 	TREE_2        = { id = 143, w = 16, h = 16 },
 
+	-- ============================================
+	-- WATER TILES (16x16, 9-sliced, 2 animation frames)
+	-- ============================================
+	-- Set 1: Grass border surrounding water (water is inside)
+	-- Frame 1
+	WATER_SET1_F1_TL = { id = 208, w = 16, h = 16 },  -- top-left corner
+	WATER_SET1_F1_T  = { id = 209, w = 16, h = 16 },  -- top edge
+	WATER_SET1_F1_TR = { id = 210, w = 16, h = 16 },  -- top-right corner
+	WATER_SET1_F1_L  = { id = 216, w = 16, h = 16 },  -- left edge
+	WATER_SET1_F1_C  = { id = 217, w = 16, h = 16 },  -- center (pure water)
+	WATER_SET1_F1_R  = { id = 218, w = 16, h = 16 },  -- right edge
+	WATER_SET1_F1_BL = { id = 224, w = 16, h = 16 },  -- bottom-left corner
+	WATER_SET1_F1_B  = { id = 225, w = 16, h = 16 },  -- bottom edge
+	WATER_SET1_F1_BR = { id = 226, w = 16, h = 16 },  -- bottom-right corner
+	-- Frame 2
+	WATER_SET1_F2_TL = { id = 232, w = 16, h = 16 },
+	WATER_SET1_F2_T  = { id = 233, w = 16, h = 16 },
+	WATER_SET1_F2_TR = { id = 234, w = 16, h = 16 },
+	WATER_SET1_F2_L  = { id = 240, w = 16, h = 16 },
+	WATER_SET1_F2_C  = { id = 241, w = 16, h = 16 },
+	WATER_SET1_F2_R  = { id = 242, w = 16, h = 16 },
+	WATER_SET1_F2_BL = { id = 248, w = 16, h = 16 },
+	WATER_SET1_F2_B  = { id = 249, w = 16, h = 16 },
+	WATER_SET1_F2_BR = { id = 250, w = 16, h = 16 },
+
+	-- Set 2: Water border surrounding grass (grass island inside water)
+	-- Frame 1
+	WATER_SET2_F1_TL = { id = 211, w = 16, h = 16 },  -- top-left corner (inner)
+	WATER_SET2_F1_T  = { id = 212, w = 16, h = 16 },  -- top edge (inner)
+	WATER_SET2_F1_TR = { id = 213, w = 16, h = 16 },  -- top-right corner (inner)
+	WATER_SET2_F1_L  = { id = 219, w = 16, h = 16 },  -- left edge (inner)
+	-- Center is grass (use GRASS tile)
+	WATER_SET2_F1_R  = { id = 221, w = 16, h = 16 },  -- right edge (inner)
+	WATER_SET2_F1_BL = { id = 227, w = 16, h = 16 },  -- bottom-left corner (inner)
+	WATER_SET2_F1_B  = { id = 228, w = 16, h = 16 },  -- bottom edge (inner)
+	WATER_SET2_F1_BR = { id = 229, w = 16, h = 16 },  -- bottom-right corner (inner)
+	-- Frame 2
+	WATER_SET2_F2_TL = { id = 235, w = 16, h = 16 },
+	WATER_SET2_F2_T  = { id = 236, w = 16, h = 16 },
+	WATER_SET2_F2_TR = { id = 237, w = 16, h = 16 },
+	WATER_SET2_F2_L  = { id = 243, w = 16, h = 16 },
+	-- Center is grass
+	WATER_SET2_F2_R  = { id = 245, w = 16, h = 16 },
+	WATER_SET2_F2_BL = { id = 251, w = 16, h = 16 },
+	WATER_SET2_F2_B  = { id = 252, w = 16, h = 16 },
+	WATER_SET2_F2_BR = { id = 253, w = 16, h = 16 },
+
 	-- Player (facing east/west - flip_x for direction)
 	PLAYER_IDLE   = { id = 8,  w = 16, h = 16 },  -- idle, facing left
 	PLAYER_WALK1  = { id = 9,  w = 16, h = 16 },  -- walk frame 1
@@ -205,9 +252,9 @@ PLAYER_CONFIG = {
 -- CAMERA CONFIG
 -- ============================================
 CAMERA_CONFIG = {
-	follow_smoothing = 0.1,  -- 0 = instant, 1 = no movement
-	deadzone_x = 20,
-	deadzone_y = 20,
+	follow_smoothing = 0.08,  -- smoothing factor (lower = smoother/slower, higher = snappier)
+	deadzone_half_w = 16,     -- half-width of center deadzone (player can move this far before camera follows)
+	deadzone_half_h = 16,     -- half-height of center deadzone
 }
 
 -- ============================================
@@ -306,6 +353,116 @@ GROUND_CONFIG = {
 -- ============================================
 DEBUG_CONFIG = {
 	enabled = false,  -- set to false to disable debug features
+}
+
+-- ============================================
+-- TRAFFIC LIGHT CONFIG
+-- ============================================
+TRAFFIC_CONFIG = {
+	cycle_time = 15,        -- seconds per green phase
+	yellow_time = 2,        -- seconds for yellow before switching
+	-- N-S traffic signals (controls north-south traffic flow)
+	signal_sprites_ns = {
+		yellow = 195,
+		green = 196,
+		red = 197,
+	},
+	-- E-W traffic signals (controls east-west traffic flow)
+	signal_sprites_ew = {
+		yellow = 214,
+		green = 215,
+		red = 222,
+	},
+	-- Base signal position on lamp sprite
+	signal_base_x = 12,     -- from left edge of lamp (center of 24px lamp)
+	signal_base_y = 21,     -- from bottom of lamp (near top)
+	-- Offset for first signal (N-S) from base position
+	signal_1_offset_x = -6,
+	signal_1_offset_y = 0,
+	-- Offset for second signal (E-W) from base position
+	signal_2_offset_x = 6,
+	signal_2_offset_y = 0,
+	-- Only show traffic lights at intersections (disable regular street lights)
+	intersection_lights_only = true,
+}
+
+-- ============================================
+-- MINIMAP CONFIG
+-- ============================================
+MINIMAP_CONFIG = {
+	enabled = true,          -- show minimap
+	x = 8,                   -- screen X position (top-left corner)
+	y = 8,                   -- screen Y position (top-left corner)
+	width = 80,              -- minimap width in pixels
+	height = 60,             -- minimap height in pixels
+	scale = 0.03,            -- world-to-minimap scale (smaller = more zoomed out)
+	bg_color = 20,           -- background color (grass green)
+	border_color = 6,        -- border color
+	road_color = 5,          -- road color (gray)
+	building_color = 4,      -- building color (brown)
+	player_color = 11,       -- player blip color (green)
+	npc_color = 8,           -- NPC blip color (red)
+	player_size = 2,         -- player blip radius
+	npc_size = 1,            -- NPC blip size
+	alpha = 0.7,             -- transparency (not used directly, for reference)
+	water_color = 24,        -- water color on minimap (blue)
+}
+
+-- ============================================
+-- WATER CONFIG
+-- ============================================
+-- Water surrounds the city with animated tiles
+-- Set 1: Grass border around water (outer coastline)
+-- Set 2: Water border around grass (island coastlines)
+WATER_CONFIG = {
+	animation_speed = 0.5,   -- seconds per frame (2 FPS animation)
+	-- World bounds for land (beyond this = water)
+	-- Roads span -700 to 1900 x, -400 to 1600 y
+	-- Adding extra grass buffer around the city
+	land_min_x = -850,       -- west edge of land (extra 100px grass beyond roads)
+	land_max_x = 2050,       -- east edge of land (extra 150px grass beyond roads)
+	land_min_y = -550,       -- north edge of land (extra 150px grass beyond roads)
+	land_max_y = 1750,       -- south edge of land (extra 150px grass beyond roads)
+	-- Water extends to world bounds (defined in ground.lua)
+
+	-- 9-slice tile IDs for Set 1 (grass surrounding water - outer coastline)
+	-- [frame][position] where position: tl, t, tr, l, c, r, bl, b, br
+	set1 = {
+		-- Frame 1
+		{ tl = 208, t = 209, tr = 210,
+		  l  = 216, c = 217, r  = 218,
+		  bl = 224, b = 225, br = 226 },
+		-- Frame 2
+		{ tl = 232, t = 233, tr = 234,
+		  l  = 240, c = 241, r  = 242,
+		  bl = 248, b = 249, br = 250 },
+	},
+
+	-- 9-slice tile IDs for Set 2 (water surrounding grass - island coastlines)
+	-- Center tile not used (use grass instead)
+	set2 = {
+		-- Frame 1
+		{ tl = 211, t = 212, tr = 213,
+		  l  = 219, c = nil, r  = 221,
+		  bl = 227, b = 228, br = 229 },
+		-- Frame 2
+		{ tl = 235, t = 236, tr = 237,
+		  l  = 243, c = nil, r  = 245,
+		  bl = 251, b = 252, br = 253 },
+	},
+
+	-- Islands configuration (position in water, outside land bounds)
+	-- x,y = world position of island top-left, w,h = size in tiles (16px each)
+	islands = {
+		{ x = -1000, y = -600, w = 4, h = 3 },   -- island far NW
+		{ x = -1100, y = 400, w = 3, h = 2 },    -- island W
+		{ x = -950, y = 1200, w = 5, h = 4 },    -- larger island SW
+		{ x = 2050, y = -500, w = 4, h = 3 },    -- island far NE
+		{ x = 2100, y = 600, w = 3, h = 3 },     -- island E
+		{ x = 2000, y = 1400, w = 4, h = 2 },    -- island SE
+		{ x = 400, y = 1750, w = 3, h = 2 },     -- island S
+		{ x = 800, y = -650, w = 3, h = 2 },     -- island N
+	},
 }
 
 -- ============================================

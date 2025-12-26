@@ -37,37 +37,43 @@ function create_npc(x, y, npc_type_index)
 	}
 end
 
--- Get a random point on a road for spawning
-function get_random_road_point()
+-- Get a random point on a sidewalk for spawning
+function get_random_sidewalk_point()
 	local road = ROADS[flr(rnd(#ROADS)) + 1]
 	local x, y
+	local sidewalk_w = ROAD_CONFIG.sidewalk_width
+	local road_half = road.width / 2
+	-- Offset to center of sidewalk
+	local sidewalk_offset = road_half + sidewalk_w / 2
+	-- Pick which side of the road (north/south for horizontal, east/west for vertical)
+	local side = rnd(1) < 0.5 and -1 or 1
 
 	if road.direction == "horizontal" then
 		x = road.x1 + rnd(road.x2 - road.x1)
-		y = road.y
+		y = road.y + side * sidewalk_offset
 	else
-		x = road.x
+		x = road.x + side * sidewalk_offset
 		y = road.y1 + rnd(road.y2 - road.y1)
 	end
 
 	return x, y
 end
 
--- Get a valid spawn point that doesn't collide with buildings
+-- Get a valid spawn point on sidewalk that doesn't collide with buildings
 function get_valid_spawn_point()
 	local max_attempts = 20
 	local radius = NPC_CONFIG.collision_radius
 
 	for attempt = 1, max_attempts do
-		local x, y = get_random_road_point()
-		-- Check if this point collides with any building
-		if not npc_collides_with_building(x, y, radius) then
+		local x, y = get_random_sidewalk_point()
+		-- Check if this point is on walkable terrain and doesn't collide with buildings
+		if is_walkable_terrain(x, y) and not npc_collides_with_building(x, y, radius) then
 			return x, y
 		end
 	end
 
-	-- Fallback: return a road point anyway (better than nothing)
-	return get_random_road_point()
+	-- Fallback: return a sidewalk point anyway (better than nothing)
+	return get_random_sidewalk_point()
 end
 
 -- Spawn NPCs on roads, avoiding buildings
@@ -104,8 +110,10 @@ function npc_collides_with_building(x, y, radius)
 end
 
 -- Pick a new random direction that doesn't immediately hit a building
-function pick_valid_direction(npc)
+-- Now also considers terrain: prefers sidewalk/grass, avoids roads unless crossing
+function pick_valid_direction(npc, allow_crossing)
 	local valid_dirs = {}
+	local preferred_dirs = {}  -- directions that stay on walkable terrain
 	local speed = NPC_CONFIG.walk_speed
 	local radius = NPC_CONFIG.collision_radius
 
@@ -117,10 +125,64 @@ function pick_valid_direction(npc)
 
 		if not npc_collides_with_building(test_x, test_y, radius) then
 			add(valid_dirs, dir)
+
+			-- Check if this direction keeps us on walkable terrain
+			if is_walkable_terrain(test_x, test_y) then
+				add(preferred_dirs, dir)
+			elseif allow_crossing and is_on_road_surface(test_x, test_y) then
+				-- Allow crossing if at intersection and light is green
+				if is_at_intersection(npc.x, npc.y) and can_cross_in_direction(dir) then
+					add(preferred_dirs, dir)
+				end
+			end
 		end
 	end
 
-	-- Pick a random valid direction, or stay still if none
+	-- Prefer directions that keep us on walkable terrain
+	if #preferred_dirs > 0 then
+		return preferred_dirs[flr(rnd(#preferred_dirs)) + 1]
+	end
+
+	-- If no preferred, check if we should wait at intersection
+	if is_on_sidewalk(npc.x, npc.y) then
+		-- We're on sidewalk, might be waiting to cross
+		for _, dir in ipairs(valid_dirs) do
+			local vec = DIR_VECTORS[dir]
+			local test_x = npc.x + vec.dx * speed * 2
+			local test_y = npc.y + vec.dy * speed * 2
+			if is_on_road_surface(test_x, test_y) then
+				-- There's a road ahead - should we wait?
+				if not can_cross_in_direction(dir) then
+					-- Light is red, wait
+					return nil  -- signals to enter waiting state
+				end
+			end
+		end
+	end
+
+	-- Fallback to any valid direction
+	if #valid_dirs > 0 then
+		return valid_dirs[flr(rnd(#valid_dirs)) + 1]
+	end
+	return nil
+end
+
+-- Pick direction for NPC that ignores traffic rules (for fleeing/returning)
+function pick_valid_direction_ignore_traffic(npc)
+	local valid_dirs = {}
+	local speed = NPC_CONFIG.walk_speed
+	local radius = NPC_CONFIG.collision_radius
+
+	for _, dir in ipairs(DIRECTIONS) do
+		local vec = DIR_VECTORS[dir]
+		local test_x = npc.x + vec.dx * speed * 8
+		local test_y = npc.y + vec.dy * speed * 8
+
+		if not npc_collides_with_building(test_x, test_y, radius) then
+			add(valid_dirs, dir)
+		end
+	end
+
 	if #valid_dirs > 0 then
 		return valid_dirs[flr(rnd(#valid_dirs)) + 1]
 	end
@@ -195,7 +257,10 @@ function update_npc(npc, player_x, player_y)
 	npc.last_update_time = now
 
 	-- Check if player is too close (trigger surprised state)
-	if npc.state ~= "surprised" and npc.state ~= "fleeing" and player_x and player_y then
+	-- Don't interrupt crossing or returning states
+	if npc.state ~= "surprised" and npc.state ~= "fleeing" and
+	   npc.state ~= "crossing" and npc.state ~= "returning" and
+	   player_x and player_y then
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist = sqrt(dx * dx + dy * dy)
@@ -220,20 +285,49 @@ function update_npc(npc, player_x, player_y)
 
 		if now >= npc.state_end_time then
 			-- Time to start walking
-			local new_dir = pick_valid_direction(npc)
+			local new_dir = pick_valid_direction(npc, true)  -- allow crossing if light is green
 			if new_dir then
 				npc.facing_dir = new_dir
-				npc.state = "walking"
+				-- Check if we're about to cross a road
+				local vec = DIR_VECTORS[new_dir]
+				local test_x = npc.x + vec.dx * 16
+				local test_y = npc.y + vec.dy * 16
+				if is_on_road_surface(test_x, test_y) then
+					-- Starting to cross - enter crossing state
+					npc.state = "crossing"
+					npc.cross_dir = new_dir
+				else
+					npc.state = "walking"
+				end
 				local cfg = NPC_CONFIG.direction_change_time
 				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
-				-- Can't move, stay idle longer
-				local cfg = NPC_CONFIG.idle_time
-				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+				-- Can't move or should wait - check if waiting for light
+				if is_on_sidewalk(npc.x, npc.y) then
+					-- Check if there's a road nearby we want to cross
+					for _, dir in ipairs(DIRECTIONS) do
+						local vec = DIR_VECTORS[dir]
+						local test_x = npc.x + vec.dx * 16
+						local test_y = npc.y + vec.dy * 16
+						if is_on_road_surface(test_x, test_y) and not can_cross_in_direction(dir) then
+							-- There's a road with red light, wait
+							npc.state = "waiting"
+							npc.wait_dir = dir
+							npc.facing_dir = dir
+							break
+						end
+					end
+				end
+				if npc.state == "idle" then
+					-- Still idle, wait longer
+					local cfg = NPC_CONFIG.idle_time
+					npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+				end
 			end
 		end
+
 	elseif npc.state == "walking" then
-		-- Moving (pixels per second * delta time)
+		-- Moving on sidewalk/grass (pixels per second * delta time)
 		local vec = DIR_VECTORS[npc.facing_dir]
 		local speed = NPC_CONFIG.walk_speed * dt
 		local radius = NPC_CONFIG.collision_radius
@@ -241,14 +335,29 @@ function update_npc(npc, player_x, player_y)
 		local new_x = npc.x + vec.dx * speed
 		local new_y = npc.y + vec.dy * speed
 
-		-- Check for collision
+		-- Check for collision with buildings
 		if npc_collides_with_building(new_x, new_y, radius) then
 			-- Hit a building, stop and go idle
 			npc.state = "idle"
 			local cfg = NPC_CONFIG.idle_time
 			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+		-- Check if we're about to step onto road
+		elseif is_on_road_surface(new_x, new_y) then
+			-- Don't walk onto road unless crossing
+			if is_at_intersection(npc.x, npc.y) and can_cross_in_direction(npc.facing_dir) then
+				-- Start crossing
+				npc.state = "crossing"
+				npc.cross_dir = npc.facing_dir
+				npc.x = new_x
+				npc.y = new_y
+			else
+				-- Stop at road edge, enter waiting or turn around
+				npc.state = "idle"
+				local cfg = NPC_CONFIG.idle_time
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+			end
 		else
-			-- Move
+			-- Normal movement on walkable terrain
 			npc.x = new_x
 			npc.y = new_y
 
@@ -260,7 +369,7 @@ function update_npc(npc, player_x, player_y)
 			end
 		end
 
-		if now >= npc.state_end_time then
+		if now >= npc.state_end_time and npc.state == "walking" then
 			-- Time to change direction or stop
 			if rnd(1) < 0.3 then
 				-- Stop and idle
@@ -268,8 +377,8 @@ function update_npc(npc, player_x, player_y)
 				local cfg = NPC_CONFIG.idle_time
 				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
-				-- Pick a new direction
-				local new_dir = pick_valid_direction(npc)
+				-- Pick a new direction (prefer walkable terrain)
+				local new_dir = pick_valid_direction(npc, true)
 				if new_dir then
 					npc.facing_dir = new_dir
 					local cfg = NPC_CONFIG.direction_change_time
@@ -282,6 +391,69 @@ function update_npc(npc, player_x, player_y)
 				end
 			end
 		end
+
+	elseif npc.state == "waiting" then
+		-- Waiting at intersection for light to change
+		npc.walk_frame = 0
+
+		-- Check if we can now cross
+		if npc.wait_dir and can_cross_in_direction(npc.wait_dir) then
+			-- Light turned green, start crossing
+			npc.state = "crossing"
+			npc.cross_dir = npc.wait_dir
+			npc.facing_dir = npc.wait_dir
+			npc.wait_dir = nil
+		elseif now >= npc.state_end_time then
+			-- Been waiting too long, maybe turn around
+			if rnd(1) < 0.2 then
+				npc.state = "idle"
+				npc.wait_dir = nil
+				local cfg = NPC_CONFIG.idle_time
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+			else
+				-- Keep waiting, reset timer
+				npc.state_end_time = now + 2  -- check again in 2 seconds
+			end
+		end
+
+	elseif npc.state == "crossing" then
+		-- Crossing the road - ALWAYS complete the crossing
+		local vec = DIR_VECTORS[npc.cross_dir or npc.facing_dir]
+		local speed = NPC_CONFIG.walk_speed * dt
+		local radius = NPC_CONFIG.collision_radius
+
+		local new_x = npc.x + vec.dx * speed
+		local new_y = npc.y + vec.dy * speed
+
+		-- Check for collision with buildings
+		if npc_collides_with_building(new_x, new_y, radius) then
+			-- Somehow hit a building while crossing, go idle
+			npc.state = "idle"
+			npc.cross_dir = nil
+			local cfg = NPC_CONFIG.idle_time
+			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+		else
+			-- Move across the road
+			npc.x = new_x
+			npc.y = new_y
+
+			-- Update walk animation
+			local anim_speed = NPC_CONFIG.animation_speed
+			if now >= npc.walk_time + anim_speed then
+				npc.walk_frame = (npc.walk_frame % 3) + 1
+				npc.walk_time = now
+			end
+
+			-- Check if we've reached the other side (back on walkable terrain)
+			if is_walkable_terrain(new_x, new_y) then
+				-- Finished crossing
+				npc.state = "walking"
+				npc.cross_dir = nil
+				local cfg = NPC_CONFIG.direction_change_time
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+			end
+		end
+
 	elseif npc.state == "surprised" then
 		-- Frozen in place, showing exclamation sprite
 		npc.walk_frame = 0
@@ -302,8 +474,9 @@ function update_npc(npc, player_x, player_y)
 			npc.scare_player_x = nil
 			npc.scare_player_y = nil
 		end
+
 	elseif npc.state == "fleeing" then
-		-- Running away from player (pixels per second * delta time)
+		-- Running away from player - IGNORES all traffic rules
 		local speed = NPC_CONFIG.run_speed * dt
 		local radius = NPC_CONFIG.collision_radius
 
@@ -325,7 +498,7 @@ function update_npc(npc, player_x, player_y)
 				npc.flee_dir = get_flee_direction(npc, player_x or npc.x, player_y or npc.y)
 				npc.facing_dir = npc.flee_dir or npc.facing_dir
 			else
-				-- Move
+				-- Move (anywhere - ignoring roads/sidewalks)
 				npc.x = new_x
 				npc.y = new_y
 			end
@@ -340,21 +513,73 @@ function update_npc(npc, player_x, player_y)
 
 		-- Check if calmed down
 		if now >= npc.state_end_time then
-			-- Return to previous state
-			npc.state = npc.prev_state or "idle"
-			npc.facing_dir = npc.prev_facing_dir or npc.facing_dir
+			-- After fleeing, return to sidewalk if on road
+			if is_on_road_surface(npc.x, npc.y) then
+				npc.state = "returning"
+				-- Find nearest sidewalk
+				local sw_x, sw_y = get_nearest_sidewalk(npc.x, npc.y)
+				if sw_x then
+					npc.target_x = sw_x
+					npc.target_y = sw_y
+					npc.facing_dir = get_direction_towards(npc.x, npc.y, sw_x, sw_y)
+				end
+			else
+				-- Already on walkable terrain, return to normal
+				npc.state = "idle"
+				local cfg = NPC_CONFIG.idle_time
+				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+			end
 			npc.prev_state = nil
 			npc.prev_facing_dir = nil
 			npc.flee_dir = nil
 			npc.show_surprise = false
-			-- Reset timer for restored state
-			if npc.state == "idle" then
+		end
+
+	elseif npc.state == "returning" then
+		-- Returning to sidewalk after fleeing
+		local speed = NPC_CONFIG.walk_speed * dt
+		local radius = NPC_CONFIG.collision_radius
+
+		-- Move towards target sidewalk
+		if npc.target_x and npc.target_y then
+			local dir = get_direction_towards(npc.x, npc.y, npc.target_x, npc.target_y)
+			npc.facing_dir = dir
+			local vec = DIR_VECTORS[dir]
+			local new_x = npc.x + vec.dx * speed
+			local new_y = npc.y + vec.dy * speed
+
+			if npc_collides_with_building(new_x, new_y, radius) then
+				-- Hit building, just go idle wherever we are
+				npc.state = "idle"
+				npc.target_x = nil
+				npc.target_y = nil
 				local cfg = NPC_CONFIG.idle_time
 				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 			else
-				local cfg = NPC_CONFIG.direction_change_time
-				npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+				npc.x = new_x
+				npc.y = new_y
+
+				-- Update walk animation
+				local anim_speed = NPC_CONFIG.animation_speed
+				if now >= npc.walk_time + anim_speed then
+					npc.walk_frame = (npc.walk_frame % 3) + 1
+					npc.walk_time = now
+				end
+
+				-- Check if reached sidewalk
+				if is_walkable_terrain(new_x, new_y) then
+					npc.state = "idle"
+					npc.target_x = nil
+					npc.target_y = nil
+					local cfg = NPC_CONFIG.idle_time
+					npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+				end
 			end
+		else
+			-- No target, just go idle
+			npc.state = "idle"
+			local cfg = NPC_CONFIG.idle_time
+			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
 		end
 	end
 end
@@ -369,7 +594,7 @@ function spawn_npc_near_player(player_x, player_y)
 	local max_dist = cfg.despawn_distance  -- spawn up to despawn distance
 	local radius = cfg.collision_radius
 
-	-- Try to find a valid spawn point
+	-- Try to find a valid spawn point on walkable terrain (sidewalk/grass)
 	for attempt = 1, 10 do
 		-- Random angle and distance
 		local angle = rnd(1) * 6.28318  -- 2*PI
@@ -377,8 +602,8 @@ function spawn_npc_near_player(player_x, player_y)
 		local x = player_x + cos(angle) * dist
 		local y = player_y + sin(angle) * dist
 
-		-- Check if on a road and not colliding with buildings
-		if is_on_any_road(x, y) and not npc_collides_with_building(x, y, radius) then
+		-- Check if on walkable terrain and not colliding with buildings
+		if is_walkable_terrain(x, y) and not npc_collides_with_building(x, y, radius) then
 			local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
 			return create_npc(x, y, npc_type_index)
 		end

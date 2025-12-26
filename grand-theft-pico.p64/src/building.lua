@@ -1,6 +1,9 @@
 --[[pod_format="raw"]]
 -- building.lua - Building data and rendering (GTA1/2 top-down style)
 
+-- Pending traffic signals to draw after night overlay (so they're not darkened)
+pending_traffic_signals = {}
+
 -- Draw east/west walls only (slant away from center, should be behind player)
 function draw_building_back_walls(b)
 	local x0, y0 = b.x, b.y
@@ -150,11 +153,14 @@ function draw_buildings_and_player(buildings, player, player_spr, flip_x)
 	-- Use player's feet position for depth sorting
 	-- Player sprite is 16x16, feet are roughly at center-bottom (+8 from top-left)
 	local player_feet_y = player.y + 8
+	local player_sx, player_sy = world_to_screen(player.x, player.y)
 	add(visible, {
 		type = "player",
 		y = player_feet_y,
 		cx = player.x,
 		cy = player.y,
+		sx = player_sx,  -- cache screen position for deadzone camera
+		sy = player_sy,
 		spr = player_spr,
 		flip_x = flip_x
 	})
@@ -195,7 +201,11 @@ profile("cull")
 				cx = light.x,
 				cy = light.y,
 				sx = sx,
-				sy = sy
+				sy = sy,
+				is_traffic_light = light.is_traffic_light,
+				corner = light.corner,  -- which corner of intersection (for sprite facing)
+				flip_x = light.flip_x,
+				flip_y = light.flip_y,
 			})
 		end
 	end
@@ -232,7 +242,7 @@ profile("cull")
 			local sh = PLAYER_CONFIG.shadow_height
 			local sx_off = PLAYER_CONFIG.shadow_x_offset
 			local sy_off = PLAYER_CONFIG.shadow_y_offset
-			ovalfill(SCREEN_CX - sr + sx_off, SCREEN_CY + sy_off, SCREEN_CX + sr + sx_off, SCREEN_CY + sy_off + sh, PLAYER_CONFIG.shadow_color)
+			ovalfill(obj.sx - sr + sx_off, obj.sy + sy_off, obj.sx + sr + sx_off, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
 		elseif obj.type == "npc" then
 			local sr = NPC_CONFIG.shadow_radius
 			local sh = NPC_CONFIG.shadow_height
@@ -264,7 +274,7 @@ profile("cull")
 		if obj.type == "building" then
 			draw_building_front(obj.data)
 		elseif obj.type == "player" then
-			spr(obj.spr, SCREEN_CX - 8, SCREEN_CY - 8, obj.flip_x)
+			spr(obj.spr, obj.sx - 8, obj.sy - 8, obj.flip_x)
 		elseif obj.type == "npc" then
 			local npc = obj.data
 			local npc_spr = get_npc_sprite(npc)
@@ -283,6 +293,75 @@ profile("cull")
 			local draw_x = obj.sx - lamp_w / 2
 			local draw_y = obj.sy - lamp_h
 			spr(lamp_cfg.lamp_sprite, draw_x, draw_y)
+
+			-- If this is a traffic light, store BOTH signals for later drawing (after night overlay)
+			-- Each lamp has 2 signals: one N-S and one E-W
+			-- Corner-specific positioning and flipping:
+			--   NW: Left=N-S (flip_y), Right=E-W
+			--   NE: Left=E-W, Right=N-S (swap positions from default)
+			--   SW: Left=N-S, Right=E-W
+			--   SE: Left=E-W, Right=N-S (swap positions from default)
+			if obj.is_traffic_light then
+				local base_x = draw_x + TRAFFIC_CONFIG.signal_base_x - 4  -- center 8px signal
+				local base_y = draw_y + (lamp_h - TRAFFIC_CONFIG.signal_base_y) - 4  -- from bottom
+
+				local off1_x = TRAFFIC_CONFIG.signal_1_offset_x
+				local off1_y = TRAFFIC_CONFIG.signal_1_offset_y
+				local off2_x = TRAFFIC_CONFIG.signal_2_offset_x
+				local off2_y = TRAFFIC_CONFIG.signal_2_offset_y
+
+				-- Corner-specific signal arrangement
+				-- NE, SE, NW, SW corners as requested
+				if obj.corner == "ne" then
+					-- NE: Left=E-W, Right=N-S (flip_y on right)
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- E-W no flip
+					})
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
+						x = base_x + off2_x, y = base_y + off2_y,
+						flip_x = false, flip_y = true,   -- N-S flipped vertically
+					})
+				elseif obj.corner == "se" then
+					-- SE: Left=E-W, Right=N-S
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- E-W no flip
+					})
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
+						x = base_x + off2_x, y = base_y + off2_y,
+						flip_x = false, flip_y = false,  -- N-S no flip
+					})
+				elseif obj.corner == "nw" then
+					-- NW: Left=N-S (flip_y), Right=E-W (flip_x)
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = true,   -- N-S flipped vertically
+					})
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
+						x = base_x + off2_x, y = base_y + off2_y,
+						flip_x = true, flip_y = false,   -- E-W flipped horizontally
+					})
+				elseif obj.corner == "sw" then
+					-- SW: Left=N-S, Right=E-W (flip_x)
+					add(pending_traffic_signals, {
+						ns_light = true, corner = obj.corner,
+						x = base_x + off1_x, y = base_y + off1_y,
+						flip_x = false, flip_y = false,  -- N-S no flip
+					})
+					add(pending_traffic_signals, {
+						ns_light = false, corner = obj.corner,
+						x = base_x + off2_x, y = base_y + off2_y,
+						flip_x = true, flip_y = false,   -- E-W flipped horizontally
+					})
+				end
+			end
 		end
 	end
 	profile("sprites")
@@ -303,4 +382,14 @@ function draw_buildings(buildings)
 	for _, b in ipairs(visible) do
 		draw_building(b)
 	end
+end
+
+-- Draw pending traffic signals (called after night overlay to avoid darkening)
+function draw_traffic_signals()
+	for _, sig in ipairs(pending_traffic_signals) do
+		local signal_spr = get_signal_sprite(sig.ns_light, sig.corner)
+		spr(signal_spr, sig.x, sig.y, sig.flip_x, sig.flip_y)
+	end
+	-- Clear for next frame
+	pending_traffic_signals = {}
 end

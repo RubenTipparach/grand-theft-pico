@@ -16,218 +16,9 @@ local ground_scanlines = userdata("f64", 11, 270)
 -- Pre-allocated slope vector (reused across all ground drawing)
 local ground_slope = vec(0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0)
 
--- Batched sprite buffer for tilemap rendering
--- Format per row: sprite_id, x, y (no flip needed for ground tiles)
--- Max tiles visible: ~20x17 = 340 tiles, round up to 400
-local MAX_VISIBLE_TILES = 400
-local tile_batch = userdata("f64", 3, MAX_VISIBLE_TILES)
-
--- Tilemap-based rendering (alternative approach)
--- World is divided into 16x16 tiles, stored in a 2D userdata grid
-local TILE_SIZE = 16
--- Expanded world bounds to include countryside
-local WORLD_MIN_X = -1200
-local WORLD_MIN_Y = -800
-local WORLD_MAX_X = 2200
-local WORLD_MAX_Y = 1900
-local TILEMAP_W = 0  -- calculated at init
-local TILEMAP_H = 0
-local ground_tilemap = nil  -- userdata("u8", TILEMAP_W, TILEMAP_H)
-local tilemap_ready = false
-
--- Sprite IDs for each tile type (cached at init)
-local tile_sprites = {}
-
--- Initialize the ground tilemap (call once in _init)
-function init_ground_tilemap()
-	-- Calculate tilemap dimensions
-	TILEMAP_W = ceil((WORLD_MAX_X - WORLD_MIN_X) / TILE_SIZE)
-	TILEMAP_H = ceil((WORLD_MAX_Y - WORLD_MIN_Y) / TILE_SIZE)
-
-	printh("Initializing ground tilemap: " .. TILEMAP_W .. "x" .. TILEMAP_H .. " tiles")
-
-	-- Create tilemap (tile type per cell)
-	ground_tilemap = userdata("u8", TILEMAP_W, TILEMAP_H)
-
-	-- Cache sprite IDs for each tile type
-	tile_sprites[TILE_GRASS] = SPRITES.GRASS.id
-	tile_sprites[TILE_DIRT_LIGHT] = SPRITES.DIRT_LIGHT.id
-	tile_sprites[TILE_DIRT_MEDIUM] = SPRITES.DIRT_MEDIUM.id
-	tile_sprites[TILE_DIRT_HEAVY] = SPRITES.DIRT_HEAVY.id
-	tile_sprites[TILE_SIDEWALK_NS] = SPRITES.SIDEWALK_NS.id
-	tile_sprites[TILE_SIDEWALK_EW] = SPRITES.SIDEWALK_EW.id
-
-	-- Fill with grass by default
-	for ty = 0, TILEMAP_H - 1 do
-		for tx = 0, TILEMAP_W - 1 do
-			ground_tilemap:set(tx, ty, TILE_GRASS)
-		end
-	end
-
-	-- Paint sidewalks first (so roads overwrite at intersections)
-	for _, road in ipairs(ROADS) do
-		paint_sidewalks_to_tilemap(road)
-	end
-	-- Then paint city roads on top
-	for _, road in ipairs(ROADS) do
-		paint_road_surface_to_tilemap(road)
-	end
-	-- Paint countryside roads (no sidewalks)
-	for _, road in ipairs(COUNTRYSIDE_ROADS) do
-		paint_road_surface_to_tilemap(road)
-	end
-
-	tilemap_ready = true
-	printh("Ground tilemap ready!")
-end
-
--- Paint only sidewalks for a road onto the tilemap
-function paint_sidewalks_to_tilemap(road)
-	local half_road = road.width / 2
-	local sidewalk_w = ROAD_CONFIG.sidewalk_width
-
-	if road.direction == "horizontal" then
-		local sidewalk_tile = TILE_SIDEWALK_EW
-		local road_y1 = road.y - half_road
-		local road_y2 = road.y + half_road
-		-- Top sidewalk
-		paint_rect_to_tilemap(road.x1, road_y1 - sidewalk_w, road.x2, road_y1, sidewalk_tile)
-		-- Bottom sidewalk
-		paint_rect_to_tilemap(road.x1, road_y2, road.x2, road_y2 + sidewalk_w, sidewalk_tile)
-	elseif road.direction == "vertical" then
-		local sidewalk_tile = TILE_SIDEWALK_NS
-		local road_x1 = road.x - half_road
-		local road_x2 = road.x + half_road
-		-- Left sidewalk
-		paint_rect_to_tilemap(road_x1 - sidewalk_w, road.y1, road_x1, road.y2, sidewalk_tile)
-		-- Right sidewalk
-		paint_rect_to_tilemap(road_x2, road.y1, road_x2 + sidewalk_w, road.y2, sidewalk_tile)
-	end
-end
-
--- Paint only road surface onto the tilemap (called after sidewalks)
-function paint_road_surface_to_tilemap(road)
-	local half_road = road.width / 2
-	local road_tile = road.tile_type or TILE_DIRT_MEDIUM
-
-	if road.direction == "horizontal" then
-		paint_rect_to_tilemap(road.x1, road.y - half_road, road.x2, road.y + half_road, road_tile)
-	elseif road.direction == "vertical" then
-		paint_rect_to_tilemap(road.x - half_road, road.y1, road.x + half_road, road.y2, road_tile)
-	end
-end
-
--- Get tile type at a world position (for flora system etc.)
-function get_tile_type(wx, wy)
-	if not tilemap_ready then return TILE_GRASS end
-
-	-- Convert world coords to tile coords
-	local tx = flr((wx - WORLD_MIN_X) / TILE_SIZE)
-	local ty = flr((wy - WORLD_MIN_Y) / TILE_SIZE)
-
-	-- Bounds check
-	if tx < 0 or tx >= TILEMAP_W or ty < 0 or ty >= TILEMAP_H then
-		return TILE_GRASS  -- default to grass outside bounds
-	end
-
-	return ground_tilemap:get(tx, ty)
-end
-
--- Paint a rectangle of tiles onto the tilemap
-function paint_rect_to_tilemap(wx1, wy1, wx2, wy2, tile_type)
-	-- Convert world coords to tile coords
-	local tx1 = flr((wx1 - WORLD_MIN_X) / TILE_SIZE)
-	local ty1 = flr((wy1 - WORLD_MIN_Y) / TILE_SIZE)
-	local tx2 = ceil((wx2 - WORLD_MIN_X) / TILE_SIZE)
-	local ty2 = ceil((wy2 - WORLD_MIN_Y) / TILE_SIZE)
-
-	-- Clamp to tilemap bounds
-	tx1 = max(0, min(tx1, TILEMAP_W - 1))
-	ty1 = max(0, min(ty1, TILEMAP_H - 1))
-	tx2 = max(0, min(tx2, TILEMAP_W - 1))
-	ty2 = max(0, min(ty2, TILEMAP_H - 1))
-
-	for ty = ty1, ty2 do
-		for tx = tx1, tx2 do
-			ground_tilemap:set(tx, ty, tile_type)
-		end
-	end
-end
-
--- Draw ground using tilemap (alternative to batched tline3d)
--- Uses batched spr() for better performance
-function draw_ground_tilemap()
-	if not tilemap_ready then return end
-
-	-- Calculate which tiles are visible
-	local cam_left = cam_x - SCREEN_CX
-	local cam_top = cam_y - SCREEN_CY
-
-	-- Tile range to draw (with 1 tile margin)
-	local tx_start = flr((cam_left - WORLD_MIN_X) / TILE_SIZE) - 1
-	local ty_start = flr((cam_top - WORLD_MIN_Y) / TILE_SIZE) - 1
-	local tx_end = tx_start + ceil(SCREEN_W / TILE_SIZE) + 2
-	local ty_end = ty_start + ceil(SCREEN_H / TILE_SIZE) + 2
-
-	-- Clamp to tilemap bounds
-	tx_start = max(0, tx_start)
-	ty_start = max(0, ty_start)
-	tx_end = min(TILEMAP_W - 1, tx_end)
-	ty_end = min(TILEMAP_H - 1, ty_end)
-
-	-- Pre-calculate screen offset for first tile
-	local base_world_x = WORLD_MIN_X + tx_start * TILE_SIZE
-	local base_world_y = WORLD_MIN_Y + ty_start * TILE_SIZE
-	local base_sx = base_world_x - cam_x + SCREEN_CX
-	local base_sy = base_world_y - cam_y + SCREEN_CY
-
-	-- Build batch of visible tiles
-	local tile_count = 0
-	local grass_spr = tile_sprites[TILE_GRASS]
-
-	for ty = ty_start, ty_end do
-		local sy = base_sy + (ty - ty_start) * TILE_SIZE
-		for tx = tx_start, tx_end do
-			if tile_count >= MAX_VISIBLE_TILES then break end
-
-			local tile_type = ground_tilemap:get(tx, ty)
-			local spr_id = tile_sprites[tile_type] or grass_spr
-			local sx = base_sx + (tx - tx_start) * TILE_SIZE
-
-			-- Pack into batch: sprite_id, x, y
-			tile_batch:set(0, tile_count, spr_id)
-			tile_batch:set(1, tile_count, sx)
-			tile_batch:set(2, tile_count, sy)
-			tile_count = tile_count + 1
-		end
-	end
-
-	-- Draw all tiles in one batched call
-	if tile_count > 0 then
-		spr(tile_batch, 0, tile_count)
-	end
-end
-
--- Get sprite for tile type
-function get_tile_sprite(tile_type)
-	if tile_type == TILE_GRASS then
-		return SPRITES.GRASS.id
-	elseif tile_type == TILE_DIRT_LIGHT then
-		return SPRITES.DIRT_LIGHT.id
-	elseif tile_type == TILE_DIRT_MEDIUM then
-		return SPRITES.DIRT_MEDIUM.id
-	elseif tile_type == TILE_DIRT_HEAVY then
-		return SPRITES.DIRT_HEAVY.id
-	end
-	return SPRITES.GRASS.id  -- default
-end
-
--- Get tile size for tile type (grass is 8x8, dirt is 16x16)
-function get_tile_size(tile_type)
-	if tile_type == TILE_GRASS then
-		return 8
-	end
-	return 16
+-- Stub for water animation (no-op, keeps main.lua compatible)
+function update_water_animation()
+	-- No water implementation
 end
 
 -- Check if a road is visible on screen (frustum cull)
@@ -388,13 +179,27 @@ function draw_road_batched(road, world_x_offset, world_y_offset)
 	tline3d(ground_scanlines, 0, count)
 end
 
+-- Get sprite for tile type
+function get_tile_sprite(tile_type)
+	if tile_type == TILE_GRASS then
+		return SPRITES.GRASS.id
+	elseif tile_type == TILE_DIRT_LIGHT then
+		return SPRITES.DIRT_LIGHT.id
+	elseif tile_type == TILE_DIRT_MEDIUM then
+		return SPRITES.DIRT_MEDIUM.id
+	elseif tile_type == TILE_DIRT_HEAVY then
+		return SPRITES.DIRT_HEAVY.id
+	end
+	return SPRITES.GRASS.id  -- default
+end
+
 -- Legacy non-batched function (kept for reference)
 function draw_road(road)
 	draw_road_batched(road)
 end
 
 -- Get tile type at world position
--- Uses road definitions to determine if dirt or grass
+-- Uses road definitions to determine if dirt, sidewalk, or grass
 function get_ground_tile(wx, wy)
 	-- Check if position is on a road
 	for _, road in ipairs(ROADS) do
@@ -403,8 +208,18 @@ function get_ground_tile(wx, wy)
 		end
 	end
 
+	-- Check if position is on a sidewalk
+	if is_on_sidewalk(wx, wy) then
+		return TILE_SIDEWALK_NS  -- return any sidewalk type (flora checks != TILE_GRASS)
+	end
+
 	-- Default to grass
 	return TILE_GRASS
+end
+
+-- Alias for flora.lua compatibility
+function get_tile_type(wx, wy)
+	return get_ground_tile(wx, wy)
 end
 
 -- Check if world position is on a road segment
@@ -438,4 +253,122 @@ function is_on_any_road(wx, wy)
 		end
 	end
 	return false
+end
+
+-- ============================================
+-- TERRAIN QUERY HELPERS (for NPC pathfinding)
+-- ============================================
+
+-- Check if world position is on a sidewalk
+function is_on_sidewalk(wx, wy)
+	-- Check each road's sidewalk areas
+	for _, road in ipairs(ROADS) do
+		local half_road = road.width / 2
+		local sidewalk_w = ROAD_CONFIG.sidewalk_width
+
+		if road.direction == "horizontal" then
+			-- Check top sidewalk
+			if wy >= road.y - half_road - sidewalk_w and wy < road.y - half_road then
+				if wx >= road.x1 and wx < road.x2 then
+					return true
+				end
+			end
+			-- Check bottom sidewalk
+			if wy >= road.y + half_road and wy < road.y + half_road + sidewalk_w then
+				if wx >= road.x1 and wx < road.x2 then
+					return true
+				end
+			end
+		else
+			-- Check left sidewalk
+			if wx >= road.x - half_road - sidewalk_w and wx < road.x - half_road then
+				if wy >= road.y1 and wy < road.y2 then
+					return true
+				end
+			end
+			-- Check right sidewalk
+			if wx >= road.x + half_road and wx < road.x + half_road + sidewalk_w then
+				if wy >= road.y1 and wy < road.y2 then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+-- Check if world position is on grass (not road or sidewalk)
+function is_on_grass(wx, wy)
+	return not is_on_any_road(wx, wy) and not is_on_sidewalk(wx, wy)
+end
+
+-- Check if world position is on a road surface (dirt tiles)
+function is_on_road_surface(wx, wy)
+	return is_on_any_road(wx, wy)
+end
+
+-- Check if world position is walkable for NPCs (sidewalk or grass)
+function is_walkable_terrain(wx, wy)
+	return is_on_sidewalk(wx, wy) or is_on_grass(wx, wy)
+end
+
+-- Check if world position is water (no water implemented - always false)
+function is_water(wx, wy)
+	return false
+end
+
+-- Get the nearest sidewalk position from a given point
+-- Returns x, y of nearest sidewalk tile center, or nil if none found
+function get_nearest_sidewalk(wx, wy)
+	local search_radius = 200  -- max search distance
+	local best_dist = search_radius * search_radius
+	local best_x, best_y = nil, nil
+
+	-- Search in expanding squares
+	for dist = 16, search_radius, 16 do
+		-- Check points at this distance in 8 directions
+		local offsets = {
+			{ dx = 0, dy = -dist },   -- north
+			{ dx = 0, dy = dist },    -- south
+			{ dx = -dist, dy = 0 },   -- west
+			{ dx = dist, dy = 0 },    -- east
+			{ dx = -dist, dy = -dist }, -- NW
+			{ dx = dist, dy = -dist },  -- NE
+			{ dx = -dist, dy = dist },  -- SW
+			{ dx = dist, dy = dist },   -- SE
+		}
+
+		for _, off in ipairs(offsets) do
+			local tx = wx + off.dx
+			local ty = wy + off.dy
+			if is_on_sidewalk(tx, ty) then
+				local d = off.dx * off.dx + off.dy * off.dy
+				if d < best_dist then
+					best_dist = d
+					best_x = tx
+					best_y = ty
+				end
+			end
+		end
+
+		-- If we found something at this distance, return it
+		if best_x then
+			return best_x, best_y
+		end
+	end
+
+	return nil, nil
+end
+
+-- Get direction towards a target position
+function get_direction_towards(from_x, from_y, to_x, to_y)
+	local dx = to_x - from_x
+	local dy = to_y - from_y
+
+	-- Prefer the axis with larger difference
+	if abs(dx) > abs(dy) then
+		if dx > 0 then return "east" else return "west" end
+	else
+		if dy > 0 then return "south" else return "north" end
+	end
 end
