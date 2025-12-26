@@ -409,6 +409,48 @@ MINIMAP_CONFIG = {
 }
 
 -- ============================================
+-- MAP GENERATION CONFIG
+-- ============================================
+-- Sprite 255 contains a 256x256 map that defines the world layout
+-- Each pixel color represents a terrain type
+MAP_CONFIG = {
+	-- Map sprite ID
+	sprite_id = 247,
+	map_width = 256,
+	map_height = 256,
+
+	-- World scale: each map pixel = this many world units
+	-- 256px * 16 = 4096 world units
+	tile_size = 16,
+
+	-- Color legend (map pixel colors)
+	colors = {
+		grass = 20,         -- grass/land
+		water = 24,         -- water
+		main_road = 31,     -- main paved streets (no sidewalk in map, generate sidewalks)
+		dirt_road = 16,     -- dirt/country roads
+		building_zone = 4,  -- brown rectangles where buildings can spawn
+	},
+
+	-- Building generation settings
+	building = {
+		-- Min/max building dimensions (in world units)
+		min_size = 48,
+		max_size = 96,
+		-- Padding from roads/water (in world units)
+		road_padding = 32,
+		-- Target building count
+		target_count = 80,
+		-- Building type distribution by distance from center
+		-- World (0,0) is map center, so downtown is near origin
+		center_x = 0,     -- world center X (map center)
+		center_y = 0,     -- world center Y (map center)
+		inner_radius = 400,   -- within this = downtown
+		outer_radius = 1000,  -- beyond this = countryside
+	},
+}
+
+-- ============================================
 -- WATER CONFIG
 -- ============================================
 -- Water surrounds the city with animated tiles

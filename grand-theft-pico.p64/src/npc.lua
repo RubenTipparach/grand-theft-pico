@@ -37,49 +37,94 @@ function create_npc(x, y, npc_type_index)
 	}
 end
 
--- Get a random point on a sidewalk for spawning
+-- Get a random point on a sidewalk for spawning (map-based)
+-- Uses correct world coordinate system: (0,0) = map center (128,128)
 function get_random_sidewalk_point()
-	local road = ROADS[flr(rnd(#ROADS)) + 1]
-	local x, y
-	local sidewalk_w = ROAD_CONFIG.sidewalk_width
-	local road_half = road.width / 2
-	-- Offset to center of sidewalk
-	local sidewalk_offset = road_half + sidewalk_w / 2
-	-- Pick which side of the road (north/south for horizontal, east/west for vertical)
-	local side = rnd(1) < 0.5 and -1 or 1
+	local cfg = MAP_CONFIG
+	local tile_size = cfg.tile_size
+	local map_w = cfg.map_width
+	local map_h = cfg.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
 
-	if road.direction == "horizontal" then
-		x = road.x1 + rnd(road.x2 - road.x1)
-		y = road.y + side * sidewalk_offset
-	else
-		x = road.x + side * sidewalk_offset
-		y = road.y1 + rnd(road.y2 - road.y1)
+	-- World coordinate bounds (map center = world 0,0)
+	local min_wx = -half_w * tile_size
+	local max_wx = half_w * tile_size
+	local min_wy = -half_h * tile_size
+	local max_wy = half_h * tile_size
+
+	-- Try random positions until we find a sidewalk
+	for attempt = 1, 100 do
+		local wx = min_wx + rnd(max_wx - min_wx)
+		local wy = min_wy + rnd(max_wy - min_wy)
+
+		-- Check if this is on a sidewalk
+		if is_on_sidewalk(wx, wy) then
+			return wx, wy
+		end
 	end
 
-	return x, y
+	-- Fallback: return world center
+	return 0, 0
+end
+
+-- Check if position is too close to any existing NPC
+function is_too_close_to_npcs(x, y, min_distance)
+	for _, npc in ipairs(npcs) do
+		local dx = npc.x - x
+		local dy = npc.y - y
+		local dist_sq = dx * dx + dy * dy
+		if dist_sq < min_distance * min_distance then
+			return true
+		end
+	end
+	return false
 end
 
 -- Get a valid spawn point on sidewalk that doesn't collide with buildings
-function get_valid_spawn_point()
-	local max_attempts = 20
+-- and is spread out from other NPCs
+function get_valid_spawn_point(min_npc_distance)
+	local max_attempts = 50
 	local radius = NPC_CONFIG.collision_radius
+	min_npc_distance = min_npc_distance or 64  -- default minimum distance between NPCs
 
 	for attempt = 1, max_attempts do
 		local x, y = get_random_sidewalk_point()
-		-- Check if this point is on walkable terrain and doesn't collide with buildings
+		-- Check if this point is:
+		-- 1. On walkable terrain
+		-- 2. Doesn't collide with buildings
+		-- 3. Not too close to other NPCs
+		if is_walkable_terrain(x, y) and
+		   not npc_collides_with_building(x, y, radius) and
+		   not is_too_close_to_npcs(x, y, min_npc_distance) then
+			return x, y
+		end
+	end
+
+	-- Fallback: try without distance check
+	for attempt = 1, 20 do
+		local x, y = get_random_sidewalk_point()
 		if is_walkable_terrain(x, y) and not npc_collides_with_building(x, y, radius) then
 			return x, y
 		end
 	end
 
-	-- Fallback: return a sidewalk point anyway (better than nothing)
+	-- Last resort: return a sidewalk point anyway
 	return get_random_sidewalk_point()
 end
 
--- Spawn NPCs on roads, avoiding buildings
+-- Spawn NPCs on roads, avoiding buildings and spreading them out
 -- If player_x/player_y provided, spawns near player (for streaming mode)
 function spawn_npcs(count, player_x, player_y)
 	npcs = {}
+
+	-- Calculate minimum distance based on count and map area
+	-- More NPCs = smaller minimum distance
+	local cfg = MAP_CONFIG
+	local map_area = cfg.map_width * cfg.map_height * cfg.tile_size * cfg.tile_size
+	local avg_area_per_npc = map_area / count
+	local min_distance = max(32, min(128, sqrt(avg_area_per_npc) / 4))
+
 	for i = 1, count do
 		local npc = nil
 		if player_x and player_y then
@@ -87,14 +132,14 @@ function spawn_npcs(count, player_x, player_y)
 			npc = spawn_npc_near_player(player_x, player_y)
 		end
 		if not npc then
-			-- Mode 1 or fallback: spawn at random road points
-			local x, y = get_valid_spawn_point()
+			-- Mode 1 or fallback: spawn at random road points, spread out
+			local x, y = get_valid_spawn_point(min_distance)
 			local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
 			npc = create_npc(x, y, npc_type_index)
 		end
 		add(npcs, npc)
 	end
-	printh("Spawned " .. #npcs .. " NPCs")
+	printh("Spawned " .. #npcs .. " NPCs with min distance " .. flr(min_distance))
 end
 
 -- Check if a position collides with any building

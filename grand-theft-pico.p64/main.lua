@@ -16,6 +16,7 @@ include("src/wall_renderer.lua")
 include("src/building.lua")
 include("src/collision.lua")
 include("src/ground.lua")
+include("src/worldgen.lua")
 include("src/flora.lua")
 include("src/input.lua")
 include("src/npc.lua")
@@ -354,37 +355,19 @@ function get_signal_sprite(ns_light, corner)
 	end
 end
 
--- Generate street lights along roads
--- Lights are placed on both sidewalks, evenly spaced
--- street_light_offset slides lights along the sidewalk path
--- Traffic lights are placed at intersections (8 per intersection: 2 per corner)
+-- Generate street lights at sidewalk corners
+-- A sidewalk corner is where a sidewalk tile has exactly 2 adjacent sidewalk tiles
+-- that form an L-shape (corner pattern)
+-- Traffic lights are placed at these corners
 function generate_street_lights()
 	local lights = {}
-	local spacing = NIGHT_CONFIG.street_light_spacing
-	local offset = NIGHT_CONFIG.street_light_offset or 0
 	local light_set = {}  -- track unique positions to avoid duplicates
-	local sidewalk_w = ROAD_CONFIG.sidewalk_width
-	local half_road = ROAD_CONFIG.road_width / 2
-
-	-- Get all intersections first
-	local intersections = get_intersections()
-
-	-- Helper to check if position is near an intersection
-	local function is_near_intersection(x, y)
-		local threshold = half_road + sidewalk_w + 8  -- within intersection area
-		for _, inter in ipairs(intersections) do
-			if abs(x - inter.x) < threshold and abs(y - inter.y) < threshold then
-				return true, inter
-			end
-		end
-		return false, nil
-	end
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local tiles = WORLD_DATA.tiles
 
 	local function add_light(x, y, is_traffic_light, corner, flip_x, flip_y)
-		-- Skip if this position is on a road surface
-		if is_on_any_road_surface(x, y) then
-			return
-		end
 		local key = flr(x) .. "," .. flr(y)
 		if not light_set[key] then
 			light_set[key] = true
@@ -399,91 +382,64 @@ function generate_street_lights()
 		end
 	end
 
-	-- Generate traffic lights at intersections (1 lamp per corner, 2 signals per lamp)
-	-- Each corner has a lamp post with both N-S and E-W signals
-	-- Signal arrangement per corner:
-	--   NE: signal W (E-W), signal S (N-S)
-	--   NW: signal N (N-S), signal E (E-W)
-	--   SE: signal W (E-W), signal N (N-S)
-	--   SW: signal N (N-S), signal E (E-W)
-	for _, inter in ipairs(intersections) do
-		local ix, iy = inter.x, inter.y
-
-		-- Corner offsets from intersection center
-		local corner_offset = half_road + sidewalk_w / 2
-
-		-- NW corner: N-S signal (facing N, flip_y=true), E-W signal (facing E, flip_x=true)
-		add_light(ix - corner_offset, iy - corner_offset, true, "nw", true, false)   -- N-S: flip_y for south-facing
-
-		-- NE corner: E-W signal (facing W, no flip), N-S signal (facing S, flip_y=true)
-		add_light(ix + corner_offset, iy - corner_offset, true, "ne", false, true)   -- E-W: no flip for west-facing
-
-		-- SW corner: N-S signal (facing N, no flip), E-W signal (facing E, flip_x=true)
-		add_light(ix - corner_offset, iy + corner_offset, true, "sw", true, false)   -- E-W: flip_x for east-facing
-
-		-- SE corner: E-W signal (facing W, no flip), N-S signal (facing N, no flip)
-		add_light(ix + corner_offset, iy + corner_offset, true, "se", false, false)  -- no flips needed
+	-- Helper to check if a tile is sidewalk
+	local function is_sidewalk(mx, my)
+		if mx < 0 or mx >= map_w or my < 0 or my >= map_h then
+			return false
+		end
+		local tile = tiles:get(mx, my)
+		return tile == MAP_TILE_SIDEWALK_NS or tile == MAP_TILE_SIDEWALK_EW
 	end
 
-	-- Generate regular street lights along roads (unless disabled by config)
-	if not TRAFFIC_CONFIG.intersection_lights_only then
-		for _, road in ipairs(ROADS) do
-			local road_half = road.width / 2
-			-- Offset to place lights on sidewalks (center of sidewalk)
-			local sidewalk_offset = road_half + sidewalk_w / 2
+	-- Scan all tiles for sidewalk corners
+	for my = 0, map_h - 1 do
+		for mx = 0, map_w - 1 do
+			if is_sidewalk(mx, my) then
+				-- Check adjacent tiles (N, S, E, W)
+				local has_north = is_sidewalk(mx, my - 1)
+				local has_south = is_sidewalk(mx, my + 1)
+				local has_west = is_sidewalk(mx - 1, my)
+				local has_east = is_sidewalk(mx + 1, my)
 
-			if road.direction == "horizontal" then
-				-- North sidewalk (above road)
-				local y_north = road.y - sidewalk_offset
-				-- South sidewalk (below road)
-				local y_south = road.y + sidewalk_offset
+				-- Detect corner patterns (exactly 2 adjacent sidewalks forming an L)
+				local corner = nil
 
-				-- Place lights along both sidewalks
-				local length = road.x2 - road.x1
-				local num_segments = max(1, flr(length / spacing))
-				local actual_spacing = length / num_segments
-
-				for i = 0, num_segments do
-					local x = road.x1 + flr(i * actual_spacing) + offset
-					-- Skip if near intersection (traffic lights already placed)
-					local near, _ = is_near_intersection(x, road.y)
-					if not near then
-						add_light(x, y_north, false, nil, false, false)
-						add_light(x, y_south, false, nil, false, false)
-					end
+				-- NW corner: has sidewalk to south AND east (L opens to SE)
+				if has_south and has_east and not has_north and not has_west then
+					corner = "nw"
+				-- NE corner: has sidewalk to south AND west (L opens to SW)
+				elseif has_south and has_west and not has_north and not has_east then
+					corner = "ne"
+				-- SW corner: has sidewalk to north AND east (L opens to NE)
+				elseif has_north and has_east and not has_south and not has_west then
+					corner = "sw"
+				-- SE corner: has sidewalk to north AND west (L opens to NW)
+				elseif has_north and has_west and not has_south and not has_east then
+					corner = "se"
 				end
 
-			elseif road.direction == "vertical" then
-				-- West sidewalk (left of road)
-				local x_west = road.x - sidewalk_offset
-				-- East sidewalk (right of road)
-				local x_east = road.x + sidewalk_offset
+				if corner then
+					-- Convert map coords to world coords (center of tile)
+					local wx, wy = map_to_world(mx, my)
+					wx = wx + tile_size / 2
+					wy = wy + tile_size / 2
 
-				-- Place lights along both sidewalks
-				local length = road.y2 - road.y1
-				local num_segments = max(1, flr(length / spacing))
-				local actual_spacing = length / num_segments
-
-				for i = 0, num_segments do
-					local y = road.y1 + flr(i * actual_spacing) + offset
-					-- Skip if near intersection (traffic lights already placed)
-					local near, _ = is_near_intersection(road.x, y)
-					if not near then
-						add_light(x_west, y, false, nil, false, false)
-						add_light(x_east, y, false, nil, false, false)
-					end
+					-- All sidewalk corners get traffic lights
+					add_light(wx, wy, true, corner, false, false)
 				end
 			end
 		end
 	end
 
+	printh("Generated " .. #lights .. " traffic lights at sidewalk corners")
 	return lights
 end
 
 -- Street light positions (generated from roads)
 STREET_LIGHTS = {}
 
--- Draw minimap showing player, NPCs, roads, and buildings
+-- Draw minimap using sprite 255 map directly
+-- Coordinate system: world (0,0) = map center (128,128)
 function draw_minimap()
 	local cfg = MINIMAP_CONFIG
 	if not cfg.enabled then return end
@@ -492,85 +448,92 @@ function draw_minimap()
 	local my = cfg.y
 	local mw = cfg.width
 	local mh = cfg.height
-	local scale = cfg.scale
 
-	-- Calculate world center based on player position
-	local px = game.player.x
-	local py = game.player.y
+	-- Get map sprite
+	local map_spr = get_spr(MAP_CONFIG.sprite_id)
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local tile_size = MAP_CONFIG.tile_size
+	local half_map_w = map_w / 2
+	local half_map_h = map_h / 2
 
-	-- Draw background with border
+	-- Calculate player position in map coordinates (world 0,0 = map 128,128)
+	local px = game.player.x / tile_size + half_map_w
+	local py = game.player.y / tile_size + half_map_h
+
+	-- Calculate visible region of map (centered on player)
+	local half_mw = mw / 2
+	local half_mh = mh / 2
+
+	-- Draw border
 	rectfill(mx - 1, my - 1, mx + mw + 1, my + mh + 1, cfg.border_color)
-	rectfill(mx, my, mx + mw, my + mh, cfg.water_color)  -- water is default bg
+
+	-- Calculate source rectangle (clamp to map bounds)
+	local src_x = flr(px - half_mw)
+	local src_y = flr(py - half_mh)
+	local src_w = mw
+	local src_h = mh
+
+	-- Calculate destination offset for clamping
+	local dst_x = mx
+	local dst_y = my
+
+	-- Clamp left edge
+	if src_x < 0 then
+		dst_x = mx - src_x
+		src_w = src_w + src_x
+		src_x = 0
+	end
+
+	-- Clamp top edge
+	if src_y < 0 then
+		dst_y = my - src_y
+		src_h = src_h + src_y
+		src_y = 0
+	end
+
+	-- Clamp right edge
+	if src_x + src_w > map_w then
+		src_w = map_w - src_x
+	end
+
+	-- Clamp bottom edge
+	if src_y + src_h > map_h then
+		src_h = map_h - src_y
+	end
 
 	-- Clip to minimap area
 	clip(mx, my, mw + 1, mh + 1)
 
-	-- Helper: convert world coords to minimap coords (centered on player)
-	local function world_to_map(wx, wy)
-		local map_x = mx + mw / 2 + (wx - px) * scale
-		local map_y = my + mh / 2 + (wy - py) * scale
-		return map_x, map_y
+	-- Fill background with water color (for areas outside map)
+	rectfill(mx, my, mx + mw, my + mh, cfg.water_color)
+
+	-- Draw the map sprite section (only if valid size)
+	if src_w > 0 and src_h > 0 then
+		sspr(map_spr, src_x, src_y, src_w, src_h, dst_x, dst_y)
 	end
 
-	-- Draw land area (mainland grass)
-	local wcfg = WATER_CONFIG
-	local lx1, ly1 = world_to_map(wcfg.land_min_x, wcfg.land_min_y)
-	local lx2, ly2 = world_to_map(wcfg.land_max_x, wcfg.land_max_y)
-	rectfill(lx1, ly1, lx2, ly2, cfg.bg_color)
-
-	-- Draw islands
-	if wcfg.islands then
-		for _, island in ipairs(wcfg.islands) do
-			local ix1, iy1 = world_to_map(island.x, island.y)
-			local ix2, iy2 = world_to_map(island.x + island.w * 16, island.y + island.h * 16)
-			rectfill(ix1, iy1, ix2, iy2, cfg.bg_color)
-		end
-	end
-
-	-- Helper to draw a road on the minimap
-	local function draw_road(road)
-		local road_w = road.width * scale
-		if road_w < 1 then road_w = 1 end
-
-		if road.direction == "horizontal" then
-			local x1, y1 = world_to_map(road.x1, road.y)
-			local x2, y2 = world_to_map(road.x2, road.y)
-			rectfill(x1, y1 - road_w / 2, x2, y1 + road_w / 2, cfg.road_color)
-		else
-			local x1, y1 = world_to_map(road.x, road.y1)
-			local x2, y2 = world_to_map(road.x, road.y2)
-			rectfill(x1 - road_w / 2, y1, x1 + road_w / 2, y2, cfg.road_color)
-		end
-	end
-
-	-- Draw city roads
-	for _, road in ipairs(ROADS) do
-		draw_road(road)
-	end
-
-	-- Draw countryside/dirt roads
-	for _, road in ipairs(COUNTRYSIDE_ROADS) do
-		draw_road(road)
-	end
-
-	-- Draw buildings
+	-- Draw buildings on top (convert world coords to minimap coords)
 	for _, b in ipairs(buildings) do
-		local bx1, by1 = world_to_map(b.x, b.y)
-		local bx2, by2 = world_to_map(b.x + b.w, b.y + b.h)
+		local bx1 = mx + (b.x / tile_size + half_map_w - px + half_mw)
+		local by1 = my + (b.y / tile_size + half_map_h - py + half_mh)
+		local bx2 = mx + ((b.x + b.w) / tile_size + half_map_w - px + half_mw)
+		local by2 = my + ((b.y + b.h) / tile_size + half_map_h - py + half_mh)
 		rectfill(bx1, by1, bx2, by2, cfg.building_color)
 	end
 
 	-- Draw NPCs
 	for _, npc in ipairs(npcs) do
-		local nx, ny = world_to_map(npc.x, npc.y)
+		local nx = mx + (npc.x / tile_size + half_map_w - px + half_mw)
+		local ny = my + (npc.y / tile_size + half_map_h - py + half_mh)
 		if nx >= mx and nx <= mx + mw and ny >= my and ny <= my + mh then
 			pset(nx, ny, cfg.npc_color)
 		end
 	end
 
-	-- Draw player (center of minimap, always visible)
-	local player_mx = mx + mw / 2
-	local player_my = my + mh / 2
+	-- Draw player (center of minimap)
+	local player_mx = mx + half_mw
+	local player_my = my + half_mh
 	circfill(player_mx, player_my, cfg.player_size, cfg.player_color)
 
 	-- Reset clip
@@ -666,8 +629,19 @@ function _init()
 	-- Create night mask sprite (screen-sized)
 	night_mask = userdata("u8", SCREEN_W, SCREEN_H)
 
-	-- Create buildings from level config
+	-- Initialize world from map sprite 255
+	-- This parses the map, generates ROADS, COUNTRYSIDE_ROADS, and LEVEL_BUILDINGS
+	init_world_from_map()
+
+	-- Create buildings from generated level data
 	buildings = create_buildings_from_level()
+
+	-- Set player position at world center (0,0) which is map center (128,128)
+	game.player.x = 0
+	game.player.y = 0
+	cam_x = 0
+	cam_y = 0
+	printh("Player starting at: 0, 0 (map center)")
 
 	-- Generate street lights along roads
 	STREET_LIGHTS = generate_street_lights()

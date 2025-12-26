@@ -8,6 +8,7 @@ TILE_DIRT_MEDIUM = 2
 TILE_DIRT_HEAVY = 3
 TILE_SIDEWALK_NS = 4
 TILE_SIDEWALK_EW = 5
+TILE_WATER = 6
 
 -- Scanline buffer for batched ground rendering (11 values per scanline)
 -- Format per row: spr, x0, y, x1, y, u0, v0, u1, v1, w0, w1
@@ -16,9 +17,26 @@ local ground_scanlines = userdata("f64", 11, 270)
 -- Pre-allocated slope vector (reused across all ground drawing)
 local ground_slope = vec(0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0)
 
--- Stub for water animation (no-op, keeps main.lua compatible)
+-- Water animation frame (0 or 1)
+local water_frame = 0
+local water_timer = 0
+
+-- Update water animation timer
 function update_water_animation()
-	-- No water implementation
+	water_timer = water_timer + 1 / 60  -- assume 60fps
+	if water_timer >= WATER_CONFIG.animation_speed then
+		water_timer = 0
+		water_frame = 1 - water_frame  -- toggle 0/1
+	end
+end
+
+-- Get current water center tile sprite (animated)
+function get_water_sprite()
+	if water_frame == 0 then
+		return WATER_CONFIG.set1[1].c  -- frame 1 center
+	else
+		return WATER_CONFIG.set1[2].c  -- frame 2 center
+	end
 end
 
 -- Check if a road is visible on screen (frustum cull)
@@ -63,24 +81,113 @@ function draw_ground()
 	-- Draw all grass scanlines in one batch call
 	tline3d(ground_scanlines, 0, SCREEN_H)
 
-	-- Draw all sidewalks first (so roads overwrite at intersections)
-	for _, road in ipairs(ROADS) do
-		if is_road_visible(road) then
-			draw_sidewalks_batched(road, world_x_offset, world_y_offset)
+	-- Draw water tiles from map (simple center tiles only, no shorelines yet)
+	draw_water_from_map(world_x_offset, world_y_offset)
+
+	-- Draw roads directly from tilemap (simpler than generating ROADS segments)
+	draw_roads_from_map(world_x_offset, world_y_offset)
+end
+
+-- Draw road and sidewalk tiles directly from the parsed tilemap
+-- This is simpler and more accurate than generating ROADS segments
+function draw_roads_from_map(world_x_offset, world_y_offset)
+	-- Skip if world data not initialized
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
+
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	-- Get sprites
+	local main_road_spr = SPRITES.DIRT_MEDIUM.id
+	local dirt_road_spr = SPRITES.DIRT_HEAVY.id
+	local sidewalk_ns_spr = SPRITES.SIDEWALK_NS.id
+	local sidewalk_ew_spr = SPRITES.SIDEWALK_EW.id
+
+	-- Calculate visible world bounds
+	local left_wx = cam_x - SCREEN_CX - tile_size
+	local top_wy = cam_y - SCREEN_CY - tile_size
+	local right_wx = cam_x + SCREEN_CX + tile_size
+	local bottom_wy = cam_y + SCREEN_CY + tile_size
+
+	-- Convert to map coordinates (world 0,0 = map 128,128)
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for converting world coords to screen coords
+	local screen_ox = SCREEN_CX - cam_x
+	local screen_oy = SCREEN_CY - cam_y
+
+	-- Draw tiles in visible range
+	for my = my1, my2 do
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			local tile = tiles:get(mx, my)
+			local wx = (mx - half_w) * tile_size
+			local sx = wx + screen_ox
+
+			if tile == MAP_TILE_MAIN_ROAD then
+				spr(main_road_spr, sx, sy)
+			elseif tile == MAP_TILE_DIRT_ROAD then
+				spr(dirt_road_spr, sx, sy)
+			elseif tile == MAP_TILE_SIDEWALK_NS then
+				spr(sidewalk_ns_spr, sx, sy)
+			elseif tile == MAP_TILE_SIDEWALK_EW then
+				spr(sidewalk_ew_spr, sx, sy)
+			end
 		end
 	end
+end
 
-	-- Then draw all city roads on top
-	for _, road in ipairs(ROADS) do
-		if is_road_visible(road) then
-			draw_road_batched(road, world_x_offset, world_y_offset)
-		end
-	end
+-- Draw water tiles based on parsed map data (center tiles only for now)
+-- Optimized: only draws water in visible area, uses direct userdata access
+-- Coordinate system: world (0,0) = map center (128,128)
+function draw_water_from_map(world_x_offset, world_y_offset)
+	-- Skip if world data not initialized
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
 
-	-- Draw countryside roads (no sidewalks)
-	for _, road in ipairs(COUNTRYSIDE_ROADS) do
-		if is_road_visible(road) then
-			draw_road_batched(road, world_x_offset, world_y_offset)
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+	local water_spr = get_water_sprite()
+
+	-- Calculate visible world bounds
+	local left_wx = cam_x - SCREEN_CX - tile_size
+	local top_wy = cam_y - SCREEN_CY - tile_size
+	local right_wx = cam_x + SCREEN_CX + tile_size
+	local bottom_wy = cam_y + SCREEN_CY + tile_size
+
+	-- Convert to map coordinates (world 0,0 = map 128,128)
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for converting world coords to screen coords
+	local screen_ox = SCREEN_CX - cam_x
+	local screen_oy = SCREEN_CY - cam_y
+
+	-- Draw only water tiles in visible range
+	for my = my1, my2 do
+		-- Convert map Y to world Y
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			if tiles:get(mx, my) == MAP_TILE_WATER then
+				-- Convert map X to world X
+				local wx = (mx - half_w) * tile_size
+				local sx = wx + screen_ox
+				spr(water_spr, sx, sy)
+			end
 		end
 	end
 end
@@ -199,18 +306,32 @@ function draw_road(road)
 end
 
 -- Get tile type at world position
--- Uses road definitions to determine if dirt, sidewalk, or grass
+-- Uses tilemap data to determine terrain type
 function get_ground_tile(wx, wy)
-	-- Check if position is on a road
+	-- Use tilemap if available
+	if WORLD_DATA and WORLD_DATA.tiles then
+		local tile = get_map_tile_at_world(wx, wy)
+		-- Convert MAP_TILE_* to TILE_* for legacy compatibility
+		if tile == MAP_TILE_GRASS then
+			return TILE_GRASS
+		elseif tile == MAP_TILE_WATER then
+			return TILE_WATER  -- flora should NOT spawn here
+		elseif tile == MAP_TILE_MAIN_ROAD then
+			return TILE_DIRT_MEDIUM
+		elseif tile == MAP_TILE_DIRT_ROAD then
+			return TILE_DIRT_HEAVY  -- flora should NOT spawn here
+		elseif tile == MAP_TILE_SIDEWALK_NS or tile == MAP_TILE_SIDEWALK_EW then
+			return TILE_SIDEWALK_NS
+		elseif tile == MAP_TILE_BUILDING_ZONE then
+			return TILE_GRASS  -- building zones count as grass for flora
+		end
+	end
+
+	-- Fallback: check old road definitions
 	for _, road in ipairs(ROADS) do
 		if is_on_road(wx, wy, road) then
 			return road.tile_type or TILE_DIRT_MEDIUM
 		end
-	end
-
-	-- Check if position is on a sidewalk
-	if is_on_sidewalk(wx, wy) then
-		return TILE_SIDEWALK_NS  -- return any sidewalk type (flora checks != TILE_GRASS)
 	end
 
 	-- Default to grass
@@ -259,52 +380,25 @@ end
 -- TERRAIN QUERY HELPERS (for NPC pathfinding)
 -- ============================================
 
--- Check if world position is on a sidewalk
+-- Check if world position is on a sidewalk (tilemap-based)
 function is_on_sidewalk(wx, wy)
-	-- Check each road's sidewalk areas
-	for _, road in ipairs(ROADS) do
-		local half_road = road.width / 2
-		local sidewalk_w = ROAD_CONFIG.sidewalk_width
-
-		if road.direction == "horizontal" then
-			-- Check top sidewalk
-			if wy >= road.y - half_road - sidewalk_w and wy < road.y - half_road then
-				if wx >= road.x1 and wx < road.x2 then
-					return true
-				end
-			end
-			-- Check bottom sidewalk
-			if wy >= road.y + half_road and wy < road.y + half_road + sidewalk_w then
-				if wx >= road.x1 and wx < road.x2 then
-					return true
-				end
-			end
-		else
-			-- Check left sidewalk
-			if wx >= road.x - half_road - sidewalk_w and wx < road.x - half_road then
-				if wy >= road.y1 and wy < road.y2 then
-					return true
-				end
-			end
-			-- Check right sidewalk
-			if wx >= road.x + half_road and wx < road.x + half_road + sidewalk_w then
-				if wy >= road.y1 and wy < road.y2 then
-					return true
-				end
-			end
-		end
-	end
-	return false
+	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
+	local tile = get_map_tile_at_world(wx, wy)
+	return tile == MAP_TILE_SIDEWALK_NS or tile == MAP_TILE_SIDEWALK_EW
 end
 
--- Check if world position is on grass (not road or sidewalk)
+-- Check if world position is on grass (tilemap-based)
 function is_on_grass(wx, wy)
-	return not is_on_any_road(wx, wy) and not is_on_sidewalk(wx, wy)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return true end
+	local tile = get_map_tile_at_world(wx, wy)
+	return tile == MAP_TILE_GRASS
 end
 
--- Check if world position is on a road surface (dirt tiles)
+-- Check if world position is on a road surface (tilemap-based)
 function is_on_road_surface(wx, wy)
-	return is_on_any_road(wx, wy)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
+	local tile = get_map_tile_at_world(wx, wy)
+	return tile == MAP_TILE_MAIN_ROAD or tile == MAP_TILE_DIRT_ROAD
 end
 
 -- Check if world position is walkable for NPCs (sidewalk or grass)
@@ -312,8 +406,12 @@ function is_walkable_terrain(wx, wy)
 	return is_on_sidewalk(wx, wy) or is_on_grass(wx, wy)
 end
 
--- Check if world position is water (no water implemented - always false)
+-- Check if world position is water (from parsed map data)
 function is_water(wx, wy)
+	-- Use map data if available
+	if WORLD_DATA and WORLD_DATA.tiles then
+		return is_water_from_map(wx, wy)
+	end
 	return false
 end
 
