@@ -7,8 +7,8 @@ walk_timer = 0
 -- Handle player input and update camera
 function handle_input()
 	-- Skip walking input if player is in a vehicle (vehicle handles its own input)
-	-- Also skip if dialog is active (player shouldn't move while talking)
-	if not player_vehicle and not (dialog and dialog.active) then
+	-- Also skip if dialog or shop is active (player shouldn't move while in menus)
+	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
 		local dx, dy = 0, 0
 
 		if btn(0) then dx = -1 end  -- left
@@ -55,6 +55,24 @@ function handle_input()
 		else
 			walk_timer = 0
 			game.player.walk_frame = 0  -- idle when not moving
+		end
+	end
+
+	-- Weapon controls (only when not in vehicle and not in dialog)
+	if not player_vehicle and not (dialog and dialog.active) then
+		-- Q: cycle weapon backward
+		if keyp("q") then
+			cycle_weapon_backward()
+		end
+
+		-- T: cycle weapon forward
+		if keyp("t") then
+			cycle_weapon_forward()
+		end
+
+		-- X or Space: attack/fire
+		if btn(5) or key("space") then
+			try_attack()
 		end
 	end
 

@@ -284,6 +284,12 @@ PLAYER_CONFIG = {
 	heart_show_duration = 5,     -- seconds heart shows after player approaches
 	prompt_color = 21,           -- color for interaction prompts (E: FLIRT etc)
 
+	-- Money system
+	starting_money = 10000,        -- player starts with $100
+	money_color = 11,            -- green for money text
+	money_display_x = 8,
+	money_display_y = 48,        -- below popularity bar
+
 	-- Dialog/Flirting
 	interact_key = "e",          -- key to talk/interact
 	love_meter_max = 100,        -- max love before they're yours
@@ -384,6 +390,131 @@ PLAYER_CONFIG = {
 	dialog_text_color = 7,
 	dialog_option_color = 14,
 	dialog_selected_color = 22,
+}
+
+-- ============================================
+-- WEAPON CONFIG
+-- ============================================
+WEAPON_CONFIG = {
+	-- Weapon order for cycling (melee first, then ranged)
+	weapon_order = { "hammer", "pickaxe", "sword", "pistol", "laser_pistol", "plasma_rifle" },
+
+	-- Melee weapons (rendered as rotating quads)
+	melee = {
+		hammer = {
+			name = "Hammer",
+			price = 50,
+			damage = 15,
+			swing_speed = 0.3,    -- seconds for full swing
+			range = 16,           -- hit detection range
+			sprite = 156,         -- weapon sprite (faces west by default)
+			sprite_w = 8,         -- sprite width
+			sprite_h = 16,        -- sprite height
+		},
+		pickaxe = {
+			name = "Pick Axe",
+			price = 150,
+			damage = 25,
+			swing_speed = 0.4,
+			range = 20,
+			sprite = 157,         -- weapon sprite (faces west by default)
+			sprite_w = 8,
+			sprite_h = 16,
+		},
+		sword = {
+			name = "Sword",
+			price = 300,
+			damage = 40,
+			swing_speed = 0.25,
+			range = 24,
+			sprite = 47,          -- weapon sprite (faces west by default)
+			sprite_w = 8,
+			sprite_h = 16,
+		},
+	},
+
+	-- Ranged weapons (fire projectiles)
+	ranged = {
+		pistol = {
+			name = "Pistol",
+			price = 550,
+			ammo_price = 10,
+			ammo_count = 10,      -- ammo per purchase
+			damage = 20,
+			fire_rate = 0.3,      -- seconds between shots
+			bullet_speed = 300,   -- pixels per second
+			sprite_ew = 112,      -- bullet sprite for east/west
+			sprite_ns = 113,      -- bullet sprite for north/south
+		},
+		laser_pistol = {
+			name = "Laser Pistol",
+			price = 1200,
+			ammo_price = 50,
+			ammo_count = 20,
+			damage = 35,
+			fire_rate = 0.2,
+			bullet_speed = 400,
+			sprite_frames = { 114, 115 },  -- animated bullet
+			animation_speed = 0.05,
+		},
+		plasma_rifle = {
+			name = "Plasma Rifle",
+			price = 2500,
+			ammo_price = 120,
+			ammo_count = 50,
+			damage = 60,
+			fire_rate = 0.5,
+			bullet_speed = 250,
+			sprite_frames = { 54, 55, 62, 63 },  -- 4-frame animation
+			animation_speed = 0.05,
+		},
+	},
+
+	-- Combat settings
+	npc_hit_popularity_loss = 5,  -- popularity lost when hitting an NPC
+
+	-- Melee animation settings (rotation in turns, 0-1 = 0-360 degrees)
+	melee_swing_start = 0,        -- start angle in turns (0 degrees)
+	melee_swing_end = 0.25,       -- end angle in turns (90 degrees)
+	melee_base_rot_east = 0.875,  -- base rotation when facing east (315 degrees)
+	melee_base_rot_west = 0.125,  -- base rotation when facing west (45 degrees)
+}
+
+-- ============================================
+-- ARMS DEALER CONFIG
+-- ============================================
+ARMS_DEALER_CONFIG = {
+	names = { "Doug", "Bill" },
+	health = 200,
+	damage = 25,              -- damage per bullet to player
+	fire_rate = 0.8,          -- seconds between shots
+	chase_speed = 40,         -- pixels per second when hostile
+	walk_speed = 15,          -- pixels per second when peaceful
+	respawn_time = 30,        -- seconds after death to respawn
+	minimap_color = 16,       -- always visible on minimap
+	minimap_size = 1,         -- radius of dealer marker on minimap
+
+	-- Animation settings
+	idle_animation_speed = 0.05,   -- seconds per frame when idle
+	walk_animation_speed = 0.04,  -- seconds per frame when walking/chasing
+	idle_frames = 11,             -- frames 0-10
+	walk_frames = 12,             -- frames 16-27
+	damaged_frames = 7,           -- frames 32-38
+
+	-- Sprite IDs (1.gfx sprites start at 256)
+	-- In 1.gfx: idle=0-11, walk=16-27, damaged=32-38, bullets=110-111
+	sprite_base = 256,        -- offset for 1.gfx sprites
+	idle_start = 0,
+	walk_start = 16,
+	damaged_start = 32,
+	bullet_sprites = { 110, 111 },  -- relative to sprite_base
+
+	-- Interaction
+	interact_distance = 24,   -- distance to show shop prompt
+
+	-- Rendering
+	sprite_scale = 0.5,       -- scale factor for dealer sprites (0.5 = 50%)
+	sprite_size = 32,         -- original sprite size (32x32)
 }
 
 -- ============================================

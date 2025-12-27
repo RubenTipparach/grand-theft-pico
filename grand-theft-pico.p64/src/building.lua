@@ -205,6 +205,11 @@ profile("cull")
 		end
 	end
 
+	-- Add visible arms dealers to the list (frustum cull)
+	if arms_dealers then
+		add_dealers_to_visible(visible)
+	end
+
 	-- Add visible street lamps to the list (frustum cull)
 	local lamp_cfg = NIGHT_CONFIG
 	local lamp_w = lamp_cfg.lamp_width
@@ -354,6 +359,9 @@ profile("cull")
 				local bob = sin(time() * PLAYER_CONFIG.heart_bob_speed) * PLAYER_CONFIG.heart_bob_height
 				spr(PLAYER_CONFIG.heart_sprite, draw_x, draw_y - 12 + bob)
 			end
+		elseif obj.type == "dealer" then
+			-- Draw arms dealer
+			draw_dealer(obj.data, obj.sx, obj.sy)
 		elseif obj.type == "lamp" then
 			-- Draw lamp sprite with bottom-center anchored at light position
 			local draw_x = obj.sx - lamp_w / 2

@@ -57,6 +57,8 @@ include("src/flora.lua")
 include("src/input.lua")
 include("src/npc.lua")
 include("src/vehicle.lua")
+include("src/weapon.lua")
+include("src/dealer.lua")
 
 -- Load input utilities module (for single-press detection)
 input_utils = require("src/input_utils")
@@ -116,6 +118,16 @@ game = {
 		-- Combat/popularity system
 		health = PLAYER_CONFIG.max_health,
 		popularity = PLAYER_CONFIG.starting_popularity,
+		-- Money system
+		money = PLAYER_CONFIG.starting_money,
+		-- Weapon inventory
+		weapons = {},         -- List of owned weapon keys (e.g., {"hammer", "pistol"})
+		ammo = {},            -- Ammo counts by weapon key (e.g., {pistol = 30})
+		equipped_index = 0,   -- 0 = no weapon, 1+ = index into weapons
+		is_attacking = false,
+		attack_timer = 0,
+		attack_angle = 0,     -- For melee swing rotation
+		fire_cooldown = 0,    -- Cooldown timer for ranged weapons
 	}
 }
 
@@ -148,6 +160,119 @@ function change_popularity(amount)
 	game.player.popularity = max(0, min(PLAYER_CONFIG.max_popularity, game.player.popularity + amount))
 	popularity_change.amount = amount
 	popularity_change.end_time = time() + PLAYER_CONFIG.popularity_text_duration
+end
+
+-- Player death state
+player_dead = false
+death_timer = 0
+death_fade = 0  -- 0-1 for fade effect
+
+-- Handle player death
+function handle_player_death()
+	if player_dead then return end
+
+	player_dead = true
+	death_timer = time()
+	death_fade = 0
+
+	-- Lose half money
+	game.player.money = flr(game.player.money / 2)
+
+	-- Lose 20 popularity
+	change_popularity(-20)
+
+	-- Clear all lovers (romantic partners lost)
+	lovers = {}
+	for _, fan in ipairs(fans) do
+		fan.is_lover = false
+		fan.love = 0
+	end
+
+	-- Reset hostile dealers
+	if arms_dealers then
+		for _, dealer in ipairs(arms_dealers) do
+			if dealer.state == "hostile" then
+				dealer.state = "idle"
+			end
+		end
+	end
+
+	-- Close any open dialogs/shop
+	if dialog then dialog.active = false end
+	if shop then shop.active = false end
+
+	-- Exit vehicle if in one
+	if player_vehicle then
+		player_vehicle.is_player_vehicle = false
+		player_vehicle = nil
+	end
+end
+
+-- Update death sequence
+function update_death()
+	if not player_dead then
+		-- Check if player should die
+		if game.player.health <= 0 then
+			handle_player_death()
+		end
+		return
+	end
+
+	local elapsed = time() - death_timer
+
+	-- Fade to black over 1 second
+	if elapsed < 1 then
+		death_fade = elapsed
+	-- Show "WASTED" for 1 second
+	elseif elapsed < 2 then
+		death_fade = 1
+	-- Fade back in over 1 second
+	elseif elapsed < 3 then
+		death_fade = 1 - (elapsed - 2)
+		-- Respawn player at start position (once, at start of fade-in)
+		if elapsed < 2.1 then
+			game.player.x = 0
+			game.player.y = 0
+			game.player.health = PLAYER_CONFIG.max_health
+			cam_x = 0
+			cam_y = 0
+		end
+	else
+		-- Death sequence complete
+		player_dead = false
+		death_fade = 0
+	end
+end
+
+-- Draw death overlay
+function draw_death_overlay()
+	if not player_dead and death_fade <= 0 then return end
+
+	-- Draw black overlay with fade
+	local alpha = flr(death_fade * 255)
+	if alpha > 0 then
+		-- Use dark color for fade effect
+		for y = 0, SCREEN_H - 1, 4 do
+			for x = 0, SCREEN_W - 1, 4 do
+				if rnd(255) < alpha then
+					rectfill(x, y, x + 3, y + 3, 0)
+				end
+			end
+		end
+	end
+
+	-- Show "WASTED" text
+	local elapsed = time() - death_timer
+	if elapsed > 1 and elapsed < 2.5 then
+		local text = "WASTED"
+		local tw = #text * 8  -- Larger font assumption
+		print_shadow(text, (SCREEN_W - tw) / 2, SCREEN_H / 2 - 8, 8)
+
+		-- Show what was lost
+		local loss_text = "Lost money and popularity"
+		local ltw = #loss_text * 4
+		print_shadow(loss_text, (SCREEN_W - ltw) / 2, SCREEN_H / 2 + 8, 6)
+	end
 end
 
 -- Player shadow
@@ -676,6 +801,18 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw arms dealers (always visible on minimap)
+	if arms_dealers then
+		for _, dealer in ipairs(arms_dealers) do
+			if dealer.state ~= "dead" then
+				local dx = mx + (dealer.x / tile_size + half_map_w - px + half_mw)
+				local dy = my + (dealer.y / tile_size + half_map_h - py + half_mh)
+				-- Always draw dealers, even if off edge of minimap (clipped anyway)
+				circfill(dx, dy, ARMS_DEALER_CONFIG.minimap_size, ARMS_DEALER_CONFIG.minimap_color)
+			end
+		end
+	end
+
 	-- Draw player (center of minimap)
 	if cfg.show_player then
 		local player_mx = mx + half_mw
@@ -808,6 +945,9 @@ function _init()
 	-- Spawn vehicles on roads and boats on water
 	spawn_vehicles()
 
+	-- Spawn arms dealers
+	spawn_arms_dealers()
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -837,6 +977,15 @@ function _update()
 	profile("vehicles_update")
 	update_vehicles()
 	profile("vehicles_update")
+
+	-- Update weapons and projectiles
+	update_projectiles()
+	update_melee_attack()
+
+	-- Update arms dealers
+	update_arms_dealers()
+	update_shop()
+	check_dealer_interaction()
 
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
@@ -877,6 +1026,9 @@ function _update()
 	-- Check for fan interaction and update dialog
 	check_fan_interaction()
 	update_dialog()
+
+	-- Update death sequence (checks for player death, handles respawn)
+	update_death()
 end
 
 -- Update nearby entity cache (called once per frame)
@@ -996,6 +1148,15 @@ function draw_lover_count()
 	spr(heart_sprite, x, y - 2)
 	-- Draw count next to heart
 	print_shadow("x" .. count, x + 10, y, cfg.popularity_color)
+end
+
+-- Draw player money display
+function draw_money()
+	local cfg = PLAYER_CONFIG
+	local x = cfg.money_display_x
+	local y = cfg.money_display_y
+	-- Draw money as "$XXX" text in green
+	print_shadow("$" .. game.player.money, x, y, cfg.money_color)
 end
 
 -- Find the nearest fan/lover NPC within interaction range
@@ -1426,6 +1587,10 @@ function _draw()
 	-- Draw collision effects (explosion feedback)
 	draw_collision_effects()
 
+	-- Draw projectiles and melee weapon
+	draw_projectiles()
+	draw_melee_weapon()
+
 	-- Draw player shadow overlay using color table (only when not in night mode)
 	-- if not night_mode then
 	-- 	apply_color_table(shadow_coltab_mode)
@@ -1453,13 +1618,27 @@ function _draw()
 	-- Draw fan prompt (if near a fan)
 	draw_fan_prompt()
 
-	-- Draw player health and popularity bars
+	-- Draw player health, popularity, and money
 	draw_health_bar()
 	draw_popularity_bar()
 	draw_lover_count()
+	draw_money()
+
+	-- Draw weapon HUD (equipped weapon and ammo)
+	draw_weapon_hud()
+
+	-- Draw dealer prompt and boss health bar
+	draw_dealer_prompt()
+	draw_boss_health_bar()
 
 	-- Draw dialog box (if talking to fan)
 	draw_dialog()
+
+	-- Draw shop UI (overlays everything)
+	draw_shop()
+
+	-- Draw death overlay (WASTED screen - overlays everything)
+	draw_death_overlay()
 
 	-- UI with drop shadows (only when debug enabled)
 	profile("ui")
