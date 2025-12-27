@@ -55,6 +55,7 @@ function create_vehicle(x, y, vehicle_type_name, facing_dir)
 		health = health,
 		max_health = health,
 		is_player_vehicle = false,
+		has_driver = true,       -- AI vehicles start with a driver
 		-- AI state
 		target_dir = facing_dir or "east",
 		wait_time = 0,           -- time to wait at red light
@@ -418,6 +419,7 @@ end
 
 -- Check if there's another vehicle ahead (in same lane)
 -- OPTIMIZED: Only checks vehicles within reasonable distance
+-- Returns the blocking vehicle, or nil if path is clear
 function vehicle_ahead(vehicle, distance)
 	local vec = VEHICLE_DIR_VECTORS[vehicle.facing_dir]
 	local check_x = vehicle.x + vec.dx * distance
@@ -438,18 +440,17 @@ function vehicle_ahead(vehicle, distance)
 
 			local dx = abs(other.x - check_x)
 			local dy = abs(other.y - check_y)
-			-- Check if other vehicle is in the way (tighter check for same lane)
-			-- For N/S movement, check Y distance more strictly
-			-- For E/W movement, check X distance more strictly
+			-- Check if other vehicle is in the way (TIGHT lane check - only same lane)
+			-- Lane width is ~12px offset from center, so check within ~10px
 			local in_way = false
 			if vehicle.facing_dir == "north" or vehicle.facing_dir == "south" then
-				-- Moving vertically - check if other is in our lane (similar X)
-				if dx < 16 and dy < 24 then
+				-- Moving vertically - check if other is in our lane (similar X position)
+				if dx < 10 and dy < 20 then
 					in_way = true
 				end
 			else
-				-- Moving horizontally - check if other is in our lane (similar Y)
-				if dx < 24 and dy < 16 then
+				-- Moving horizontally - check if other is in our lane (similar Y position)
+				if dx < 20 and dy < 10 then
 					in_way = true
 				end
 			end
@@ -620,6 +621,7 @@ function update_vehicle_ai(vehicle, dt)
 	if vehicle.is_player_vehicle then return end  -- skip player-controlled vehicles
 	if vehicle.state == "destroyed" then return end
 	if vehicle.state == "exploding" then return end
+	if not vehicle.has_driver then return end  -- no driver = no AI movement
 
 	local vtype = vehicle.vtype
 	local now = time()
@@ -700,11 +702,24 @@ function update_vehicle_ai(vehicle, dt)
 			vehicle.x = target_x
 			vehicle.y = target_y
 		else
-			-- Bounce off edge
-			if vehicle.facing_dir == "north" then vehicle.facing_dir = "south"
-			elseif vehicle.facing_dir == "south" then vehicle.facing_dir = "north"
-			elseif vehicle.facing_dir == "east" then vehicle.facing_dir = "west"
-			elseif vehicle.facing_dir == "west" then vehicle.facing_dir = "east"
+			-- Hit edge - try 90 degree turn first (prefer right)
+			local current = vehicle.facing_dir
+			local right_turn = { north = "east", east = "south", south = "west", west = "north" }
+			local left_turn = { north = "west", west = "south", south = "east", east = "north" }
+			local reverse = { north = "south", south = "north", east = "west", west = "east" }
+
+			local right_dir = right_turn[current]
+			local right_vec = VEHICLE_DIR_VECTORS[right_dir]
+			if is_on_main_road(vehicle.x + right_vec.dx * 32, vehicle.y + right_vec.dy * 32) then
+				vehicle.facing_dir = right_dir
+			else
+				local left_dir = left_turn[current]
+				local left_vec = VEHICLE_DIR_VECTORS[left_dir]
+				if is_on_main_road(vehicle.x + left_vec.dx * 32, vehicle.y + left_vec.dy * 32) then
+					vehicle.facing_dir = left_dir
+				else
+					vehicle.facing_dir = reverse[current]
+				end
 			end
 		end
 		return
@@ -719,12 +734,16 @@ function update_vehicle_ai(vehicle, dt)
 		return
 	end
 
-	-- Check for vehicle ahead (stop if there's one close)
-	local ahead = vehicle_ahead(vehicle, 40)
+	-- Check for vehicle ahead - try to go around, only stop if very close
+	local ahead = vehicle_ahead(vehicle, 24)  -- reduced from 40 to 24
 	if ahead then
-		-- Stop behind other vehicle
-		vehicle.state = "stopped"
-		return
+		-- Only stop if the vehicle ahead is also stopped/waiting (traffic jam)
+		-- Otherwise try to continue - lane correction will naturally separate them
+		if ahead.state == "stopped" or ahead.state == "waiting" then
+			vehicle.state = "stopped"
+			return
+		end
+		-- Vehicle ahead is moving, just slow down naturally (don't stop)
 	else
 		if vehicle.state == "stopped" then
 			vehicle.state = "driving"
@@ -807,11 +826,33 @@ function update_vehicle_ai(vehicle, dt)
 		vehicle.x = target_x
 		vehicle.y = target_y
 	else
-		-- Hit edge of road or dead end - turn around
-		if vehicle.facing_dir == "north" then vehicle.facing_dir = "south"
-		elseif vehicle.facing_dir == "south" then vehicle.facing_dir = "north"
-		elseif vehicle.facing_dir == "east" then vehicle.facing_dir = "west"
-		elseif vehicle.facing_dir == "west" then vehicle.facing_dir = "east"
+		-- Hit edge of road or dead end - try 90 degree turn first (prefer right turn for right-side driving)
+		local current = vehicle.facing_dir
+		local right_turn = { north = "east", east = "south", south = "west", west = "north" }
+		local left_turn = { north = "west", west = "south", south = "east", east = "north" }
+		local reverse = { north = "south", south = "north", east = "west", west = "east" }
+
+		-- Try right turn first (natural for right-side driving)
+		local right_dir = right_turn[current]
+		local right_vec = VEHICLE_DIR_VECTORS[right_dir]
+		local right_x = vehicle.x + right_vec.dx * 32
+		local right_y = vehicle.y + right_vec.dy * 32
+
+		if is_on_main_road(right_x, right_y) then
+			vehicle.facing_dir = right_dir
+		else
+			-- Try left turn
+			local left_dir = left_turn[current]
+			local left_vec = VEHICLE_DIR_VECTORS[left_dir]
+			local left_x = vehicle.x + left_vec.dx * 32
+			local left_y = vehicle.y + left_vec.dy * 32
+
+			if is_on_main_road(left_x, left_y) then
+				vehicle.facing_dir = left_dir
+			else
+				-- Last resort: reverse (180 degree turn)
+				vehicle.facing_dir = reverse[current]
+			end
 		end
 		-- Recalculate route
 		precompute_vehicle_route(vehicle, 5)
@@ -876,13 +917,15 @@ function update_player_vehicle(vehicle, dt)
 			if is_water(new_x, new_y) then valid_terrain = false end
 		end
 
-		-- Check building collision
+		-- Check building collision (skip for water vehicles - they can't hit buildings)
 		local collides_building = false
-		for _, b in ipairs(buildings) do
-			if new_x + 16 > b.x and new_x - 16 < b.x + b.w and
-			   new_y + 8 > b.y and new_y - 8 < b.y + b.h then
-				collides_building = true
-				break
+		if not vtype.water_only then
+			for _, b in ipairs(buildings) do
+				if new_x + 16 > b.x and new_x - 16 < b.x + b.w and
+				   new_y + 8 > b.y and new_y - 8 < b.y + b.h then
+					collides_building = true
+					break
+				end
 			end
 		end
 
@@ -895,8 +938,8 @@ function update_player_vehicle(vehicle, dt)
 		end
 	end
 
-	-- Exit vehicle with E key
-	if keyp(VEHICLE_CONFIG.steal_key) then
+	-- Exit vehicle with E key (use input_utils for proper single-press detection)
+	if input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
 		exit_vehicle()
 	end
 end
@@ -910,19 +953,20 @@ function check_vehicle_collisions(visible_vehicles)
 	local now = time()
 	local cfg = VEHICLE_CONFIG
 	local count = #visible_vehicles
+	local scale = cfg.collision_scale or 1.0  -- collision box scale
 
 	for i = 1, count do
 		local v1 = visible_vehicles[i]
 		if v1.state ~= "destroyed" and v1.state ~= "exploding" then
-			local w1 = v1.vtype.w / 2
-			local h1 = v1.vtype.h / 2
+			local w1 = v1.vtype.w / 2 * scale
+			local h1 = v1.vtype.h / 2 * scale
 
 			for j = i + 1, count do
 				local v2 = visible_vehicles[j]
 				if v2.state ~= "destroyed" and v2.state ~= "exploding" then
-					-- Simple AABB collision
-					local w2 = v2.vtype.w / 2
-					local h2 = v2.vtype.h / 2
+					-- Simple AABB collision (scaled down for tighter feel)
+					local w2 = v2.vtype.w / 2 * scale
+					local h2 = v2.vtype.h / 2 * scale
 
 					if abs(v1.x - v2.x) < w1 + w2 and abs(v1.y - v2.y) < h1 + h2 then
 						-- Spawn collision effect if player is involved (only once per cooldown)
@@ -1120,15 +1164,18 @@ function steal_vehicle(vehicle)
 	vehicle.max_health = vehicle.vtype.health * multiplier
 	vehicle.health = min(vehicle.health * multiplier, vehicle.max_health)
 
-	-- Spawn a startled NPC running away (the "driver")
-	local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
-	local npc = create_npc(vehicle.x, vehicle.y, npc_type_index)
-	npc.state = "surprised"
-	npc.state_end_time = time() + NPC_CONFIG.surprise_duration
-	npc.show_surprise = true
-	npc.scare_player_x = vehicle.x
-	npc.scare_player_y = vehicle.y
-	add(npcs, npc)
+	-- Spawn a startled NPC running away (the "driver") - only if vehicle had a driver
+	if vehicle.has_driver then
+		local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
+		local npc = create_npc(vehicle.x, vehicle.y, npc_type_index)
+		npc.state = "surprised"
+		npc.state_end_time = time() + NPC_CONFIG.surprise_duration
+		npc.show_surprise = true
+		npc.scare_player_x = vehicle.x
+		npc.scare_player_y = vehicle.y
+		add(npcs, npc)
+		vehicle.has_driver = false  -- driver ejected
+	end
 
 	printh("Player stole a " .. vehicle.vtype.name)
 end
@@ -1233,9 +1280,10 @@ function update_vehicles()
 	process_vehicle_respawns(player_x, player_y)
 
 	-- Check for vehicle stealing (with cooldown after exiting)
+	-- Use input_utils for proper single-press detection (same key as exit)
 	if not player_vehicle and time() > vehicle_exit_cooldown then
 		local nearby = get_nearest_stealable_vehicle(game.player.x, game.player.y)
-		if nearby and keyp(VEHICLE_CONFIG.steal_key) then
+		if nearby and input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
 			steal_vehicle(nearby)
 		end
 	end
@@ -1268,7 +1316,8 @@ end
 function get_vehicle_flip(vehicle)
 	local dir = vehicle.facing_dir
 	local flip_x = (dir == "west")
-	local flip_y = (dir == "south")
+	-- Flip Y for south-facing vehicles, but NOT for boats (they only have E/W sprites)
+	local flip_y = (dir == "south") and not vehicle.vtype.water_only
 	return flip_x, flip_y
 end
 

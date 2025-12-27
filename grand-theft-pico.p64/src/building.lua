@@ -310,9 +310,9 @@ profile("cull")
 			local draw_x = obj.sx - vw / 2
 			local draw_y = obj.sy - vh / 2
 
-			-- Offset N/S facing vehicles down 8 pixels so Y center aligns with E/W bottom
+			-- Offset N/S facing vehicles so Y center aligns with E/W bottom
 			if vehicle.facing_dir == "north" or vehicle.facing_dir == "south" then
-				draw_y = draw_y + 8
+				draw_y = draw_y + (vehicle.vtype.ns_y_offset or 0)
 			end
 
 			-- Draw vehicle sprite

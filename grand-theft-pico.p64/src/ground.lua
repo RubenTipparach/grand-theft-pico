@@ -148,30 +148,30 @@ end
 -- Get water sprite for a tile based on neighboring tiles (9-slice)
 -- Uses Set 1 for outer corners/edges (grass surrounding water)
 -- Uses Set 2 for inner corners (water surrounding grass - diagonal notches)
+-- Helper to check if a tile is water (inlined for performance)
+local function is_water_at(tiles, x, y, map_w, map_h)
+	if x < 0 or x >= map_w or y < 0 or y >= map_h then
+		return true  -- outside map = water
+	end
+	return tiles:get(x, y) == MAP_TILE_WATER
+end
+
 function get_water_tile_sprite(mx, my, tiles, map_w, map_h)
 	local frame = water_frame + 1  -- 1 or 2 for table index
 	local set1 = WATER_CONFIG.set1[frame]
 	local set2 = WATER_CONFIG.set2[frame]
 
-	-- Check which neighbors are water (outside bounds = water)
-	local function is_water_tile(x, y)
-		if x < 0 or x >= map_w or y < 0 or y >= map_h then
-			return true  -- outside map = water
-		end
-		return tiles:get(x, y) == MAP_TILE_WATER
-	end
-
-	-- Cardinal neighbors
-	local n = is_water_tile(mx, my - 1)  -- north
-	local s = is_water_tile(mx, my + 1)  -- south
-	local w = is_water_tile(mx - 1, my)  -- west
-	local e = is_water_tile(mx + 1, my)  -- east
+	-- Cardinal neighbors (using hoisted helper function)
+	local n = is_water_at(tiles, mx, my - 1, map_w, map_h)  -- north
+	local s = is_water_at(tiles, mx, my + 1, map_w, map_h)  -- south
+	local w = is_water_at(tiles, mx - 1, my, map_w, map_h)  -- west
+	local e = is_water_at(tiles, mx + 1, my, map_w, map_h)  -- east
 
 	-- Diagonal neighbors (for inner corner detection)
-	local nw = is_water_tile(mx - 1, my - 1)  -- northwest
-	local ne = is_water_tile(mx + 1, my - 1)  -- northeast
-	local sw = is_water_tile(mx - 1, my + 1)  -- southwest
-	local se = is_water_tile(mx + 1, my + 1)  -- southeast
+	local nw = is_water_at(tiles, mx - 1, my - 1, map_w, map_h)  -- northwest
+	local ne = is_water_at(tiles, mx + 1, my - 1, map_w, map_h)  -- northeast
+	local sw = is_water_at(tiles, mx - 1, my + 1, map_w, map_h)  -- southwest
+	local se = is_water_at(tiles, mx + 1, my + 1, map_w, map_h)  -- southeast
 
 	-- Set 1: Outer corners/edges (grass border around water)
 	-- Corner cases (2 cardinal sides have grass)

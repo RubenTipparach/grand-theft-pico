@@ -4,6 +4,42 @@
 -- A top-down GTA1/2-style game for Picotron
 
 -- ============================================
+-- REQUIRE FUNCTION (for modules that return values)
+-- ============================================
+function require(name)
+	if _modules == nil then
+		_modules = {}
+	end
+
+	local already_imported = _modules[name]
+	if already_imported ~= nil then
+		return already_imported
+	end
+
+	local filename = fullpath(name .. '.lua')
+	local src = fetch(filename)
+
+	if type(src) ~= "string" then
+		notify("could not include " .. filename)
+		stop()
+		return
+	end
+
+	local func, err = load(src, "@" .. filename, "t", _ENV)
+	if not func then
+		send_message(3, { event = "report_error", content = "*syntax error" })
+		send_message(3, { event = "report_error", content = tostr(err) })
+		stop()
+		return
+	end
+
+	local module = func()
+	_modules[name] = module
+
+	return module
+end
+
+-- ============================================
 -- INCLUDES (load modules)
 -- ============================================
 include("src/constants.lua")
@@ -21,6 +57,9 @@ include("src/flora.lua")
 include("src/input.lua")
 include("src/npc.lua")
 include("src/vehicle.lua")
+
+-- Load input utilities module (for single-press detection)
+input_utils = require("src/input_utils")
 
 -- ============================================
 -- PALETTE SETUP
@@ -563,6 +602,18 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw vehicles (cars = 21, boats = 9)
+	for _, vehicle in ipairs(vehicles) do
+		if vehicle.state ~= "destroyed" then
+			local vx = mx + (vehicle.x / tile_size + half_map_w - px + half_mw)
+			local vy = my + (vehicle.y / tile_size + half_map_h - py + half_mh)
+			if vx >= mx and vx <= mx + mw and vy >= my and vy <= my + mh then
+				local color = vehicle.vtype.water_only and 9 or 21
+				pset(vx, vy, color)
+			end
+		end
+	end
+
 	-- Draw player (center of minimap)
 	local player_mx = mx + half_mw
 	local player_my = my + half_mh
@@ -816,17 +867,17 @@ function _draw()
 	-- UI with drop shadows (only when debug enabled)
 	profile("ui")
 	if DEBUG_CONFIG.enabled then
-		print_shadow("GTA PICOTRON", 4, 4, 7)
-		print_shadow("arrows: move  X: toggle renderer", 4, 14, 7)
-		print_shadow("pos: "..flr(game.player.x)..","..flr(game.player.y), 4, SCREEN_H - 20, 7)
-		print_shadow("mode: "..render_mode, 4, SCREEN_H - 10, 7)
-		print_shadow("coltab: "..shadow_coltab_mode.." (M cycle)", SCREEN_W - 150, 24, 7)
+		-- print_shadow("GTA PICOTRON", 4, 4, 6)
+		print_shadow("arrows: move  X: toggle renderer", 4, 14, 6)
+		print_shadow("pos: "..flr(game.player.x)..","..flr(game.player.y), 4, SCREEN_H - 20, 6)
+		print_shadow("mode: "..render_mode, 4, SCREEN_H - 10, 6)
+		print_shadow("coltab: "..shadow_coltab_mode.." (M cycle)", SCREEN_W - 150, 24, 6)
 
 		-- CPU stats
 		local cpu = stat(1)  -- CPU usage (0-1 range, where 1 = 100%)
 		local fps = stat(7)  -- current FPS
-		print_shadow("cpu: "..flr(cpu * 100).."%", SCREEN_W - 70, 4, 7)
-		print_shadow("fps: "..flr(fps), SCREEN_W - 70, 14, 7)
+		print_shadow("cpu: "..flr(cpu * 100).."%", SCREEN_W - 70, 4, 6)
+		print_shadow("fps: "..flr(fps), SCREEN_W - 70, 14, 6)
 
 		-- Draw profiler output
 		profile.draw()

@@ -6,52 +6,55 @@ walk_timer = 0
 
 -- Handle player input and update camera
 function handle_input()
-	local dx, dy = 0, 0
+	-- Skip walking input if player is in a vehicle (vehicle handles its own input)
+	if not player_vehicle then
+		local dx, dy = 0, 0
 
-	if btn(0) then dx = -1 end  -- left
-	if btn(1) then dx = 1 end   -- right
-	if btn(2) then dy = -1 end  -- up
-	if btn(3) then dy = 1 end   -- down
+		if btn(0) then dx = -1 end  -- left
+		if btn(1) then dx = 1 end   -- right
+		if btn(2) then dy = -1 end  -- up
+		if btn(3) then dy = 1 end   -- down
 
-	-- Get speed from config
-	local speed = PLAYER_CONFIG.walk_speed
+		-- Get speed from config
+		local speed = PLAYER_CONFIG.walk_speed
 
-	-- Move player with collision detection
-	local new_x, new_y = move_with_collision(
-		game.player.x, game.player.y,
-		dx, dy, speed
-	)
-	game.player.x = new_x
-	game.player.y = new_y
+		-- Move player with collision detection
+		local new_x, new_y = move_with_collision(
+			game.player.x, game.player.y,
+			dx, dy, speed
+		)
+		game.player.x = new_x
+		game.player.y = new_y
 
-	-- Update facing direction based on dominant velocity
-	-- When vertical > horizontal, use north/south; otherwise east/west
-	if dx ~= 0 or dy ~= 0 then
-		if abs(dy) > abs(dx) then
-			-- Vertical movement dominates
-			if dy < 0 then
-				game.player.facing_dir = "north"
+		-- Update facing direction based on dominant velocity
+		-- When vertical > horizontal, use north/south; otherwise east/west
+		if dx ~= 0 or dy ~= 0 then
+			if abs(dy) > abs(dx) then
+				-- Vertical movement dominates
+				if dy < 0 then
+					game.player.facing_dir = "north"
+				else
+					game.player.facing_dir = "south"
+				end
 			else
-				game.player.facing_dir = "south"
+				-- Horizontal movement dominates (or equal)
+				game.player.facing_dir = "east"  -- east/west use same sprites with flip
+				game.player.facing_right = (dx < 0)
 			end
-		else
-			-- Horizontal movement dominates (or equal)
-			game.player.facing_dir = "east"  -- east/west use same sprites with flip
-			game.player.facing_right = (dx < 0)
 		end
-	end
 
-	-- Update walking animation
-	local is_moving = (dx ~= 0 or dy ~= 0)
-	if is_moving then
-		walk_timer = walk_timer + 1
-		local anim_speed = PLAYER_CONFIG.animation_speed
-		-- 2-frame walk cycle: alternate between 1 and 2 (not 0 which is idle)
-		local frame_index = flr(walk_timer / anim_speed) % 2 + 1
-		game.player.walk_frame = frame_index  -- 1 or 2
-	else
-		walk_timer = 0
-		game.player.walk_frame = 0  -- idle when not moving
+		-- Update walking animation
+		local is_moving = (dx ~= 0 or dy ~= 0)
+		if is_moving then
+			walk_timer = walk_timer + 1
+			local anim_speed = PLAYER_CONFIG.animation_speed
+			-- 2-frame walk cycle: alternate between 1 and 2 (not 0 which is idle)
+			local frame_index = flr(walk_timer / anim_speed) % 2 + 1
+			game.player.walk_frame = frame_index  -- 1 or 2
+		else
+			walk_timer = 0
+			game.player.walk_frame = 0  -- idle when not moving
+		end
 	end
 
 	-- Smooth follow camera with deadzone

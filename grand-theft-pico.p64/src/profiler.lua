@@ -47,7 +47,7 @@ end
 
 -- Draw CPU usage only
 local function draw_cpu()
-	print_shadow("cpu:" .. string.sub(stat(1) * 100, 1, 5) .. "%", 1, 24, 7)
+	print_shadow("cpu:" .. string.sub(stat(1) * 100, 1, 5) .. "%", 1, 24, 6)
 end
 
 -- Draw all profiles
@@ -57,7 +57,7 @@ local function display_profiles()
 		local usage = string.sub(prof.time * 100, 1, 5) .. "%"
 		local text = prof.name .. ":" .. usage
 		-- Indent sub-profiles (names starting with space) in different color
-		local color = prof.name:sub(1, 1) == " " and 12 or 7
+		local color = prof.name:sub(1, 1) == " " and 6 or 6
 		print_shadow(text, 1, y, color)
 		y = y + 10
 	end

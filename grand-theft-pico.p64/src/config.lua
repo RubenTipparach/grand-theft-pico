@@ -352,7 +352,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = false,  -- set to false to disable debug features
+	enabled = true,  -- set to false to disable debug features
 }
 
 -- ============================================
@@ -783,26 +783,29 @@ VEHICLE_CONFIG = {
 			name = "truck",
 			sprite_e = 201,  -- facing east
 			sprite_n = 202,  -- facing north
-			w = 32, h = 16,  -- sprite dimensions (east-facing)
-			speed = 40,      -- pixels per second
+			w = 16, h = 16,  -- sprite dimensions
+			speed = 60,      -- pixels per second
 			health = 100,
+			ns_y_offset = 4, -- Y offset when facing N/S
 		},
 		van = {
 			name = "van",
 			sprite_e = 203,  -- facing east
 			sprite_n = 204,  -- facing north
-			w = 24, h = 16,  -- sprite dimensions (east-facing)
-			speed = 50,
+			w = 16, h = 16,  -- sprite dimensions (east-facing)
+			speed = 70,
 			health = 80,
+			ns_y_offset = 4, -- Y offset when facing N/S
 		},
 		boat = {
 			name = "boat",
 			sprite_e = 205,  -- facing east (only water vehicle)
 			sprite_n = nil,  -- boats only face E/W
-			w = 32, h = 16,
-			speed = 35,
+			w = 16, h = 16,
+			speed = 25,
 			health = 60,
 			water_only = true,  -- can only travel on water
+			ns_y_offset = 0, -- boats don't face N/S
 		},
 	},
 
@@ -838,6 +841,9 @@ VEHICLE_CONFIG = {
 
 	-- NPC collision
 	npc_push_force = 60,         -- how fast NPCs get pushed aside
+
+	-- Collision hitbox scale (1.0 = full sprite size, 0.7 = 70% of sprite)
+	collision_scale = 0.7,       -- shrink collision box to feel tighter
 
 	-- Respawn settings (when vehicles are destroyed)
 	respawn_enabled = true,              -- set to false to disable respawning
