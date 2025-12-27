@@ -7,7 +7,8 @@ walk_timer = 0
 -- Handle player input and update camera
 function handle_input()
 	-- Skip walking input if player is in a vehicle (vehicle handles its own input)
-	if not player_vehicle then
+	-- Also skip if dialog is active (player shouldn't move while talking)
+	if not player_vehicle and not (dialog and dialog.active) then
 		local dx, dy = 0, 0
 
 		if btn(0) then dx = -1 end  -- left

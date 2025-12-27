@@ -113,8 +113,42 @@ game = {
 		facing_right = true,
 		facing_dir = "east",  -- "north", "south", "east" (east/west use flip_x)
 		walk_frame = 0,
+		-- Combat/popularity system
+		health = PLAYER_CONFIG.max_health,
+		popularity = PLAYER_CONFIG.starting_popularity,
 	}
 }
+
+-- List of NPCs that are fans/lovers (by NPC reference)
+-- Fans: NPCs who recognized the player, won't flee, show heart
+-- Lovers: Fans who filled love meter, always show heart, can heal
+fans = {}  -- { npc = npc_ref, is_lover = false, love = 0 }
+lovers = {}  -- separate list for quick lookup on minimap
+
+-- Dialog system state
+dialog = {
+	active = false,
+	npc = nil,           -- NPC we're talking to
+	fan_data = nil,      -- fan data for the NPC
+	options = {},        -- current dialog options
+	selected = 1,        -- currently selected option
+	phase = "choose",    -- "choose" = picking line, "result" = showing result
+	result_text = "",    -- text to show after choosing
+	result_timer = 0,    -- time until dialog closes
+}
+
+-- Popularity change display (shows +/- text near bar)
+popularity_change = {
+	amount = 0,         -- amount to display (+5 or -2 etc)
+	end_time = 0,       -- when to stop showing
+}
+
+-- Helper function to change popularity and show feedback
+function change_popularity(amount)
+	game.player.popularity = max(0, min(PLAYER_CONFIG.max_popularity, game.player.popularity + amount))
+	popularity_change.amount = amount
+	popularity_change.end_time = time() + PLAYER_CONFIG.popularity_text_duration
+end
 
 -- Player shadow
 SHADOW_RADIUS = 37
@@ -132,6 +166,12 @@ day_night_transition_timer = 0  -- frames until next step
 
 -- Buildings created from level data in config
 buildings = {}
+
+-- Nearby entity caches (computed once per frame for optimization)
+-- Avoids iterating through full NPC/vehicle lists multiple times
+nearby_fans = {}      -- { npc, fan_data, dist } for fans within interaction range
+nearby_fan = nil      -- closest fan NPC reference (for quick access)
+nearby_fan_data = nil -- closest fan's data
 
 -- ============================================
 -- MAIN CALLBACKS
@@ -595,14 +635,28 @@ function draw_minimap()
 		end
 	end
 
-	-- Draw NPCs
+	-- Draw NPCs (and lovers in special color)
 	if cfg.show_npcs then
 		for _, npc in ipairs(npcs) do
 			local nx = mx + (npc.x / tile_size + half_map_w - px + half_mw)
 			local ny = my + (npc.y / tile_size + half_map_h - py + half_mh)
 			if nx >= mx and nx <= mx + mw and ny >= my and ny <= my + mh then
-				pset(nx, ny, cfg.npc_color)
+				-- Check if this NPC is a lover (use special color)
+				local color = cfg.npc_color
+				if is_npc_lover(npc) then
+					color = PLAYER_CONFIG.lover_map_color
+				end
+				pset(nx, ny, color)
 			end
+		end
+	end
+
+	-- Always draw lovers on minimap (even if NPCs are disabled)
+	for _, lover_npc in ipairs(lovers) do
+		local lx = mx + (lover_npc.x / tile_size + half_map_w - px + half_mw)
+		local ly = my + (lover_npc.y / tile_size + half_map_h - py + half_mh)
+		if lx >= mx and lx <= mx + mw and ly >= my and ly <= my + mh then
+			pset(lx, ly, PLAYER_CONFIG.lover_map_color)
 		end
 	end
 
@@ -816,6 +870,50 @@ function _update()
 
 	-- Update day-night cycle transitions
 	update_day_night_cycle()
+
+	-- Update nearby entity cache (once per frame)
+	update_nearby_cache()
+
+	-- Check for fan interaction and update dialog
+	check_fan_interaction()
+	update_dialog()
+end
+
+-- Update nearby entity cache (called once per frame)
+-- This avoids iterating through full lists multiple times for interaction checks
+-- Also refreshes heart show timer for nearby fans
+function update_nearby_cache()
+	local px, py = game.player.x, game.player.y
+	local interact_range = PLAYER_CONFIG.fan_detect_distance * 2
+	local now = time()
+	local heart_duration = PLAYER_CONFIG.heart_show_duration
+
+	-- Clear caches
+	nearby_fans = {}
+	nearby_fan = nil
+	nearby_fan_data = nil
+
+	-- Skip if in vehicle (can't interact with fans)
+	if player_vehicle then return end
+
+	-- Find all nearby fans and track the closest one
+	local best_dist = interact_range
+	for _, fan_data in ipairs(fans) do
+		local npc = fan_data.npc
+		local dx = npc.x - px
+		local dy = npc.y - py
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < interact_range then
+			add(nearby_fans, { npc = npc, fan_data = fan_data, dist = dist })
+			-- Refresh heart show timer when player is nearby
+			fan_data.heart_show_until = now + heart_duration
+			if dist < best_dist then
+				best_dist = dist
+				nearby_fan = npc
+				nearby_fan_data = fan_data
+			end
+		end
+	end
 end
 
 -- Print text with drop shadow for legibility
@@ -823,6 +921,484 @@ function print_shadow(text, x, y, col, shadow_col)
 	shadow_col = shadow_col or 0  -- default black shadow
 	print(text, x + 1, y + 1, shadow_col)
 	print(text, x, y, col)
+end
+
+-- Draw player health bar
+function draw_health_bar()
+	local cfg = PLAYER_CONFIG
+	local x = cfg.health_bar_x
+	local y = cfg.health_bar_y
+	local w = cfg.health_bar_width
+	local h = cfg.health_bar_height
+
+	-- Calculate health percentage
+	local health_pct = game.player.health / cfg.max_health
+	health_pct = max(0, min(1, health_pct))  -- clamp 0-1
+	local fill_w = flr(w * health_pct)
+
+	-- Draw label
+	print_shadow("HP", x, y - 8, cfg.health_color)
+
+	-- Draw border
+	rect(x - 1, y - 1, x + w, y + h, cfg.health_border_color)
+	-- Draw background
+	rectfill(x, y, x + w - 1, y + h - 1, cfg.health_bg_color)
+	-- Draw health fill
+	if fill_w > 0 then
+		rectfill(x, y, x + fill_w - 1, y + h - 1, cfg.health_color)
+	end
+end
+
+-- Draw player popularity bar
+function draw_popularity_bar()
+	local cfg = PLAYER_CONFIG
+	local x = cfg.popularity_bar_x
+	local y = cfg.popularity_bar_y
+	local w = cfg.popularity_bar_width
+	local h = cfg.popularity_bar_height
+
+	-- Calculate popularity percentage
+	local pop_pct = game.player.popularity / cfg.max_popularity
+	pop_pct = max(0, min(1, pop_pct))  -- clamp 0-1
+	local fill_w = flr(w * pop_pct)
+
+	-- Draw label
+	print_shadow("POP", x, y - 8, cfg.popularity_color)
+
+	-- Draw border
+	rect(x - 1, y - 1, x + w, y + h, cfg.popularity_border_color)
+	-- Draw background
+	rectfill(x, y, x + w - 1, y + h - 1, cfg.popularity_bg_color)
+	-- Draw popularity fill
+	if fill_w > 0 then
+		rectfill(x, y, x + fill_w - 1, y + h - 1, cfg.popularity_color)
+	end
+
+	-- Draw popularity change text (if active)
+	if time() < popularity_change.end_time then
+		local amount = popularity_change.amount
+		local text = (amount >= 0) and ("+" .. amount) or tostr(amount)
+		local col = (amount >= 0) and cfg.popularity_gain_color or cfg.popularity_loss_color
+		print_shadow(text, x + w + 4, y - 2, col)
+	end
+end
+
+-- Draw lover count under popularity bar
+function draw_lover_count()
+	local cfg = PLAYER_CONFIG
+	local x = cfg.popularity_bar_x
+	local y = cfg.popularity_bar_y + cfg.popularity_bar_height + 4  -- below popularity bar
+
+	-- Draw heart icon and count
+	local count = #lovers
+	local heart_sprite = cfg.heart_sprite
+	-- Draw small heart sprite (scaled down or just use spr)
+	spr(heart_sprite, x, y - 2)
+	-- Draw count next to heart
+	print_shadow("x" .. count, x + 10, y, cfg.popularity_color)
+end
+
+-- Find the nearest fan/lover NPC within interaction range
+-- Uses cached values computed in update_nearby_cache()
+function find_nearby_fan()
+	return nearby_fan, nearby_fan_data
+end
+
+-- Helper: shuffle an array in place
+function shuffle_array(arr)
+	for i = #arr, 2, -1 do
+		local j = flr(rnd(i)) + 1
+		arr[i], arr[j] = arr[j], arr[i]
+	end
+	return arr
+end
+
+-- Helper: pick random items from array (without replacement)
+function pick_random_items(arr, count)
+	local copy = {}
+	for _, v in ipairs(arr) do add(copy, v) end
+	shuffle_array(copy)
+	local result = {}
+	for i = 1, min(count, #copy) do
+		add(result, copy[i])
+	end
+	return result
+end
+
+-- Start dialog with a fan
+function start_dialog(npc, fan_data)
+	dialog.active = true
+	dialog.npc = npc
+	dialog.fan_data = fan_data
+	dialog.selected = 1
+	dialog.phase = "choose"
+	dialog.love_gained = 0  -- track love gained this dialog for display
+
+	-- Stop the NPC from moving during dialog
+	npc.in_dialog = true
+
+	-- Initialize failure count if not set
+	if not fan_data.failures then
+		fan_data.failures = 0
+	end
+
+	-- Build options based on fan/lover status
+	dialog.options = {}
+
+	if fan_data.is_lover then
+		-- Lovers always have heal option
+		add(dialog.options, { text = "Heal me!", action = "heal" })
+		add(dialog.options, { text = "Nevermind", action = "cancel" })
+	else
+		-- Non-lovers get flirting options based on archetype
+		local archetype = fan_data.archetype or "friendly"
+		local all_options = PLAYER_CONFIG.dialog_options
+
+		-- Get the archetype-matching options
+		local matching_options = all_options[archetype] or all_options.friendly
+
+		-- Get one random option from the matching archetype (guaranteed)
+		local archetype_pick = matching_options[flr(rnd(#matching_options)) + 1]
+		-- Mark it as matching the archetype
+		archetype_pick = {
+			text = archetype_pick.text,
+			response = archetype_pick.response,
+			love = archetype_pick.love,
+			is_correct = true  -- this is the right choice
+		}
+
+		-- Build pool of options from OTHER archetypes
+		local other_pool = {}
+		for arch, opts in pairs(all_options) do
+			if arch ~= archetype then
+				for _, opt in ipairs(opts) do
+					add(other_pool, {
+						text = opt.text,
+						response = opt.response,
+						love = opt.love,
+						is_correct = false  -- wrong archetype
+					})
+				end
+			end
+		end
+
+		-- Pick 2 random options from other archetypes
+		local other_picks = pick_random_items(other_pool, 2)
+
+		-- Combine: archetype pick + other picks, then shuffle
+		local final_options = { archetype_pick }
+		for _, opt in ipairs(other_picks) do
+			add(final_options, opt)
+		end
+		shuffle_array(final_options)
+
+		-- Convert to dialog format
+		for _, opt in ipairs(final_options) do
+			add(dialog.options, {
+				text = opt.text,
+				action = "flirt",
+				love = opt.love,
+				response = opt.response,
+				is_correct = opt.is_correct
+			})
+		end
+	end
+end
+
+-- Handle dialog option selection
+function select_dialog_option()
+	local opt = dialog.options[dialog.selected]
+	if not opt then return end
+
+	if opt.action == "cancel" then
+		-- Clear dialog flag on NPC
+		if dialog.npc then dialog.npc.in_dialog = false end
+		dialog.active = false
+		return
+	end
+
+	if opt.action == "heal" then
+		-- Heal the player
+		game.player.health = min(PLAYER_CONFIG.max_health, game.player.health + PLAYER_CONFIG.heal_amount)
+		dialog.phase = "result"
+		dialog.result_text = "You feel better! +" .. PLAYER_CONFIG.heal_amount .. " HP"
+		dialog.result_timer = time() + 1.5
+		return
+	end
+
+	-- Flirting action
+	if opt.action == "flirt" then
+		local fan_data = dialog.fan_data
+
+		-- Check if this is the correct archetype choice
+		if opt.is_correct then
+			-- Success! Add love
+			fan_data.love = fan_data.love + opt.love
+			dialog.love_gained = opt.love
+
+			-- Check if love meter is full (becomes a lover)
+			if fan_data.love >= PLAYER_CONFIG.love_meter_max then
+				fan_data.is_lover = true
+				fan_data.love = PLAYER_CONFIG.love_meter_max
+				-- Add to lovers list for minimap
+				add(lovers, fan_data.npc)
+				dialog.phase = "result"
+				dialog.result_text = "They're smitten! New lover!"
+			else
+				-- Show NPC's response with love gain
+				dialog.phase = "result"
+				dialog.result_text = opt.response or "..."
+			end
+		else
+			-- Wrong choice! Increment failure count
+			fan_data.failures = (fan_data.failures or 0) + 1
+			dialog.love_gained = 0
+
+			-- Check if they've had enough (3 strikes)
+			if fan_data.failures >= PLAYER_CONFIG.max_failures then
+				dialog.phase = "result"
+				dialog.result_text = "I'm done with you!"
+				dialog.result_timer = time() + 1.5
+				-- Mark for removal after dialog closes
+				dialog.fan_gave_up = true
+				return
+			else
+				-- Show a random failure response
+				local responses = PLAYER_CONFIG.failure_responses
+				local fail_response = responses[flr(rnd(#responses)) + 1]
+				dialog.phase = "result"
+				dialog.result_text = fail_response
+			end
+		end
+		dialog.result_timer = time() + 1.5
+		return
+	end
+end
+
+-- Update dialog system
+function update_dialog()
+	if not dialog.active then return end
+
+	if dialog.phase == "result" then
+		-- Wait for result timer
+		if time() >= dialog.result_timer then
+			-- Clear dialog flag on NPC so they can move again
+			if dialog.npc then dialog.npc.in_dialog = false end
+
+			-- Check if fan gave up (3 strikes)
+			if dialog.fan_gave_up then
+				dialog.fan_gave_up = false
+				-- Remove from fans list
+				for i, fan_data in ipairs(fans) do
+					if fan_data.npc == dialog.npc then
+						deli(fans, i)
+						break
+					end
+				end
+				-- Make NPC flee and reset their fan_checked so they can become a fan again later
+				dialog.npc.state = "fleeing"
+				dialog.npc.state_end_time = time() + NPC_CONFIG.flee_duration
+				dialog.npc.flee_dir = get_flee_direction(dialog.npc, game.player.x, game.player.y)
+				dialog.npc.facing_dir = dialog.npc.flee_dir or dialog.npc.facing_dir
+				dialog.npc.fan_checked = false  -- can become a fan again based on popularity
+				-- Lose popularity for failing at flirting
+				change_popularity(-PLAYER_CONFIG.popularity_loss_flirt_fail)
+			end
+
+			dialog.active = false
+		end
+		return
+	end
+
+	-- Navigate options with up/down
+	if btnp(2) then  -- up
+		dialog.selected = dialog.selected - 1
+		if dialog.selected < 1 then dialog.selected = #dialog.options end
+	elseif btnp(3) then  -- down
+		dialog.selected = dialog.selected + 1
+		if dialog.selected > #dialog.options then dialog.selected = 1 end
+	end
+
+	-- Select with X or E key (use input_utils for E to share state with check_fan_interaction)
+	if btnp(5) or input_utils.key_pressed("e") then
+		select_dialog_option()
+	end
+
+	-- Cancel with O key
+	if btnp(4) then
+		dialog.active = false
+	end
+end
+
+-- Wrap text to fit within max characters per line
+-- Returns a table of lines
+function wrap_text(text, max_chars)
+	local lines = {}
+	local current_line = ""
+
+	-- Split text into words manually (avoid string.gmatch)
+	local words = split(text, " ", false)
+	for _, word in ipairs(words) do
+		if #word > 0 then
+			if #current_line == 0 then
+				current_line = word
+			elseif #current_line + 1 + #word <= max_chars then
+				current_line = current_line .. " " .. word
+			else
+				add(lines, current_line)
+				current_line = word
+			end
+		end
+	end
+
+	-- Add remaining line
+	if #current_line > 0 then
+		add(lines, current_line)
+	end
+
+	return lines
+end
+
+-- Draw dialog box
+function draw_dialog()
+	if not dialog.active then return end
+
+	local cfg = PLAYER_CONFIG
+	local w = cfg.dialog_width
+	local max_chars = cfg.dialog_max_chars_per_line
+	local line_h = cfg.dialog_line_height
+	local x = (SCREEN_W - w) / 2
+
+	-- Calculate height based on content
+	local content_height = 0
+	local wrapped_options = {}  -- cache wrapped text for options
+
+	if dialog.phase == "result" then
+		-- Result phase: wrap result text
+		local result_lines = wrap_text(dialog.result_text, max_chars)
+		content_height = #result_lines * line_h + 20  -- padding
+		if dialog.love_gained and dialog.love_gained > 0 then
+			content_height = content_height + 14  -- extra line for love gain
+		end
+	else
+		-- Choose phase: calculate height for all options with wrapping
+		for i, opt in ipairs(dialog.options) do
+			local prefix = (i == dialog.selected) and "> " or "  "
+			local text = prefix .. opt.text
+			local lines = wrap_text(text, max_chars)
+			wrapped_options[i] = lines
+			content_height = content_height + #lines * line_h + 4  -- 4px gap between options
+		end
+		content_height = content_height + 22  -- padding for love bar area
+	end
+
+	-- Add space for love bar if showing
+	if dialog.fan_data and not dialog.fan_data.is_lover then
+		content_height = content_height + 16
+	end
+
+	local h = max(cfg.dialog_height, content_height)
+	local y = SCREEN_H - h - 20  -- above bottom of screen
+
+	-- Draw box
+	rectfill(x, y, x + w, y + h, cfg.dialog_bg_color)
+	rect(x, y, x + w, y + h, cfg.dialog_border_color)
+
+	-- Always show love meter at the top if flirting (not a lover yet)
+	local content_start_y = y + 8
+	if dialog.fan_data and not dialog.fan_data.is_lover then
+		local love_pct = dialog.fan_data.love / cfg.love_meter_max
+		local bar_w = w - 16
+		local bar_x = x + 8
+		local bar_y = y + 4
+		-- Background
+		rectfill(bar_x, bar_y, bar_x + bar_w, bar_y + 6, 1)
+		-- Fill
+		if love_pct > 0 then
+			rectfill(bar_x, bar_y, bar_x + bar_w * love_pct, bar_y + 6, 14)
+		end
+		-- Border
+		rect(bar_x - 1, bar_y - 1, bar_x + bar_w + 1, bar_y + 7, 6)
+		-- Label
+		print_shadow("LOVE", bar_x, bar_y - 8, 14)
+
+		-- Show failure count if any
+		if dialog.fan_data.failures and dialog.fan_data.failures > 0 then
+			local strikes = dialog.fan_data.failures .. "/" .. cfg.max_failures
+			print_shadow(strikes, bar_x + bar_w - 16, bar_y - 8, 8)  -- red color for strikes
+		end
+		content_start_y = bar_y + 14
+	end
+
+	if dialog.phase == "result" then
+		-- Show result text with wrapping, centered
+		local result_lines = wrap_text(dialog.result_text, max_chars)
+		local total_text_height = #result_lines * line_h
+		local result_y = y + (h - total_text_height) / 2
+
+		for _, line in ipairs(result_lines) do
+			local tw = #line * 4
+			print(line, x + (w - tw) / 2, result_y, cfg.dialog_text_color)
+			result_y = result_y + line_h
+		end
+
+		-- Show love gain text below result (if gained love)
+		if dialog.love_gained and dialog.love_gained > 0 then
+			local love_text = "+" .. dialog.love_gained .. " love"
+			local ltw = #love_text * 4
+			print(love_text, x + (w - ltw) / 2, result_y + 4, cfg.love_gain_color)
+		end
+	else
+		-- Show options with text wrapping
+		local oy = content_start_y
+		for i, opt in ipairs(dialog.options) do
+			local col = (i == dialog.selected) and cfg.dialog_selected_color or cfg.dialog_option_color
+			local prefix = (i == dialog.selected) and "> " or "  "
+			local text = prefix .. opt.text
+			local lines = wrap_text(text, max_chars)
+
+			for j, line in ipairs(lines) do
+				-- Only show prefix on first line
+				if j > 1 then
+					line = "  " .. line  -- indent continuation lines
+				end
+				print(line, x + 8, oy, col)
+				oy = oy + line_h
+			end
+			oy = oy + 2  -- small gap between options
+		end
+	end
+end
+
+-- Check for fan interaction (E key near fan)
+function check_fan_interaction()
+	if dialog.active then return end
+	if player_vehicle then return end  -- can't talk while in vehicle
+
+	-- Use input_utils.key_pressed to prevent E key from also selecting dialog option
+	if input_utils.key_pressed("e") then
+		local npc, fan_data = find_nearby_fan()
+		if npc and fan_data then
+			start_dialog(npc, fan_data)
+		end
+	end
+end
+
+-- Draw prompt when near a fan
+function draw_fan_prompt()
+	if dialog.active then return end
+	if player_vehicle then return end
+
+	local npc, fan_data = find_nearby_fan()
+	if npc and fan_data then
+		local sx, sy = world_to_screen(npc.x, npc.y)
+		-- Different text for fans vs lovers (lovers can heal you)
+		local text = fan_data.is_lover and "E: HEAL" or "E: FLIRT"
+		local tw = #text * 4
+		-- Draw above the heart sprite (moved up from -20 to -28)
+		local prompt_y = sy - 28
+		print_shadow(text, sx - tw/2, prompt_y, PLAYER_CONFIG.prompt_color)
+	end
 end
 
 function _draw()
@@ -873,6 +1449,17 @@ function _draw()
 
 	-- Draw steal prompt (if near a vehicle)
 	draw_steal_prompt()
+
+	-- Draw fan prompt (if near a fan)
+	draw_fan_prompt()
+
+	-- Draw player health and popularity bars
+	draw_health_bar()
+	draw_popularity_bar()
+	draw_lover_count()
+
+	-- Draw dialog box (if talking to fan)
+	draw_dialog()
 
 	-- UI with drop shadows (only when debug enabled)
 	profile("ui")

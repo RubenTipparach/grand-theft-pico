@@ -425,6 +425,94 @@ function get_lane_offset_for_direction(dir)
 end
 
 -- ============================================
+-- STUCK VEHICLE DETECTION AND RECOVERY
+-- ============================================
+
+-- Find the nearest road position for a stuck vehicle
+-- Searches in expanding squares similar to get_nearest_sidewalk
+function get_nearest_road_position(wx, wy)
+	local search_radius = 100  -- max search distance
+	local best_dist_sq = search_radius * search_radius
+	local best_x, best_y = nil, nil
+
+	-- Search in expanding squares
+	for dist = 16, search_radius, 16 do
+		-- Check points at this distance in 4 cardinal directions
+		local offsets = {
+			{ dx = 0, dy = -dist },   -- north
+			{ dx = 0, dy = dist },    -- south
+			{ dx = -dist, dy = 0 },   -- west
+			{ dx = dist, dy = 0 },    -- east
+		}
+
+		for _, off in ipairs(offsets) do
+			local tx = wx + off.dx
+			local ty = wy + off.dy
+			if is_on_main_road(tx, ty) then
+				local d_sq = off.dx * off.dx + off.dy * off.dy
+				if d_sq < best_dist_sq then
+					best_dist_sq = d_sq
+					best_x = tx
+					best_y = ty
+				end
+			end
+		end
+
+		-- If we found a road position at this distance, return it
+		if best_x then
+			return best_x, best_y
+		end
+	end
+
+	return nil, nil
+end
+
+-- Check if a vehicle is stuck (on sidewalk/grass for too long)
+-- and unstick it by moving to nearest road
+function check_and_unstick_vehicle(vehicle)
+	-- Skip player vehicles and boats
+	if vehicle.is_player_vehicle then return end
+	if vehicle.vtype.water_only then return end
+	if vehicle.state == "destroyed" or vehicle.state == "exploding" then return end
+
+	local now = time()
+
+	-- Check if vehicle is on the road
+	if is_on_main_road(vehicle.x, vehicle.y) then
+		-- On road, reset stuck timer
+		vehicle.stuck_time = nil
+		return
+	end
+
+	-- Vehicle is off-road (sidewalk, grass, etc.)
+	if not vehicle.stuck_time then
+		-- Start tracking stuck time
+		vehicle.stuck_time = now
+		return
+	end
+
+	-- Check if stuck for more than 2 seconds
+	if now - vehicle.stuck_time > 2 then
+		-- Find nearest road and teleport there
+		local road_x, road_y = get_nearest_road_position(vehicle.x, vehicle.y)
+		if road_x then
+			vehicle.x = road_x
+			vehicle.y = road_y
+			vehicle.stuck_time = nil
+			-- Pick a valid direction for the road orientation
+			local orientation = get_road_orientation_at(road_x, road_y)
+			if orientation == "ns" then
+				vehicle.facing_dir = rnd(1) > 0.5 and "north" or "south"
+			else
+				vehicle.facing_dir = rnd(1) > 0.5 and "east" or "west"
+			end
+			-- Recalculate route
+			precompute_vehicle_route(vehicle, 5)
+		end
+	end
+end
+
+-- ============================================
 -- VEHICLE AI UPDATE
 -- ============================================
 
@@ -1004,6 +1092,8 @@ function check_vehicle_collisions(visible_vehicles)
 								local cy = (v1.y + v2.y) / 2
 								add(collision_effects, { x = cx, y = cy, end_time = now + 0.5 })
 								effect_spawned = true
+								-- Lose popularity for crashing
+								change_popularity(-PLAYER_CONFIG.popularity_loss_crash)
 							end
 
 							-- If hit by player, start fleeing
@@ -1101,8 +1191,10 @@ function update_vehicle_state(vehicle, dt)
 		vehicle.explosion_frame = 1
 		vehicle.explosion_timer = now
 
-		-- If player was in this vehicle, exit
+		-- If player was in this vehicle, exit and take damage
 		if vehicle.is_player_vehicle then
+			-- Damage the player from the explosion
+			game.player.health = max(0, game.player.health - cfg.explosion_player_damage)
 			player_vehicle = nil
 			vehicle.is_player_vehicle = false
 		end
@@ -1338,6 +1430,11 @@ function update_vehicles()
 			end
 
 			update_vehicle_state(vehicle, dt)
+
+			-- Check if AI vehicle is stuck on sidewalk (only for visible vehicles)
+			if is_visible and not vehicle.is_player_vehicle then
+				check_and_unstick_vehicle(vehicle)
+			end
 		end
 	end
 
@@ -1407,10 +1504,12 @@ function get_vehicle_dimensions(vehicle)
 end
 
 -- Draw vehicle health bar (called from UI drawing)
+-- Uses same colors as player health bar for consistency
 function draw_vehicle_health_bar()
 	if not player_vehicle then return end
 
 	local cfg = MINIMAP_CONFIG
+	local pcfg = PLAYER_CONFIG
 	local vehicle = player_vehicle
 
 	-- Position next to minimap
@@ -1419,35 +1518,28 @@ function draw_vehicle_health_bar()
 	local bar_w = 40
 	local bar_h = 6
 
-	-- Background
-	rectfill(bar_x - 1, bar_y - 1, bar_x + bar_w + 1, bar_y + bar_h + 1, 0)
-
 	-- Health percentage
 	local health_pct = vehicle.health / vehicle.max_health
 	health_pct = max(0, min(1, health_pct))
 
-	-- Color based on health
-	local bar_color = 11  -- green
-	if health_pct < 0.3 then
-		bar_color = 8  -- red
-	elseif health_pct < 0.6 then
-		bar_color = 9  -- orange
-	end
+	-- Draw label (same color as player health bar)
+	print_shadow("CAR", bar_x, bar_y - 8, pcfg.health_color)
 
-	-- Health bar fill
+	-- Draw border
+	rect(bar_x - 1, bar_y - 1, bar_x + bar_w, bar_y + bar_h, pcfg.health_border_color)
+
+	-- Draw background
+	rectfill(bar_x, bar_y, bar_x + bar_w - 1, bar_y + bar_h - 1, pcfg.health_bg_color)
+
+	-- Draw health fill (same color as player health)
 	local fill_w = flr(bar_w * health_pct)
 	if fill_w > 0 then
-		rectfill(bar_x, bar_y, bar_x + fill_w, bar_y + bar_h, bar_color)
+		rectfill(bar_x, bar_y, bar_x + fill_w - 1, bar_y + bar_h - 1, pcfg.health_color)
 	end
-
-	-- Border
-	rect(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 6)
-
-	-- Label above health bar
-	print("CAR", bar_x, bar_y - 8, 7)
 end
 
 -- Draw steal prompt when near a vehicle
+-- Uses same color as flirt prompt for consistency
 function draw_steal_prompt()
 	if player_vehicle then return end
 
@@ -1457,8 +1549,7 @@ function draw_steal_prompt()
 		-- Draw prompt above vehicle
 		local text = "E: STEAL"
 		local tw = #text * 4
-		print(text, sx - tw/2 + 1, sy - 20 + 1, 0)  -- shadow
-		print(text, sx - tw/2, sy - 20, 7)  -- white text
+		print_shadow(text, sx - tw/2, sy - 20, PLAYER_CONFIG.prompt_color)
 	end
 end
 

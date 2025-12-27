@@ -246,6 +246,144 @@ PLAYER_CONFIG = {
 	shadow_height = 4,    -- shadow ellipse height
 	shadow_x_offset = -1,  -- horizontal offset for shadow
 	shadow_y_offset = 6,  -- how far below player center to draw shadow
+
+	-- Health system
+	max_health = 100,
+	health_bar_width = 60,
+	health_bar_height = 6,
+	health_bar_x = 8,
+	health_bar_y = 12,        -- moved down to make room for label
+	health_color = 12,        -- red for health
+	health_bg_color = 1,      -- dark blue background
+	health_border_color = 6,  -- light gray border
+
+	-- Popularity system
+	max_popularity = 100,
+	starting_popularity = 20,     -- initial popularity (0-100)
+	popularity_bar_width = 60,
+	popularity_bar_height = 6,
+	popularity_bar_x = 8,
+	popularity_bar_y = 30,    -- moved down to make room for label
+	popularity_color = 14,       -- pink for popularity
+	popularity_bg_color = 1,     -- dark blue background
+	popularity_border_color = 6, -- light gray border
+	popularity_per_fan = 2,      -- popularity gained when meeting a fan
+	popularity_loss_crash = 2,   -- popularity lost per car crash
+	popularity_loss_flirt_fail = 2, -- popularity lost when fan gives up (3 strikes)
+	popularity_text_duration = 1.5, -- seconds to show +/- popularity text
+	popularity_gain_color = 11,  -- green for gain
+	popularity_loss_color = 8,   -- red for loss
+
+	-- Fan system (chance scales with popularity)
+	fan_chance_min = 0.10,       -- 10% chance at 0 popularity
+	fan_chance_max = 0.50,       -- 15% chance at max popularity
+	fan_detect_distance = 24,    -- pixels to detect fan
+	heart_sprite = 193,          -- heart sprite ID
+	heart_bob_speed = 3,         -- how fast heart bobs up/down
+	heart_bob_height = 2,        -- pixels of bob
+	heart_show_duration = 5,     -- seconds heart shows after player approaches
+	prompt_color = 21,           -- color for interaction prompts (E: FLIRT etc)
+
+	-- Dialog/Flirting
+	interact_key = "e",          -- key to talk/interact
+	love_meter_max = 100,        -- max love before they're yours
+	love_per_good_line = 35,     -- love gained from good pickup line
+	love_per_ok_line = 20,       -- love gained from ok pickup line
+	love_per_bad_line = 5,       -- love gained from bad pickup line
+	heal_amount = 25,            -- health restored by healing with a fan
+	lover_map_color = 18,        -- color for lovers on minimap
+
+	-- Character archetypes (assigned randomly when NPC becomes a fan)
+	archetypes = { "dirty", "friendly", "clever", "funny" },
+
+	-- Dialog options by archetype (8-10 per archetype)
+	-- Each has: text, response (NPC reply), love_gain
+	dialog_options = {
+		dirty = {
+			{ text = "Are those space pants? Your butt is out of this world.", response = "Oh my! How forward...", love = 35 },
+			{ text = "Is it hot in here or is that just you?", response = "Getting warmer!", love = 30 },
+			{ text = "I lost my number, can I have yours?", response = "Smooth talker!", love = 25 },
+			{ text = "If you were a vegetable, you'd be a cute-cumber.", response = "Hehe, cheeky!", love = 20 },
+			{ text = "Do you believe in love at first sight?", response = "Maybe now I do...", love = 30 },
+			{ text = "Are you a campfire? You're hot and I want s'more.", response = "That's so bad it's good!", love = 25 },
+			{ text = "Is your dad a boxer? Cause you're a knockout!", response = "Flattery works!", love = 20 },
+			{ text = "You must be tired from running through my dreams.", response = "Oh stop it you!", love = 30 },
+		},
+		friendly = {
+			{ text = "Hey! You seem really cool, wanna hang out?", response = "Aw, you're sweet!", love = 35 },
+			{ text = "I love your vibe! What's your story?", response = "Thanks for asking!", love = 30 },
+			{ text = "You look like you give great hugs!", response = "Want to find out?", love = 25 },
+			{ text = "I bet you're an amazing friend.", response = "I try my best!", love = 20 },
+			{ text = "Your smile just made my day better!", response = "That's so kind!", love = 30 },
+			{ text = "You seem like someone worth knowing.", response = "Back at you!", love = 25 },
+			{ text = "I feel like we'd get along great!", response = "I think so too!", love = 30 },
+			{ text = "Want to grab coffee sometime?", response = "I'd love that!", love = 35 },
+		},
+		clever = {
+			{ text = "Are you made of copper and tellurium? Cause you're Cu-Te!", response = "A science pun! Nice!", love = 35 },
+			{ text = "I must be a snowflake cause I've fallen for you.", response = "Clever wordplay!", love = 30 },
+			{ text = "Are you WiFi? Cause I'm feeling a connection.", response = "Strong signal!", love = 25 },
+			{ text = "Is your name Chapstick? Cause you're da balm!", response = "Ha! Good one!", love = 20 },
+			{ text = "You must be a magician. Everyone else disappeared.", response = "How charming!", love = 30 },
+			{ text = "Are you a bank loan? Cause you got my interest.", response = "Financially sound!", love = 25 },
+			{ text = "If beauty were time, you'd be an eternity.", response = "Poetic!", love = 30 },
+			{ text = "You must be a parking ticket, cause you got fine written all over.", response = "Classic but clever!", love = 20 },
+		},
+		funny = {
+			{ text = "Did it hurt when you fell from the vending machine?", response = "Wait what? Haha!", love = 35 },
+			{ text = "I'm not a photographer but I can picture us together.", response = "So corny! I love it!", love = 30 },
+			{ text = "Are you a banana? Cause I find you a-peeling!", response = "Fruit puns! Yes!", love = 25 },
+			{ text = "I'd tell you a chemistry joke but I know I won't get a reaction.", response = "Hahaha amazing!", love = 30 },
+			{ text = "Are you a keyboard? Cause you're just my type!", response = "That's hilarious!", love = 25 },
+			{ text = "I was blinded by your beauty. Need your name for insurance.", response = "LOL smooth!", love = 20 },
+			{ text = "Is your dad a thief? Who stole the stars and put them in your eyes?", response = "So cheesy! Perfect!", love = 30 },
+			{ text = "If you were a triangle, you'd be acute one!", response = "Geometry humor wins!", love = 35 },
+		},
+	},
+
+	-- Generic/fallback lines (used when archetype doesn't match)
+	generic_lines = {
+		{ text = "Hey there, nice to meet you!", response = "Nice to meet you too!", love = 15 },
+		{ text = "What's a person like you doing in a place like this?", response = "Just hanging around!", love = 10 },
+		{ text = "Come here often?", response = "Sometimes!", love = 5 },
+		{ text = "You've got great energy!", response = "Thanks, so do you!", love = 15 },
+		{ text = "I couldn't help but notice you.", response = "Oh really now?", love = 12 },
+		{ text = "That's a nice outfit you've got.", response = "Why thank you!", love = 10 },
+		{ text = "You seem interesting.", response = "I try to be!", love = 8 },
+		{ text = "Having a good day?", response = "Better now!", love = 12 },
+		{ text = "You look like fun!", response = "I like to think so!", love = 10 },
+		{ text = "I like the way you walk.", response = "That's... unique!", love = 8 },
+		{ text = "Something about you is different.", response = "In a good way?", love = 12 },
+		{ text = "You caught my eye.", response = "Did I now?", love = 15 },
+		{ text = "Mind if I walk with you?", response = "Sure, why not!", love = 10 },
+	},
+
+	-- Failure responses (when choosing wrong archetype line)
+	failure_responses = {
+		"Ugh, that's not my style...",
+		"Really? That's the best you got?",
+		"Yikes... try again.",
+		"That was awful.",
+		"Not impressed.",
+		"You can do better than that.",
+		"Cringe...",
+		"That didn't land at all.",
+	},
+
+	-- 3 strikes system
+	max_failures = 3,              -- failures before fan gives up
+	love_gain_color = 18,          -- color for "+X love" text
+
+	-- Dialog box settings
+	dialog_width = 320,
+	dialog_height = 80,
+	dialog_max_chars_per_line = 50,  -- max characters per line before wrapping
+	dialog_line_height = 10,         -- pixels per line of text
+	dialog_bg_color = 1,
+	dialog_border_color = 6,
+	dialog_text_color = 7,
+	dialog_option_color = 14,
+	dialog_selected_color = 22,
 }
 
 -- ============================================
@@ -352,7 +490,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = true,  -- set to false to disable debug features
+	enabled = false,  -- set to false to disable debug features
 }
 
 -- ============================================
@@ -843,6 +981,7 @@ VEHICLE_CONFIG = {
 	explosion_sprites = { 104, 105, 106, 107 },  -- explosion animation frames
 	explosion_animation_speed = 0.1,  -- seconds per explosion frame
 	destroyed_sprite = 200,           -- wreckage sprite after explosion
+	explosion_player_damage = 50,     -- damage to player when their vehicle explodes
 
 	-- Interaction
 	steal_prompt_distance = 24,  -- distance to show "E to steal" prompt

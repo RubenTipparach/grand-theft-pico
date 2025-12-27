@@ -4,6 +4,36 @@
 -- Global NPC list
 npcs = {}
 
+-- Check if an NPC is a fan (referenced in the fans table)
+function is_npc_fan(npc)
+	for _, fan_data in ipairs(fans) do
+		if fan_data.npc == npc then
+			return true, fan_data
+		end
+	end
+	return false, nil
+end
+
+-- Check if an NPC is a lover
+function is_npc_lover(npc)
+	for _, lover_npc in ipairs(lovers) do
+		if lover_npc == npc then
+			return true
+		end
+	end
+	return false
+end
+
+-- Get fan data for an NPC (returns nil if not a fan)
+function get_fan_data(npc)
+	for _, fan_data in ipairs(fans) do
+		if fan_data.npc == npc then
+			return fan_data
+		end
+	end
+	return nil
+end
+
 -- Directions for movement
 local DIRECTIONS = { "north", "south", "east", "west" }
 local DIR_VECTORS = {
@@ -303,11 +333,26 @@ function update_npc(npc, player_x, player_y)
 	local dt = now - npc.last_update_time
 	npc.last_update_time = now
 
+	-- If NPC is in dialog, don't move - just face the player
+	if npc.in_dialog then
+		npc.walk_frame = 0  -- stop animation
+		if player_x and player_y then
+			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
+		end
+		return  -- skip all other state processing
+	end
+
+	-- Check if this NPC is a fan or lover (they don't flee)
+	local is_fan, fan_data = is_npc_fan(npc)
+	local is_lover = is_npc_lover(npc)
+
 	-- Check if player is too close (trigger surprised state)
 	-- Don't interrupt crossing or returning states
+	-- Fans and lovers don't get scared - they're happy to see you!
 	if npc.state ~= "surprised" and npc.state ~= "fleeing" and
 	   npc.state ~= "crossing" and npc.state ~= "returning" and
-	   player_x and player_y then
+	   npc.state ~= "fan_greeting" and
+	   player_x and player_y and not is_fan and not is_lover then
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist = sqrt(dx * dx + dy * dy)
@@ -324,6 +369,56 @@ function update_npc(npc, player_x, player_y)
 			npc.scare_player_x = player_x
 			npc.scare_player_y = player_y
 		end
+	end
+
+	-- Fan detection: when player approaches a non-fan NPC, chance scales with popularity
+	-- This only triggers once per NPC (checked via fan_checked flag)
+	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked then
+		local dx = npc.x - player_x
+		local dy = npc.y - player_y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < PLAYER_CONFIG.fan_detect_distance then
+			npc.fan_checked = true  -- only check once per NPC
+			-- Calculate fan chance based on popularity (higher popularity = more fans)
+			local popularity_pct = game.player.popularity / PLAYER_CONFIG.max_popularity
+			local fan_chance = PLAYER_CONFIG.fan_chance_min +
+				(popularity_pct * (PLAYER_CONFIG.fan_chance_max - PLAYER_CONFIG.fan_chance_min))
+			if rnd(1) < fan_chance then
+				-- This NPC is a fan! Add to fans list
+				-- Assign a random archetype from config
+				local archetypes = PLAYER_CONFIG.archetypes
+				local archetype = archetypes[flr(rnd(#archetypes)) + 1]
+				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype })
+				-- Gain popularity for meeting a fan
+				change_popularity(PLAYER_CONFIG.popularity_per_fan)
+				-- Stop fleeing if they were about to flee
+				if npc.state == "surprised" then
+					npc.state = "fan_greeting"
+					npc.state_end_time = now + 2  -- greet for 2 seconds
+					npc.show_surprise = false
+				else
+					npc.state = "fan_greeting"
+					npc.state_end_time = now + 2
+				end
+				npc.walk_frame = 0
+			end
+		end
+	end
+
+	-- Fan greeting state: stand still, face player, show heart
+	if npc.state == "fan_greeting" then
+		npc.walk_frame = 0
+		-- Face the player
+		if player_x and player_y then
+			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
+		end
+		if now >= npc.state_end_time then
+			-- Return to idle after greeting
+			npc.state = "idle"
+			local cfg = NPC_CONFIG.idle_time
+			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+		end
+		return  -- skip other state processing
 	end
 
 	if npc.state == "idle" then

@@ -347,6 +347,13 @@ profile("cull")
 				-- Sprite 135 is 8x8, center it above head
 				spr(NPC_CONFIG.surprise_sprite, draw_x, draw_y - 10)
 			end
+			-- Draw heart sprite above fans/lovers (bobbing animation, only when timer active)
+			local fan_data = get_fan_data(npc)
+			if fan_data and fan_data.heart_show_until and time() < fan_data.heart_show_until then
+				-- Heart bobs up and down
+				local bob = sin(time() * PLAYER_CONFIG.heart_bob_speed) * PLAYER_CONFIG.heart_bob_height
+				spr(PLAYER_CONFIG.heart_sprite, draw_x, draw_y - 12 + bob)
+			end
 		elseif obj.type == "lamp" then
 			-- Draw lamp sprite with bottom-center anchored at light position
 			local draw_x = obj.sx - lamp_w / 2
