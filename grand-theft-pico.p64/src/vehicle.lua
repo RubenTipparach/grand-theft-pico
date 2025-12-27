@@ -16,15 +16,16 @@ local VEHICLE_DIR_VECTORS = {
 	west  = { dx = -1, dy = 0 },
 }
 
+-- Pre-computed turn tables (avoid creating tables every frame)
+local RIGHT_TURN = { north = "east", east = "south", south = "west", west = "north" }
+local LEFT_TURN = { north = "west", west = "south", south = "east", east = "north" }
+local REVERSE_DIR = { north = "south", south = "north", east = "west", west = "east" }
+
 -- ============================================
 -- VEHICLE CREATION
 -- ============================================
 
--- Offscreen update throttling settings (like NPCs)
-local VEHICLE_OFFSCREEN_MARGIN = 64
-local VEHICLE_OFFSCREEN_UPDATE_INTERVAL = 5  -- seconds between updates for offscreen vehicles
-local VEHICLE_UPDATE_DISTANCE = 400  -- pixels from player; vehicles beyond this get throttled
-local VEHICLE_FLEE_DURATION = 10  -- seconds to flee after being hit by player
+-- Offscreen update throttling settings (from config)
 
 -- Cooldown to prevent immediately re-stealing after exiting
 local vehicle_exit_cooldown = 0
@@ -35,6 +36,25 @@ local vehicle_respawn_queue = {}
 -- Collision effects (visual feedback when hitting cars)
 -- Each entry: {x, y, end_time}
 local collision_effects = {}
+
+-- Check if a vehicle at position collides with any building
+-- Uses raw building footprint (no perspective offset - that's just visual)
+function vehicle_collides_building(x, y, half_w, half_h)
+	-- Vehicle collision box
+	local v_left = x - half_w
+	local v_right = x + half_w
+	local v_top = y - half_h
+	local v_bottom = y + half_h
+
+	for _, b in ipairs(buildings) do
+		-- Use raw building footprint
+		if v_left < b.x + b.w and v_right > b.x and
+		   v_top < b.y + b.h and v_bottom > b.y then
+			return true
+		end
+	end
+	return false
+end
 
 -- Create a new vehicle at a given position
 function create_vehicle(x, y, vehicle_type_name, facing_dir)
@@ -418,50 +438,41 @@ function can_vehicle_proceed(vehicle)
 end
 
 -- Check if there's another vehicle ahead (in same lane)
--- OPTIMIZED: Only checks vehicles within reasonable distance
+-- OPTIMIZED: Uses nearby_vehicles list instead of full vehicle list
 -- Returns the blocking vehicle, or nil if path is clear
-function vehicle_ahead(vehicle, distance)
+function vehicle_ahead(vehicle, distance, nearby_vehicles)
 	local vec = VEHICLE_DIR_VECTORS[vehicle.facing_dir]
 	local check_x = vehicle.x + vec.dx * distance
 	local check_y = vehicle.y + vec.dy * distance
+	local is_vertical = vehicle.facing_dir == "north" or vehicle.facing_dir == "south"
 
-	-- Pre-calculate max check distance to skip far vehicles early
-	local max_dist_sq = (distance + 32) * (distance + 32)
+	-- Use nearby_vehicles if provided, otherwise fall back to visible_vehicles cache
+	local check_list = nearby_vehicles or visible_vehicles_cache or {}
 
-	for _, other in ipairs(vehicles) do
+	for _, other in ipairs(check_list) do
 		if other ~= vehicle and other.state ~= "destroyed" and other.state ~= "exploding" then
-			-- Quick distance check first (skip far vehicles)
-			local rough_dx = other.x - vehicle.x
-			local rough_dy = other.y - vehicle.y
-			local rough_dist_sq = rough_dx * rough_dx + rough_dy * rough_dy
-			if rough_dist_sq > max_dist_sq then
-				goto continue
-			end
-
 			local dx = abs(other.x - check_x)
 			local dy = abs(other.y - check_y)
 			-- Check if other vehicle is in the way (TIGHT lane check - only same lane)
 			-- Lane width is ~12px offset from center, so check within ~10px
-			local in_way = false
-			if vehicle.facing_dir == "north" or vehicle.facing_dir == "south" then
+			if is_vertical then
 				-- Moving vertically - check if other is in our lane (similar X position)
 				if dx < 10 and dy < 20 then
-					in_way = true
+					return other
 				end
 			else
 				-- Moving horizontally - check if other is in our lane (similar Y position)
 				if dx < 20 and dy < 10 then
-					in_way = true
+					return other
 				end
 			end
-			if in_way then
-				return other
-			end
-			::continue::
 		end
 	end
 	return nil
 end
+
+-- Cache for visible vehicles (set during update_vehicles)
+visible_vehicles_cache = nil
 
 -- Precompute a route of upcoming directions for a vehicle
 -- This computes several waypoints so we don't recalculate each frame
@@ -698,27 +709,29 @@ function update_vehicle_ai(vehicle, dt)
 		local target_x = vehicle.x + vec.dx * speed
 		local target_y = vehicle.y + vec.dy * speed
 
+		-- AI vehicles only check road navigation (tilemap), NOT building collision
+		-- Building collision is only for player-controlled vehicles
 		if is_on_main_road(target_x, target_y) then
 			vehicle.x = target_x
 			vehicle.y = target_y
 		else
-			-- Hit edge - try 90 degree turn first (prefer right)
+			-- Off road - turn to stay on road
 			local current = vehicle.facing_dir
-			local right_turn = { north = "east", east = "south", south = "west", west = "north" }
-			local left_turn = { north = "west", west = "south", south = "east", east = "north" }
-			local reverse = { north = "south", south = "north", east = "west", west = "east" }
-
-			local right_dir = right_turn[current]
+			local right_dir = RIGHT_TURN[current]
 			local right_vec = VEHICLE_DIR_VECTORS[right_dir]
-			if is_on_main_road(vehicle.x + right_vec.dx * 32, vehicle.y + right_vec.dy * 32) then
+			local right_x = vehicle.x + right_vec.dx * 32
+			local right_y = vehicle.y + right_vec.dy * 32
+			if is_on_main_road(right_x, right_y) then
 				vehicle.facing_dir = right_dir
 			else
-				local left_dir = left_turn[current]
+				local left_dir = LEFT_TURN[current]
 				local left_vec = VEHICLE_DIR_VECTORS[left_dir]
-				if is_on_main_road(vehicle.x + left_vec.dx * 32, vehicle.y + left_vec.dy * 32) then
+				local left_x = vehicle.x + left_vec.dx * 32
+				local left_y = vehicle.y + left_vec.dy * 32
+				if is_on_main_road(left_x, left_y) then
 					vehicle.facing_dir = left_dir
 				else
-					vehicle.facing_dir = reverse[current]
+					vehicle.facing_dir = REVERSE_DIR[current]
 				end
 			end
 		end
@@ -821,19 +834,17 @@ function update_vehicle_ai(vehicle, dt)
 		end
 	end
 
-	-- Check if still on MAIN road (not dirt)
+	-- AI vehicles only check road navigation (tilemap), NOT building collision
+	-- Building collision is only for player-controlled vehicles (much more performant)
 	if is_on_main_road(target_x, target_y) then
 		vehicle.x = target_x
 		vehicle.y = target_y
 	else
-		-- Hit edge of road or dead end - try 90 degree turn first (prefer right turn for right-side driving)
+		-- Off road - turn to stay on road
 		local current = vehicle.facing_dir
-		local right_turn = { north = "east", east = "south", south = "west", west = "north" }
-		local left_turn = { north = "west", west = "south", south = "east", east = "north" }
-		local reverse = { north = "south", south = "north", east = "west", west = "east" }
 
 		-- Try right turn first (natural for right-side driving)
-		local right_dir = right_turn[current]
+		local right_dir = RIGHT_TURN[current]
 		local right_vec = VEHICLE_DIR_VECTORS[right_dir]
 		local right_x = vehicle.x + right_vec.dx * 32
 		local right_y = vehicle.y + right_vec.dy * 32
@@ -842,7 +853,7 @@ function update_vehicle_ai(vehicle, dt)
 			vehicle.facing_dir = right_dir
 		else
 			-- Try left turn
-			local left_dir = left_turn[current]
+			local left_dir = LEFT_TURN[current]
 			local left_vec = VEHICLE_DIR_VECTORS[left_dir]
 			local left_x = vehicle.x + left_vec.dx * 32
 			local left_y = vehicle.y + left_vec.dy * 32
@@ -850,8 +861,8 @@ function update_vehicle_ai(vehicle, dt)
 			if is_on_main_road(left_x, left_y) then
 				vehicle.facing_dir = left_dir
 			else
-				-- Last resort: reverse (180 degree turn)
-				vehicle.facing_dir = reverse[current]
+				-- Last resort: reverse
+				vehicle.facing_dir = REVERSE_DIR[current]
 			end
 		end
 		-- Recalculate route
@@ -908,25 +919,23 @@ function update_player_vehicle(vehicle, dt)
 		local new_y = vehicle.y + vec.dy * speed
 
 		-- Check terrain validity
-		local valid_terrain = false
+		-- Player vehicles can drive ANYWHERE except water - only buildings block them
+		-- (no tilemap terrain checks - those include building zones which are wrong)
+		local valid_terrain = true
 		if vtype.water_only then
+			-- Boats can only go on water
 			valid_terrain = is_water(new_x, new_y)
 		else
-			valid_terrain = is_on_road_surface(new_x, new_y) or is_on_sidewalk(new_x, new_y) or is_on_grass(new_x, new_y)
-			-- Don't go in water
+			-- Land vehicles: only blocked by water (and buildings, checked below)
 			if is_water(new_x, new_y) then valid_terrain = false end
 		end
 
-		-- Check building collision (skip for water vehicles - they can't hit buildings)
+		-- Check building collision using ONLY the buildings table (not tilemap!)
 		local collides_building = false
 		if not vtype.water_only then
-			for _, b in ipairs(buildings) do
-				if new_x + 16 > b.x and new_x - 16 < b.x + b.w and
-				   new_y + 8 > b.y and new_y - 8 < b.y + b.h then
-					collides_building = true
-					break
-				end
-			end
+			local half_w = vtype.w / 2
+			local half_h = vtype.h / 2
+			collides_building = vehicle_collides_building(new_x, new_y, half_w, half_h)
 		end
 
 		if valid_terrain and not collides_building then
@@ -935,6 +944,17 @@ function update_player_vehicle(vehicle, dt)
 		else
 			-- Hit something, stop immediately
 			vehicle.current_speed = 0
+
+			-- Take damage when hitting a building (with cooldown to prevent instant death)
+			if collides_building then
+				local now = time()
+				if now - vehicle.last_collision_time > 0.3 then
+					vehicle.health = vehicle.health - VEHICLE_CONFIG.damage_per_collision
+					vehicle.last_collision_time = now
+					-- Spawn collision effect
+					add(collision_effects, { x = new_x, y = new_y, end_time = now + 0.5 })
+				end
+			end
 		end
 	end
 
@@ -989,7 +1009,7 @@ function check_vehicle_collisions(visible_vehicles)
 							-- If hit by player, start fleeing
 							if v2.is_player_vehicle and v1.state ~= "fleeing" then
 								v1.state = "fleeing"
-								v1.flee_end_time = now + VEHICLE_FLEE_DURATION
+								v1.flee_end_time = now + cfg.flee_duration
 							end
 						end
 						if now - v2.last_collision_time > 0.5 then
@@ -1007,7 +1027,7 @@ function check_vehicle_collisions(visible_vehicles)
 							-- If hit by player, start fleeing
 							if v1.is_player_vehicle and v2.state ~= "fleeing" then
 								v2.state = "fleeing"
-								v2.flee_end_time = now + VEHICLE_FLEE_DURATION
+								v2.flee_end_time = now + cfg.flee_duration
 							end
 						end
 
@@ -1180,20 +1200,71 @@ function steal_vehicle(vehicle)
 	printh("Player stole a " .. vehicle.vtype.name)
 end
 
+-- Find a valid exit position near a boat (on land, not water)
+-- Returns x, y if found, or nil if no valid position
+-- OPTIMIZED: Only checks water, skips collision detection (boats are on water, no buildings)
+function find_exit_position(vehicle)
+	local vx, vy = vehicle.x, vehicle.y
+	local check_dist = 20  -- distance to check from vehicle center
+
+	-- Quick check: if vehicle center is on water, check 4 cardinal directions only
+	-- (cheaper than 8 directions with full collision)
+	local tx, ty
+
+	-- East
+	tx, ty = vx + check_dist, vy
+	if not is_water(tx, ty) then return tx, ty end
+
+	-- West
+	tx, ty = vx - check_dist, vy
+	if not is_water(tx, ty) then return tx, ty end
+
+	-- South
+	tx, ty = vx, vy + check_dist
+	if not is_water(tx, ty) then return tx, ty end
+
+	-- North
+	tx, ty = vx, vy - check_dist
+	if not is_water(tx, ty) then return tx, ty end
+
+	-- No valid position found
+	return nil, nil
+end
+
 -- Exit current vehicle
 function exit_vehicle()
 	if player_vehicle then
+		-- For boats (water vehicles), must find valid land position
+		if player_vehicle.vtype.water_only then
+			local exit_x, exit_y = find_exit_position(player_vehicle)
+			if not exit_x then
+				-- Can't exit - no valid land nearby, stay in boat
+				return false
+			end
+			-- Double-check exit position is safe (not water)
+			-- This prevents edge cases where player lands in water
+			if is_water(exit_x, exit_y) then
+				return false
+			end
+			-- Place player at valid exit position
+			game.player.x = exit_x
+			game.player.y = exit_y
+		else
+			-- Land vehicle - just place player next to it
+			game.player.x = player_vehicle.x + 20
+			game.player.y = player_vehicle.y
+		end
+
 		player_vehicle.is_player_vehicle = false
 		-- Stop the vehicle (no driver anymore)
 		player_vehicle.state = "stopped"
-		-- Place player next to vehicle
-		game.player.x = player_vehicle.x + 20
-		game.player.y = player_vehicle.y
 		player_vehicle = nil
 		-- Set cooldown to prevent immediately re-stealing
 		vehicle_exit_cooldown = time() + 0.5  -- 0.5 second cooldown
 		printh("Player exited vehicle")
+		return true
 	end
+	return false
 end
 
 -- ============================================
@@ -1204,14 +1275,17 @@ function update_vehicles()
 	local now = time()
 	local player_x = game.player.x
 	local player_y = game.player.y
+	local cfg = VEHICLE_CONFIG
 
 	-- Cache screen constants for visibility check
 	local cx, cy = SCREEN_CX, SCREEN_CY
 	local sw, sh = SCREEN_W, SCREEN_H
-	local margin = VEHICLE_OFFSCREEN_MARGIN
-	local update_dist_sq = VEHICLE_UPDATE_DISTANCE * VEHICLE_UPDATE_DISTANCE
+	local margin = cfg.offscreen_margin
+	local update_dist = cfg.update_distance
+	local update_dist_sq = update_dist * update_dist
+	local offscreen_interval = cfg.offscreen_update_interval
 
-	-- Collect visible/nearby vehicles for collision checks
+	-- Single pass: collect visible vehicles AND update in one loop
 	local visible_vehicles = {}
 
 	for _, vehicle in ipairs(vehicles) do
@@ -1226,7 +1300,7 @@ function update_vehicles()
 		local is_visible = sx > -margin and sx < sw + margin and
 		                   sy > -margin and sy < sh + margin
 
-		-- Track visible vehicles for collision detection
+		-- Track visible vehicles for collision detection AND ahead checks
 		if is_visible or vehicle.is_player_vehicle then
 			add(visible_vehicles, vehicle)
 		end
@@ -1243,17 +1317,12 @@ function update_vehicles()
 			vehicle.offscreen_update_time = now
 		elseif dist_sq <= update_dist_sq then
 			-- Within update distance but offscreen: throttled update
-			if now >= vehicle.offscreen_update_time + VEHICLE_OFFSCREEN_UPDATE_INTERVAL then
-				should_update = true
-				vehicle.offscreen_update_time = now
-			end
-		else
-			-- Far away and offscreen: rarely update
-			if now >= vehicle.offscreen_update_time + VEHICLE_OFFSCREEN_UPDATE_INTERVAL * 2 then
+			if now >= vehicle.offscreen_update_time + offscreen_interval then
 				should_update = true
 				vehicle.offscreen_update_time = now
 			end
 		end
+		-- Far away vehicles are FROZEN (no update at all) - removed the "rarely update" case
 
 		if should_update then
 			local dt = now - vehicle.last_update_time
@@ -1271,6 +1340,9 @@ function update_vehicles()
 			update_vehicle_state(vehicle, dt)
 		end
 	end
+
+	-- Set cache so vehicle_ahead() can use it
+	visible_vehicles_cache = visible_vehicles
 
 	-- Handle collisions (ONLY for visible/nearby vehicles now)
 	check_vehicle_collisions(visible_vehicles)

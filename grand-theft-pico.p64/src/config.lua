@@ -401,12 +401,21 @@ MINIMAP_CONFIG = {
 	border_color = 6,        -- border color
 	road_color = 5,          -- road color (gray)
 	building_color = 4,      -- building color (brown)
-	player_color = 11,       -- player blip color (green)
+	player_color = 22,       -- player blip color (yellow)
 	npc_color = 8,           -- NPC blip color (red)
-	player_size = 2,         -- player blip radius
+	vehicle_color = 21,      -- vehicle blip color (orange)
+	boat_color = 9,          -- boat blip color (blue)
+	player_size = 1,         -- player blip radius
 	npc_size = 1,            -- NPC blip size
 	alpha = 0.7,             -- transparency (not used directly, for reference)
 	water_color = 24,        -- water color on minimap (blue)
+
+	-- Toggle which dots are displayed
+	show_player = true,      -- show player blip
+	show_npcs = false,        -- show NPC blips
+	show_vehicles = false,    -- show vehicle blips (cars/trucks/vans)
+	show_boats = true,       -- show boat blips
+	show_buildings = false,   -- show building outlines
 }
 
 -- ============================================
@@ -855,6 +864,12 @@ VEHICLE_CONFIG = {
 	shadow_radius = 10,
 	shadow_height = 4,
 	shadow_y_offset = 6,
+
+	-- Offscreen update throttling (performance)
+	offscreen_margin = 32,              -- pixels beyond screen to consider "offscreen"
+	offscreen_update_interval = 2,      -- seconds between updates for offscreen vehicles
+	update_distance = 250,              -- pixels from player; vehicles beyond this are FROZEN
+	flee_duration = 10,                 -- seconds to flee after being hit by player
 }
 
 -- ============================================

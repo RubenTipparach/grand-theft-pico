@@ -585,39 +585,49 @@ function draw_minimap()
 	end
 
 	-- Draw buildings on top (convert world coords to minimap coords)
-	for _, b in ipairs(buildings) do
-		local bx1 = mx + (b.x / tile_size + half_map_w - px + half_mw)
-		local by1 = my + (b.y / tile_size + half_map_h - py + half_mh)
-		local bx2 = mx + ((b.x + b.w) / tile_size + half_map_w - px + half_mw)
-		local by2 = my + ((b.y + b.h) / tile_size + half_map_h - py + half_mh)
-		rectfill(bx1, by1, bx2, by2, cfg.building_color)
-	end
-
-	-- Draw NPCs
-	for _, npc in ipairs(npcs) do
-		local nx = mx + (npc.x / tile_size + half_map_w - px + half_mw)
-		local ny = my + (npc.y / tile_size + half_map_h - py + half_mh)
-		if nx >= mx and nx <= mx + mw and ny >= my and ny <= my + mh then
-			pset(nx, ny, cfg.npc_color)
+	if cfg.show_buildings then
+		for _, b in ipairs(buildings) do
+			local bx1 = mx + (b.x / tile_size + half_map_w - px + half_mw)
+			local by1 = my + (b.y / tile_size + half_map_h - py + half_mh)
+			local bx2 = mx + ((b.x + b.w) / tile_size + half_map_w - px + half_mw)
+			local by2 = my + ((b.y + b.h) / tile_size + half_map_h - py + half_mh)
+			rectfill(bx1, by1, bx2, by2, cfg.building_color)
 		end
 	end
 
-	-- Draw vehicles (cars = 21, boats = 9)
+	-- Draw NPCs
+	if cfg.show_npcs then
+		for _, npc in ipairs(npcs) do
+			local nx = mx + (npc.x / tile_size + half_map_w - px + half_mw)
+			local ny = my + (npc.y / tile_size + half_map_h - py + half_mh)
+			if nx >= mx and nx <= mx + mw and ny >= my and ny <= my + mh then
+				pset(nx, ny, cfg.npc_color)
+			end
+		end
+	end
+
+	-- Draw vehicles
 	for _, vehicle in ipairs(vehicles) do
 		if vehicle.state ~= "destroyed" then
-			local vx = mx + (vehicle.x / tile_size + half_map_w - px + half_mw)
-			local vy = my + (vehicle.y / tile_size + half_map_h - py + half_mh)
-			if vx >= mx and vx <= mx + mw and vy >= my and vy <= my + mh then
-				local color = vehicle.vtype.water_only and 9 or 21
-				pset(vx, vy, color)
+			local is_boat = vehicle.vtype.water_only
+			-- Check if this type should be shown
+			if (is_boat and cfg.show_boats) or (not is_boat and cfg.show_vehicles) then
+				local vx = mx + (vehicle.x / tile_size + half_map_w - px + half_mw)
+				local vy = my + (vehicle.y / tile_size + half_map_h - py + half_mh)
+				if vx >= mx and vx <= mx + mw and vy >= my and vy <= my + mh then
+					local color = is_boat and cfg.boat_color or cfg.vehicle_color
+					pset(vx, vy, color)
+				end
 			end
 		end
 	end
 
 	-- Draw player (center of minimap)
-	local player_mx = mx + half_mw
-	local player_my = my + half_mh
-	circfill(player_mx, player_my, cfg.player_size, cfg.player_color)
+	if cfg.show_player then
+		local player_mx = mx + half_mw
+		local player_my = my + half_mh
+		circfill(player_mx, player_my, cfg.player_size, cfg.player_color)
+	end
 
 	-- Reset clip
 	clip()

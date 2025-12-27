@@ -437,17 +437,46 @@ end
 -- TERRAIN QUERY HELPERS (for NPC pathfinding)
 -- ============================================
 
+-- Terrain cache (cleared each frame for freshness)
+local terrain_cache = {}
+local terrain_cache_frame = -1
+
+-- Get cached tile at world position (reduces repeated lookups)
+local function get_cached_tile(wx, wy)
+	-- Clear cache each frame
+	local current_frame = time()
+	if current_frame ~= terrain_cache_frame then
+		terrain_cache = {}
+		terrain_cache_frame = current_frame
+	end
+
+	-- Use tile-aligned coordinates for cache key
+	local tile_x = flr(wx / 16)
+	local tile_y = flr(wy / 16)
+	local cache_key = tile_x * 10000 + tile_y
+
+	local cached = terrain_cache[cache_key]
+	if cached ~= nil then
+		return cached
+	end
+
+	-- Not cached, fetch and store
+	local tile = get_map_tile_at_world(wx, wy)
+	terrain_cache[cache_key] = tile
+	return tile
+end
+
 -- Check if world position is on a sidewalk (tilemap-based)
 function is_on_sidewalk(wx, wy)
 	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
-	local tile = get_map_tile_at_world(wx, wy)
+	local tile = get_cached_tile(wx, wy)
 	return tile == MAP_TILE_SIDEWALK_NS or tile == MAP_TILE_SIDEWALK_EW
 end
 
 -- Check if world position is on grass (tilemap-based)
 function is_on_grass(wx, wy)
 	if not WORLD_DATA or not WORLD_DATA.tiles then return true end
-	local tile = get_map_tile_at_world(wx, wy)
+	local tile = get_cached_tile(wx, wy)
 	return tile == MAP_TILE_GRASS
 end
 
@@ -455,14 +484,14 @@ end
 -- Includes both main roads and dirt roads
 function is_on_road_surface(wx, wy)
 	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
-	local tile = get_map_tile_at_world(wx, wy)
+	local tile = get_cached_tile(wx, wy)
 	return tile == MAP_TILE_MAIN_ROAD or tile == MAP_TILE_DIRT_ROAD
 end
 
 -- Check if world position is on a MAIN road only (for vehicles - no dirt roads)
 function is_on_main_road(wx, wy)
 	if not WORLD_DATA or not WORLD_DATA.tiles then return false end
-	local tile = get_map_tile_at_world(wx, wy)
+	local tile = get_cached_tile(wx, wy)
 	return tile == MAP_TILE_MAIN_ROAD
 end
 
