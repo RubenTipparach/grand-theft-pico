@@ -1271,6 +1271,9 @@ end
 -- MAIN UPDATE FUNCTION
 -- ============================================
 
+-- Bucket scheduler state for vehicles
+local vehicle_current_bucket = 0
+
 function update_vehicles()
 	local now = time()
 	local player_x = game.player.x
@@ -1283,12 +1286,15 @@ function update_vehicles()
 	local margin = cfg.offscreen_margin
 	local update_dist = cfg.update_distance
 	local update_dist_sq = update_dist * update_dist
-	local offscreen_interval = cfg.offscreen_update_interval
+	local num_buckets = BUCKET_CONFIG.num_buckets
+
+	-- Advance to next bucket (wraps around)
+	vehicle_current_bucket = (vehicle_current_bucket + 1) % num_buckets
 
 	-- Single pass: collect visible vehicles AND update in one loop
 	local visible_vehicles = {}
 
-	for _, vehicle in ipairs(vehicles) do
+	for i, vehicle in ipairs(vehicles) do
 		-- Calculate distance from player (squared to avoid sqrt)
 		local dx = vehicle.x - player_x
 		local dy = vehicle.y - player_y
@@ -1314,15 +1320,14 @@ function update_vehicles()
 		elseif is_visible then
 			-- Visible vehicles always update
 			should_update = true
-			vehicle.offscreen_update_time = now
 		elseif dist_sq <= update_dist_sq then
-			-- Within update distance but offscreen: throttled update
-			if now >= vehicle.offscreen_update_time + offscreen_interval then
+			-- Within update distance but offscreen: use bucket scheduling
+			local vehicle_bucket = (i - 1) % num_buckets
+			if vehicle_bucket == vehicle_current_bucket then
 				should_update = true
-				vehicle.offscreen_update_time = now
 			end
 		end
-		-- Far away vehicles are FROZEN (no update at all) - removed the "rarely update" case
+		-- Far away vehicles are FROZEN (no update at all)
 
 		if should_update then
 			local dt = now - vehicle.last_update_time

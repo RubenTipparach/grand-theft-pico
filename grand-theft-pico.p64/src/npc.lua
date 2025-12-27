@@ -659,58 +659,56 @@ function spawn_npc_near_player(player_x, player_y)
 	return nil
 end
 
--- Mode 1: Persistent NPCs with distance-based throttling
-local function update_npcs_persistent(player_x, player_y)
-	local now = time()
+-- Bucket scheduler state for NPCs
+local npc_current_bucket = 0
 
-	-- Cache config values
-	local cfg = NPC_CONFIG
-	local offscreen_interval = cfg.offscreen_update_interval
-	local update_dist = cfg.offscreen_update_distance
-	local update_dist_sq = update_dist * update_dist  -- avoid sqrt
+-- Mode 1: Persistent NPCs with bucket-based scheduling
+-- Visible NPCs update every frame, offscreen NPCs update via round-robin buckets
+local function update_npcs_persistent(player_x, player_y)
+	local num_buckets = BUCKET_CONFIG.num_buckets
+	local update_dist = NPC_CONFIG.offscreen_update_distance
+	local update_dist_sq = update_dist * update_dist
 
 	-- Cache screen constants for inline visibility
 	local cx, cy = SCREEN_CX, SCREEN_CY
 	local sw, sh = SCREEN_W, SCREEN_H
 	local margin = OFFSCREEN_MARGIN
 
-	for _, npc in ipairs(npcs) do
+	-- Advance to next bucket (wraps around)
+	npc_current_bucket = (npc_current_bucket + 1) % num_buckets
+
+	for i, npc in ipairs(npcs) do
 		-- Distance check from player (squared to avoid sqrt)
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist_sq = dx * dx + dy * dy
 
-		-- Initialize offscreen update time if not present
-		if not npc.offscreen_update_time then
-			npc.offscreen_update_time = now
-		end
-
 		-- Check if within update distance
 		local within_distance = dist_sq <= update_dist_sq
 
 		if within_distance then
-			-- Within distance: check visibility for throttling
+			-- Within distance: check visibility
 			local sx = npc.x - cam_x + cx
 			local sy = npc.y - cam_y + cy
 			local is_visible = sx > -margin and sx < sw + margin and
 			                   sy > -margin and sy < sh + margin
 
 			if is_visible then
-				-- Visible and within distance: update every frame
+				-- Visible: ALWAYS update every frame
 				update_npc(npc, player_x, player_y)
-				npc.offscreen_update_time = now
 			else
-				-- Offscreen but within distance: throttled update
-				if now >= npc.offscreen_update_time + offscreen_interval then
+				-- Offscreen but within distance: use bucket scheduling
+				-- Each NPC is assigned to a bucket based on its index
+				local npc_bucket = (i - 1) % num_buckets
+				if npc_bucket == npc_current_bucket then
 					update_npc(npc, nil, nil)
-					npc.offscreen_update_time = now
 				end
 			end
 		else
-			-- Beyond distance: only update when interval elapses
-			if now >= npc.offscreen_update_time + offscreen_interval then
+			-- Beyond distance: use bucket scheduling (less frequent)
+			local npc_bucket = (i - 1) % num_buckets
+			if npc_bucket == npc_current_bucket then
 				update_npc(npc, nil, nil)
-				npc.offscreen_update_time = now
 			end
 		end
 	end

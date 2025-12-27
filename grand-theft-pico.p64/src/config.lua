@@ -349,6 +349,18 @@ GROUND_CONFIG = {
 }
 
 -- ============================================
+-- BUCKET SCHEDULER CONFIG
+-- ============================================
+-- Offscreen entities are updated in round-robin buckets
+-- This spreads CPU load evenly across frames
+BUCKET_CONFIG = {
+	num_buckets = 60,  -- number of buckets (one per frame at 60fps)
+	-- Entities are assigned to buckets based on their index
+	-- Each frame, we update entities in the current bucket
+	-- Visible entities ALWAYS update every frame regardless of bucket
+}
+
+-- ============================================
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
