@@ -621,7 +621,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = false,  -- set to false to disable debug features
+	enabled = true,  -- set to false to disable debug features
 }
 
 -- ============================================
