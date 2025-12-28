@@ -968,6 +968,22 @@ function _init()
 	-- Spawn arms dealers
 	spawn_arms_dealers()
 
+	-- Debug mode: give player all weapons with ammo
+	if DEBUG_CONFIG.enabled then
+		local p = game.player
+		p.weapons = {}
+		p.ammo = {}
+		for _, weapon_key in ipairs(WEAPON_CONFIG.weapon_order) do
+			add(p.weapons, weapon_key)
+			-- Give ammo for ranged weapons
+			if WEAPON_CONFIG.ranged[weapon_key] then
+				p.ammo[weapon_key] = 999
+			end
+		end
+		p.equipped_index = 1  -- equip first weapon
+		printh("Debug: gave player all weapons")
+	end
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -1610,11 +1626,10 @@ function _draw()
 	-- Draw collision effects (explosion feedback)
 	draw_collision_effects()
 
-	-- Draw projectiles, beams, and equipped weapon
+	-- Draw projectiles and beams (these stay on top, not depth sorted)
+	-- Player weapons are now drawn via the depth-sorted queue in building.lua
 	draw_projectiles()
 	draw_beams()
-	draw_melee_weapon()
-	draw_ranged_weapon()
 
 	-- Draw player shadow overlay using color table (only when not in night mode)
 	-- if not night_mode then

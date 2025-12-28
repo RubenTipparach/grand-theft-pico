@@ -21,12 +21,38 @@ local ground_slope = vec(0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0)
 local water_frame = 0
 local water_timer = 0
 
+-- ============================================
+-- GROUND BUFFER SYSTEM (blit-based caching)
+-- ============================================
+-- Buffer extends beyond screen to allow camera movement without redraw
+local GROUND_BUFFER_PADDING = 128  -- pixels of padding on each side
+local ground_buffer = nil  -- userdata for pre-rendered ground tiles
+local ground_cache_cam_x = nil  -- camera position when buffer was rendered
+local ground_cache_cam_y = nil
+local ground_buffer_dirty = true  -- force redraw on first frame
+
+-- Initialize ground buffer (call once at startup)
+function init_ground_buffer()
+	local buf_w = SCREEN_W + GROUND_BUFFER_PADDING * 2
+	local buf_h = SCREEN_H + GROUND_BUFFER_PADDING * 2
+	ground_buffer = userdata("u8", buf_w, buf_h)
+	ground_buffer_dirty = true
+	ground_cache_cam_x = nil
+	ground_cache_cam_y = nil
+end
+
+-- Mark ground buffer as needing redraw (call when tiles change)
+function invalidate_ground_buffer()
+	ground_buffer_dirty = true
+end
+
 -- Update water animation timer
 function update_water_animation()
 	water_timer = water_timer + 1 / 60  -- assume 60fps
 	if water_timer >= WATER_CONFIG.animation_speed then
 		water_timer = 0
 		water_frame = 1 - water_frame  -- toggle 0/1
+		-- Water is drawn separately on top of ground buffer, no need to invalidate
 	end
 end
 
@@ -58,21 +84,218 @@ function is_road_visible(road)
 	return sx2 > 0 and sx1 < SCREEN_W and sy2 > 0 and sy1 < SCREEN_H
 end
 
--- Draw ground using BATCHED tline3d with userdata ops
--- Optimized: only draws visible grass tiles from tilemap instead of full screen
+-- Draw ground using blit-based caching
+-- Only redraws the buffer when camera moves beyond padding threshold
 function draw_ground()
+	-- Initialize buffer on first call
+	if not ground_buffer then
+		init_ground_buffer()
+	end
+
+	-- Check if we need to redraw the buffer
+	local need_redraw = ground_buffer_dirty
+	if not need_redraw and ground_cache_cam_x then
+		-- Check if camera moved beyond padding threshold
+		local dx = abs(cam_x - ground_cache_cam_x)
+		local dy = abs(cam_y - ground_cache_cam_y)
+		if dx > GROUND_BUFFER_PADDING or dy > GROUND_BUFFER_PADDING then
+			need_redraw = true
+		end
+	else
+		need_redraw = true
+	end
+
+	if need_redraw then
+		-- Redraw the entire ground buffer
+		render_ground_to_buffer()
+		ground_cache_cam_x = cam_x
+		ground_cache_cam_y = cam_y
+		ground_buffer_dirty = false
+	end
+
+	-- Draw buffer as sprite at offset position
+	-- Buffer was rendered with its top-left at world position (cache_cam - SCREEN_C - PADDING)
+	-- That world position should appear at screen position:
+	--   sx = world_x + SCREEN_CX - cam_x
+	-- So buffer top-left goes to screen:
+	--   (cache_cam_x - SCREEN_CX - PADDING) + SCREEN_CX - cam_x = cache_cam_x - PADDING - cam_x
+	-- Which simplifies to: -(cam_x - cache_cam_x) - PADDING
+	local draw_x = -(cam_x - ground_cache_cam_x) - GROUND_BUFFER_PADDING
+	local draw_y = -(cam_y - ground_cache_cam_y) - GROUND_BUFFER_PADDING
+
+	-- Draw the buffer sprite (simpler than blit, just position the whole image)
+	spr(ground_buffer, draw_x, draw_y)
+
+	-- Draw water separately on top (animates without invalidating buffer)
+	draw_water_from_map()
+end
+
+-- Render all ground tiles to the offscreen buffer
+function render_ground_to_buffer()
+	-- Save current draw target
+	set_draw_target(ground_buffer)
+
+	-- Clear buffer (use grass color as background)
+	cls(3)  -- dark green background
+
+	-- Buffer covers cam position +/- padding
+	-- We render tiles for this extended area
+	local buf_cam_x = cam_x
+	local buf_cam_y = cam_y
+
 	-- Calculate world offsets for texture scrolling
-	local world_x_offset = cam_x - SCREEN_CX
-	local world_y_offset = cam_y - SCREEN_CY
+	local world_x_offset = buf_cam_x - SCREEN_CX - GROUND_BUFFER_PADDING
+	local world_y_offset = buf_cam_y - SCREEN_CY - GROUND_BUFFER_PADDING
 
-	-- Draw grass tiles from map (only where tilemap has grass)
-	draw_grass_from_map(world_x_offset, world_y_offset)
+	-- Draw all tile types to buffer (except water - drawn separately for animation)
+	render_grass_to_buffer(buf_cam_x, buf_cam_y)
+	render_roads_to_buffer(buf_cam_x, buf_cam_y)
 
-	-- Draw water tiles from map (simple center tiles only, has shorelines)
-	draw_water_from_map(world_x_offset, world_y_offset)
+	-- Restore draw target to screen
+	set_draw_target()
+end
 
-	-- Draw roads directly from tilemap (simpler than generating ROADS segments)
-	draw_roads_from_map(world_x_offset, world_y_offset)
+-- Render grass tiles to the ground buffer
+function render_grass_to_buffer(buf_cam_x, buf_cam_y)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
+
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	local grass_spr = SPRITES.GRASS.id
+	local buf_w = SCREEN_W + GROUND_BUFFER_PADDING * 2
+	local buf_h = SCREEN_H + GROUND_BUFFER_PADDING * 2
+
+	-- Calculate visible world bounds (extended by buffer padding)
+	local left_wx = buf_cam_x - SCREEN_CX - GROUND_BUFFER_PADDING - tile_size
+	local top_wy = buf_cam_y - SCREEN_CY - GROUND_BUFFER_PADDING - tile_size
+	local right_wx = buf_cam_x + SCREEN_CX + GROUND_BUFFER_PADDING + tile_size
+	local bottom_wy = buf_cam_y + SCREEN_CY + GROUND_BUFFER_PADDING + tile_size
+
+	-- Convert to map coordinates
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for buffer (buffer center = camera position)
+	local screen_ox = SCREEN_CX + GROUND_BUFFER_PADDING - buf_cam_x
+	local screen_oy = SCREEN_CY + GROUND_BUFFER_PADDING - buf_cam_y
+
+	-- Draw grass tiles
+	for my = my1, my2 do
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			local tile = tiles:get(mx, my)
+			if tile == MAP_TILE_GRASS or tile == MAP_TILE_BUILDING_ZONE then
+				local wx = (mx - half_w) * tile_size
+				local sx = wx + screen_ox
+				spr(grass_spr, sx, sy)
+			end
+		end
+	end
+end
+
+-- Render water tiles to the ground buffer
+function render_water_to_buffer(buf_cam_x, buf_cam_y)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
+
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	-- Calculate visible world bounds (extended by buffer padding)
+	local left_wx = buf_cam_x - SCREEN_CX - GROUND_BUFFER_PADDING - tile_size
+	local top_wy = buf_cam_y - SCREEN_CY - GROUND_BUFFER_PADDING - tile_size
+	local right_wx = buf_cam_x + SCREEN_CX + GROUND_BUFFER_PADDING + tile_size
+	local bottom_wy = buf_cam_y + SCREEN_CY + GROUND_BUFFER_PADDING + tile_size
+
+	-- Convert to map coordinates
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for buffer
+	local screen_ox = SCREEN_CX + GROUND_BUFFER_PADDING - buf_cam_x
+	local screen_oy = SCREEN_CY + GROUND_BUFFER_PADDING - buf_cam_y
+
+	-- Draw water tiles with 9-slice borders
+	for my = my1, my2 do
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			if tiles:get(mx, my) == MAP_TILE_WATER then
+				local wx = (mx - half_w) * tile_size
+				local sx = wx + screen_ox
+				local water_spr = get_water_tile_sprite(mx, my, tiles, map_w, map_h)
+				spr(water_spr, sx, sy)
+			end
+		end
+	end
+end
+
+-- Render road tiles to the ground buffer
+function render_roads_to_buffer(buf_cam_x, buf_cam_y)
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
+
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	-- Get sprites
+	local main_road_spr = SPRITES.DIRT_MEDIUM.id
+	local dirt_road_spr = SPRITES.DIRT_HEAVY.id
+	local sidewalk_ns_spr = SPRITES.SIDEWALK_NS.id
+	local sidewalk_ew_spr = SPRITES.SIDEWALK_EW.id
+
+	-- Calculate visible world bounds (extended by buffer padding)
+	local left_wx = buf_cam_x - SCREEN_CX - GROUND_BUFFER_PADDING - tile_size
+	local top_wy = buf_cam_y - SCREEN_CY - GROUND_BUFFER_PADDING - tile_size
+	local right_wx = buf_cam_x + SCREEN_CX + GROUND_BUFFER_PADDING + tile_size
+	local bottom_wy = buf_cam_y + SCREEN_CY + GROUND_BUFFER_PADDING + tile_size
+
+	-- Convert to map coordinates
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for buffer
+	local screen_ox = SCREEN_CX + GROUND_BUFFER_PADDING - buf_cam_x
+	local screen_oy = SCREEN_CY + GROUND_BUFFER_PADDING - buf_cam_y
+
+	-- Draw tiles
+	for my = my1, my2 do
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			local tile = tiles:get(mx, my)
+			local wx = (mx - half_w) * tile_size
+			local sx = wx + screen_ox
+
+			if tile == MAP_TILE_MAIN_ROAD then
+				spr(main_road_spr, sx, sy)
+			elseif tile == MAP_TILE_DIRT_ROAD then
+				spr(dirt_road_spr, sx, sy)
+			elseif tile == MAP_TILE_SIDEWALK_NS then
+				spr(sidewalk_ns_spr, sx, sy)
+			elseif tile == MAP_TILE_SIDEWALK_EW then
+				spr(sidewalk_ew_spr, sx, sy)
+			end
+		end
+	end
 end
 
 -- Draw grass tiles from parsed map data (optimized - only visible grass tiles)

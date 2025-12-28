@@ -285,7 +285,7 @@ PLAYER_CONFIG = {
 	prompt_color = 21,           -- color for interaction prompts (E: FLIRT etc)
 
 	-- Money system
-	starting_money = 10000,        -- player starts with $100
+	starting_money = 20000,        -- player starts with $100
 	money_color = 33,            -- green for money text
 	money_display_x = 8,
 	money_display_y = 48,        -- below popularity bar
@@ -448,8 +448,8 @@ WEAPON_CONFIG = {
 			weapon_sprite = 158,  -- gun sprite when held
 			weapon_w = 8,
 			weapon_h = 8,
-			bullet_offset_x = 12, -- bullet spawn x offset (flipped for west)
-			bullet_offset_y = 2,  -- bullet spawn y offset
+			bullet_offset_x = 8, -- bullet spawn x offset (flipped for west)
+			bullet_offset_y = 0,  -- bullet spawn y offset
 			bullet_offset_n_x = 2,  -- bullet spawn x offset for north (mirrored for south)
 			bullet_offset_n_y = 12, -- bullet spawn y offset for north (negated for south)
 		},
@@ -466,8 +466,8 @@ WEAPON_CONFIG = {
 			weapon_sprite = 31,   -- gun sprite when held
 			weapon_w = 8,
 			weapon_h = 8,
-			bullet_offset_x = 12,
-			bullet_offset_y = 2,
+			bullet_offset_x = 6,
+			bullet_offset_y = -2,
 			bullet_offset_n_x = 2,
 			bullet_offset_n_y = 12,
 		},
@@ -484,8 +484,8 @@ WEAPON_CONFIG = {
 			weapon_sprite = 39,   -- gun sprite when held
 			weapon_w = 8,
 			weapon_h = 16,
-			bullet_offset_x = 14,
-			bullet_offset_y = 0,
+			bullet_offset_x = 6,
+			bullet_offset_y = -2,
 			bullet_offset_n_x = 0,
 			bullet_offset_n_y = 14,
 		},
@@ -504,7 +504,7 @@ WEAPON_CONFIG = {
 			weapon_w = 8,
 			weapon_h = 16,
 			bullet_offset_x = 16, -- beam spawn x offset
-			bullet_offset_y = 0,  -- beam spawn y offset
+			bullet_offset_y = 4,  -- beam spawn y offset
 			bullet_offset_n_x = 0,
 			bullet_offset_n_y = 16,
 		},
@@ -671,7 +671,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = false,  -- set to false to disable debug features
+	enabled = true,  -- set to false to disable debug features
 }
 
 -- ============================================

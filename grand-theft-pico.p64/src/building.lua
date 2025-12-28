@@ -165,6 +165,23 @@ function draw_buildings_and_player(buildings, player, player_spr, flip_x)
 		flip_x = flip_x
 	})
 
+	-- Add player weapons to visible queue for depth sorting (if not in vehicle)
+	if not player_vehicle then
+		local melee_entry = get_player_melee_weapon_entry(player)
+		if melee_entry then
+			melee_entry.sx = player_sx
+			melee_entry.sy = player_sy
+			add(visible, melee_entry)
+		end
+
+		local ranged_entry = get_player_ranged_weapon_entry(player)
+		if ranged_entry then
+			ranged_entry.sx = player_sx
+			ranged_entry.sy = player_sy
+			add(visible, ranged_entry)
+		end
+	end
+
 profile("cull")
 
 	-- Add visible NPCs to the list (frustum cull)
@@ -362,6 +379,12 @@ profile("cull")
 		elseif obj.type == "dealer" then
 			-- Draw arms dealer
 			draw_dealer(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "player_melee_weapon" then
+			-- Draw player melee weapon (depth sorted)
+			draw_melee_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)
+		elseif obj.type == "player_ranged_weapon" then
+			-- Draw player ranged weapon (depth sorted)
+			draw_ranged_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)
 		elseif obj.type == "lamp" then
 			-- Draw lamp sprite with bottom-center anchored at light position
 			local draw_x = obj.sx - lamp_w / 2

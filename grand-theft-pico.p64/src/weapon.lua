@@ -900,3 +900,138 @@ function draw_melee_weapon()
 	-- Draw rotated weapon sprite with pivot offset
 	rspr(weapon.sprite, screen_x + offset_x, screen_y + cfg.melee_offset_y, 1, 1, base_rot + swing_rot, flip_x, cfg.melee_pivot_x, cfg.melee_pivot_y)
 end
+
+-- ============================================
+-- DEPTH-SORTED WEAPON RENDERING
+-- ============================================
+
+-- Get player ranged weapon as queue entry for depth sorting
+-- Returns nil if no ranged weapon equipped
+function get_player_ranged_weapon_entry(player)
+	local weapon, wtype = get_equipped_weapon()
+	if not weapon or wtype ~= "ranged" then return nil end
+	if not weapon.weapon_sprite then return nil end
+
+	local dir = player.facing_dir or "east"
+	-- Player depth is player.y + 8
+	-- Weapon draws in front (after player in sorted order) with tiny offset
+	-- Except when facing north: weapon draws behind (before player)
+	local depth_y = player.y + 8.01  -- tiny offset to sort after player
+	if dir == "north" then
+		-- Behind player when facing north
+		depth_y = player.y + 7.99  -- tiny offset to sort before player
+	end
+
+	return {
+		type = "player_ranged_weapon",
+		y = depth_y,
+		cx = player.x,
+		cy = player.y,
+		owner = player,
+		weapon = weapon,
+		facing_dir = dir
+	}
+end
+
+-- Get player melee weapon as queue entry for depth sorting
+-- Returns nil if no melee weapon equipped
+function get_player_melee_weapon_entry(player)
+	local weapon, wtype = get_equipped_weapon()
+	if not weapon or wtype ~= "melee" then return nil end
+
+	local dir = player.facing_dir or "east"
+	-- Player depth is player.y + 8
+	-- Weapon draws in front (after player in sorted order) with tiny offset
+	-- Except when facing north: weapon draws behind (before player)
+	local depth_y = player.y + 8.01  -- tiny offset to sort after player
+	if dir == "north" then
+		-- Behind player when facing north
+		depth_y = player.y + 7.99  -- tiny offset to sort before player
+	end
+
+	return {
+		type = "player_melee_weapon",
+		y = depth_y,
+		cx = player.x,
+		cy = player.y,
+		owner = player,
+		weapon = weapon,
+		facing_dir = dir
+	}
+end
+
+-- Draw ranged weapon at specified screen position (for depth-sorted rendering)
+function draw_ranged_weapon_at(sx, sy, owner, weapon, facing_dir)
+	if not weapon or not weapon.weapon_sprite then return end
+
+	local dir = facing_dir or "east"
+	local cfg = WEAPON_CONFIG
+
+	-- Calculate offset and rotation based on direction
+	local offset_x, offset_y = 0, 0
+	local rot = 0
+	local flip_x = false
+
+	if dir == "east" then
+		offset_x = cfg.ranged_offset_x
+		offset_y = cfg.ranged_offset_y
+		rot = 0
+	elseif dir == "west" then
+		offset_x = -cfg.ranged_offset_x
+		offset_y = cfg.ranged_offset_y
+		rot = 0
+		flip_x = true
+	elseif dir == "north" then
+		offset_x = cfg.ranged_offset_y
+		offset_y = -cfg.ranged_offset_x
+		rot = 0.75
+	elseif dir == "south" then
+		offset_x = cfg.ranged_offset_y
+		offset_y = cfg.ranged_offset_x
+		rot = 0.25
+	end
+
+	rspr(weapon.weapon_sprite, sx + offset_x, sy + offset_y, 1, 1, rot, flip_x, 0, 0)
+end
+
+-- Draw melee weapon at specified screen position (for depth-sorted rendering)
+function draw_melee_weapon_at(sx, sy, owner, weapon, facing_dir)
+	if not weapon then return end
+
+	local dir = facing_dir or "east"
+	local cfg = WEAPON_CONFIG
+
+	-- Only E/W affect weapon position, N/S keep last horizontal
+	local facing_east = (dir == "east")
+	local offset_x = facing_east and cfg.melee_offset_x or -cfg.melee_offset_x
+	local flip_x = facing_east
+
+	-- Base rotation
+	local base_rot = facing_east and cfg.melee_base_rot_east or cfg.melee_base_rot_west
+
+	-- Calculate swing rotation when attacking or returning
+	local swing_rot = 0
+	local swing_range = cfg.melee_swing_end - cfg.melee_swing_start
+
+	if owner.is_attacking and owner.attack_timer then
+		local elapsed = time() - owner.attack_timer
+		local swing_time = cfg.melee_swing_time
+		local return_time = cfg.melee_return_time
+		local total_time = swing_time + return_time
+
+		if elapsed < swing_time then
+			local progress = elapsed / swing_time
+			swing_rot = cfg.melee_swing_start + (swing_range * progress)
+		elseif elapsed < total_time then
+			local return_progress = (elapsed - swing_time) / return_time
+			swing_rot = cfg.melee_swing_end - (swing_range * return_progress)
+		else
+			owner.is_attacking = false
+			swing_rot = 0
+		end
+
+		if not facing_east then swing_rot = -swing_rot end
+	end
+
+	rspr(weapon.sprite, sx + offset_x, sy + cfg.melee_offset_y, 1, 1, base_rot + swing_rot, flip_x, cfg.melee_pivot_x, cfg.melee_pivot_y)
+end

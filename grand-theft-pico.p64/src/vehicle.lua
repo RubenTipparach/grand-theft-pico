@@ -1589,7 +1589,7 @@ end
 -- Draw vehicle profiler stats (for debugging)
 function draw_vehicle_profiler()
 	local stats = vehicle_profile_stats
-	local x, y = 8, 100
+	local x, y = SCREEN_W - 100, 40
 	local color = 7  -- white
 
 	print_shadow("=== VEHICLES ===", x, y, 11)
