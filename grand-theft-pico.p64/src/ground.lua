@@ -59,13 +59,78 @@ function is_road_visible(road)
 end
 
 -- Draw ground using BATCHED tline3d with userdata ops
+-- Optimized: only draws visible grass tiles from tilemap instead of full screen
 function draw_ground()
-	local grass_spr = SPRITES.GRASS.id
-	local grass_tex_size = SPRITES.GRASS.w
-
 	-- Calculate world offsets for texture scrolling
 	local world_x_offset = cam_x - SCREEN_CX
 	local world_y_offset = cam_y - SCREEN_CY
+
+	-- Draw grass tiles from map (only where tilemap has grass)
+	draw_grass_from_map(world_x_offset, world_y_offset)
+
+	-- Draw water tiles from map (simple center tiles only, has shorelines)
+	draw_water_from_map(world_x_offset, world_y_offset)
+
+	-- Draw roads directly from tilemap (simpler than generating ROADS segments)
+	draw_roads_from_map(world_x_offset, world_y_offset)
+end
+
+-- Draw grass tiles from parsed map data (optimized - only visible grass tiles)
+-- This replaces the old full-screen grass fill approach
+function draw_grass_from_map(world_x_offset, world_y_offset)
+	-- Skip if world data not initialized
+	if not WORLD_DATA or not WORLD_DATA.tiles then
+		-- Fallback to full-screen grass fill if no tilemap
+		draw_grass_fullscreen(world_x_offset, world_y_offset)
+		return
+	end
+
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	local grass_spr = SPRITES.GRASS.id
+
+	-- Calculate visible world bounds
+	local left_wx = cam_x - SCREEN_CX - tile_size
+	local top_wy = cam_y - SCREEN_CY - tile_size
+	local right_wx = cam_x + SCREEN_CX + tile_size
+	local bottom_wy = cam_y + SCREEN_CY + tile_size
+
+	-- Convert to map coordinates (world 0,0 = map 128,128)
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Screen offset for converting world coords to screen coords
+	local screen_ox = SCREEN_CX - cam_x
+	local screen_oy = SCREEN_CY - cam_y
+
+	-- Draw grass tiles in visible range
+	for my = my1, my2 do
+		local wy = (my - half_h) * tile_size
+		local sy = wy + screen_oy
+		for mx = mx1, mx2 do
+			local tile = tiles:get(mx, my)
+			-- Draw grass for grass tiles and building zones (buildings will be drawn on top)
+			if tile == MAP_TILE_GRASS or tile == MAP_TILE_BUILDING_ZONE then
+				local wx = (mx - half_w) * tile_size
+				local sx = wx + screen_ox
+				spr(grass_spr, sx, sy)
+			end
+		end
+	end
+end
+
+-- Fallback: full-screen grass fill (used when no tilemap data)
+function draw_grass_fullscreen(world_x_offset, world_y_offset)
+	local grass_spr = SPRITES.GRASS.id
+	local grass_tex_size = SPRITES.GRASS.w
+
 	local tex_u_start = world_x_offset % grass_tex_size
 	local tex_v_start = world_y_offset % grass_tex_size
 	local tex_u_end = tex_u_start + (SCREEN_W / grass_tex_size) * grass_tex_size
@@ -80,12 +145,6 @@ function draw_ground()
 
 	-- Draw all grass scanlines in one batch call
 	tline3d(ground_scanlines, 0, SCREEN_H)
-
-	-- Draw water tiles from map (simple center tiles only, no shorelines yet)
-	draw_water_from_map(world_x_offset, world_y_offset)
-
-	-- Draw roads directly from tilemap (simpler than generating ROADS segments)
-	draw_roads_from_map(world_x_offset, world_y_offset)
 end
 
 -- Draw road and sidewalk tiles directly from the parsed tilemap

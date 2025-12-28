@@ -157,9 +157,29 @@ popularity_change = {
 
 -- Helper function to change popularity and show feedback
 function change_popularity(amount)
-	game.player.popularity = max(0, min(PLAYER_CONFIG.max_popularity, game.player.popularity + amount))
+	-- Popularity can never drop below 1
+	game.player.popularity = max(1, min(PLAYER_CONFIG.max_popularity, game.player.popularity + amount))
 	popularity_change.amount = amount
 	popularity_change.end_time = time() + PLAYER_CONFIG.popularity_text_duration
+end
+
+-- Remove fan/lover status from an NPC (called when they're hit)
+function remove_fan_status(npc)
+	-- Remove from lovers list
+	for i = #lovers, 1, -1 do
+		if lovers[i] == npc then
+			deli(lovers, i)
+			break
+		end
+	end
+
+	-- Remove from fans list
+	for i = #fans, 1, -1 do
+		if fans[i].npc == npc then
+			deli(fans, i)
+			break
+		end
+	end
 end
 
 -- Player death state
@@ -980,6 +1000,7 @@ function _update()
 
 	-- Update weapons and projectiles
 	update_projectiles()
+	update_beams()
 	update_melee_attack()
 
 	-- Update arms dealers
@@ -1126,12 +1147,13 @@ function draw_popularity_bar()
 		rectfill(x, y, x + fill_w - 1, y + h - 1, cfg.popularity_color)
 	end
 
-	-- Draw popularity change text (if active)
+	-- Draw popularity change text in center of screen (if active)
 	if time() < popularity_change.end_time then
 		local amount = popularity_change.amount
-		local text = (amount >= 0) and ("+" .. amount) or tostr(amount)
+		local text = (amount >= 0) and ("+" .. amount .. " POPULARITY") or (tostr(amount) .. " POPULARITY")
 		local col = (amount >= 0) and cfg.popularity_gain_color or cfg.popularity_loss_color
-		print_shadow(text, x + w + 4, y - 2, col)
+		local text_w = #text * 4
+		print_shadow(text, SCREEN_CX - text_w / 2, SCREEN_CY - 20, col)
 	end
 end
 
@@ -1156,7 +1178,7 @@ function draw_money()
 	local x = cfg.money_display_x
 	local y = cfg.money_display_y
 	-- Draw money as "$XXX" text in green
-	print_shadow("$" .. game.player.money, x, y, cfg.money_color)
+	print_shadow("$" .. game.player.money, x, y + 1, cfg.money_color)
 end
 
 -- Find the nearest fan/lover NPC within interaction range
@@ -1535,9 +1557,10 @@ end
 function check_fan_interaction()
 	if dialog.active then return end
 	if player_vehicle then return end  -- can't talk while in vehicle
+	if shop and shop.active then return end  -- can't talk while shopping
 
-	-- Use input_utils.key_pressed to prevent E key from also selecting dialog option
-	if input_utils.key_pressed("e") then
+	-- Use keyp for single-press detection (input_utils.key_pressed may be consumed by dealer check)
+	if keyp("e") then
 		local npc, fan_data = find_nearby_fan()
 		if npc and fan_data then
 			start_dialog(npc, fan_data)
@@ -1587,9 +1610,11 @@ function _draw()
 	-- Draw collision effects (explosion feedback)
 	draw_collision_effects()
 
-	-- Draw projectiles and melee weapon
+	-- Draw projectiles, beams, and equipped weapon
 	draw_projectiles()
+	draw_beams()
 	draw_melee_weapon()
+	draw_ranged_weapon()
 
 	-- Draw player shadow overlay using color table (only when not in night mode)
 	-- if not night_mode then
@@ -1654,9 +1679,13 @@ function _draw()
 		local fps = stat(7)  -- current FPS
 		print_shadow("cpu: "..flr(cpu * 100).."%", SCREEN_W - 70, 4, 6)
 		print_shadow("fps: "..flr(fps), SCREEN_W - 70, 14, 6)
+		print_shadow("dir: "..(game.player.facing_dir or "?"), SCREEN_W - 70, 24, 6)
 
 		-- Draw profiler output
 		profile.draw()
+
+		-- Draw vehicle-specific profiler stats
+		draw_vehicle_profiler()
 
 		-- Print profiler stats to console every 10 seconds
 		profile.printh_periodic()

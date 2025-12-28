@@ -8,6 +8,201 @@
 -- Global projectile list
 projectiles = {}
 
+-- ============================================
+-- BEAM SYSTEM
+-- ============================================
+
+-- Global beam list (active beams currently being rendered)
+active_beams = {}
+
+-- Fire a beam weapon (hits everything in its path instantly)
+function fire_beam(x, y, dir, weapon_key, owner)
+	local weapon = WEAPON_CONFIG.ranged[weapon_key]
+	if not weapon or not weapon.is_beam then return end
+
+	-- Direction vectors
+	local dir_vectors = {
+		north = { dx = 0, dy = -1 },
+		south = { dx = 0, dy = 1 },
+		east  = { dx = 1, dy = 0 },
+		west  = { dx = -1, dy = 0 },
+	}
+	local vec = dir_vectors[dir]
+	if not vec then return end
+
+	-- Calculate beam length (extend to screen edge + margin)
+	local beam_length = 500  -- pixels, long enough to go off screen
+
+	-- End point of beam
+	local end_x = x + vec.dx * beam_length
+	local end_y = y + vec.dy * beam_length
+
+	-- Create visual beam
+	local beam = {
+		x1 = x,
+		y1 = y,
+		x2 = end_x,
+		y2 = end_y,
+		dx = vec.dx,
+		dy = vec.dy,
+		dir = dir,
+		sprite = weapon.beam_sprite,
+		width = weapon.beam_width,
+		end_time = time() + weapon.beam_duration,
+		damage = weapon.damage,
+	}
+	add(active_beams, beam)
+
+	-- Hit detection along beam path (check all entities)
+	check_beam_hits(x, y, vec.dx, vec.dy, beam_length, weapon.damage, owner)
+
+	-- Trigger panic
+	trigger_weapon_panic()
+end
+
+-- Check beam hits along its path
+function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
+	-- Sample points along beam
+	local step = 8  -- check every 8 pixels
+	local steps = flr(length / step)
+
+	-- Track already-hit entities to avoid double damage
+	local hit_npcs = {}
+	local hit_dealers = {}
+	local hit_vehicles = {}
+
+	for i = 0, steps do
+		local check_x = start_x + dx * i * step
+		local check_y = start_y + dy * i * step
+
+		-- Check if off screen (stop checking further)
+		local sx, sy = world_to_screen(check_x, check_y)
+		if sx < -50 or sx > SCREEN_W + 50 or sy < -50 or sy > SCREEN_H + 50 then
+			break
+		end
+
+		if owner == "player" then
+			-- Check dealers
+			if arms_dealers then
+				for _, dealer in ipairs(arms_dealers) do
+					if dealer.state ~= "dead" and not hit_dealers[dealer] then
+						local ddx = check_x - dealer.x
+						local ddy = check_y - dealer.y
+						local dist = sqrt(ddx * ddx + ddy * ddy)
+						if dist < 16 then
+							dealer.health = dealer.health - damage
+							make_dealer_hostile(dealer)
+							hit_dealers[dealer] = true
+						end
+					end
+				end
+			end
+
+			-- Check NPCs
+			for _, npc in ipairs(npcs) do
+				if not hit_npcs[npc] then
+					local ndx = check_x - npc.x
+					local ndy = check_y - npc.y
+					local dist = sqrt(ndx * ndx + ndy * ndy)
+					if dist < 12 then
+						change_popularity(-WEAPON_CONFIG.npc_hit_popularity_loss)
+						npc.damaged = true
+						npc.damaged_end_time = time() + 0.5
+						npc.state = "surprised"
+						npc.state_end_time = time() + 0.3
+						npc.scare_player_x = game.player.x
+						npc.scare_player_y = game.player.y
+						remove_fan_status(npc)
+						hit_npcs[npc] = true
+					end
+				end
+			end
+
+			-- Check vehicles
+			if visible_vehicles_cache then
+				for _, vehicle in ipairs(visible_vehicles_cache) do
+					if vehicle.state ~= "destroyed" and vehicle.state ~= "exploding" and not hit_vehicles[vehicle] then
+						local vw = vehicle.vtype.w / 2
+						local vh = vehicle.vtype.h / 2
+						local vdx = abs(check_x - vehicle.x)
+						local vdy = abs(check_y - vehicle.y)
+						if vdx < vw and vdy < vh then
+							vehicle.health = vehicle.health - damage
+							change_popularity(-WEAPON_CONFIG.npc_hit_popularity_loss)
+							hit_vehicles[vehicle] = true
+						end
+					end
+				end
+			end
+		else
+			-- Enemy beam - check player
+			local pdx = check_x - game.player.x
+			local pdy = check_y - game.player.y
+			local dist = sqrt(pdx * pdx + pdy * pdy)
+			if dist < 10 then
+				game.player.health = max(0, game.player.health - damage)
+				return  -- Player hit, stop checking
+			end
+		end
+	end
+end
+
+-- Update active beams (remove expired ones)
+function update_beams()
+	local now = time()
+	for i = #active_beams, 1, -1 do
+		if now >= active_beams[i].end_time then
+			deli(active_beams, i)
+		end
+	end
+end
+
+-- Draw a stretched beam using tquad
+function draw_beam_stretched(beam)
+	local sx1, sy1 = world_to_screen(beam.x1, beam.y1)
+	local sx2, sy2 = world_to_screen(beam.x2, beam.y2)
+
+	local tex = get_spr(beam.sprite)
+	local tw, th = tex:width(), tex:height()
+
+	-- Calculate beam direction and length
+	local beam_dx = sx2 - sx1
+	local beam_dy = sy2 - sy1
+	local beam_len = sqrt(beam_dx * beam_dx + beam_dy * beam_dy)
+
+	if beam_len < 1 then return end
+
+	-- Normalize direction
+	local nx = beam_dx / beam_len
+	local ny = beam_dy / beam_len
+
+	-- Perpendicular for width
+	local px = -ny
+	local py = nx
+
+	local half_w = beam.width / 2
+
+	-- Build quad corners (stretched along beam direction)
+	-- The texture will tile along the beam length
+	local tiles_along = beam_len / tw  -- how many times texture repeats
+
+	local quad = {
+		{ x = sx1 + px * half_w, y = sy1 + py * half_w, u = 0, v = 0 },
+		{ x = sx2 + px * half_w, y = sy2 + py * half_w, u = tiles_along * tw, v = 0 },
+		{ x = sx2 - px * half_w, y = sy2 - py * half_w, u = tiles_along * tw, v = th - 0.001 },
+		{ x = sx1 - px * half_w, y = sy1 - py * half_w, u = 0, v = th - 0.001 },
+	}
+
+	tquad(quad, tex, 0, 0)
+end
+
+-- Draw all active beams
+function draw_beams()
+	for _, beam in ipairs(active_beams) do
+		draw_beam_stretched(beam)
+	end
+end
+
 -- Create a new projectile
 function create_projectile(x, y, dir, weapon_key, owner)
 	local weapon = WEAPON_CONFIG.ranged[weapon_key]
@@ -325,15 +520,44 @@ function try_attack()
 			return false  -- Still on cooldown
 		end
 
-		-- Fire projectile
+		-- Consume ammo and set cooldown
 		p.ammo[weapon_key] = ammo - 1
 		p.fire_cooldown = now + weapon.fire_rate
 
-		-- Create projectile from player position
-		create_projectile(p.x, p.y, p.facing_dir, weapon_key, "player")
+		-- Calculate spawn position using bullet offsets
+		local spawn_x = p.x
+		local spawn_y = p.y
+		local offset_x = weapon.bullet_offset_x or 0
+		local offset_y = weapon.bullet_offset_y or 0
+		local offset_n_x = weapon.bullet_offset_n_x or offset_y  -- fallback to swapped E/W offsets
+		local offset_n_y = weapon.bullet_offset_n_y or offset_x
 
-		-- Trigger NPC panic
-		trigger_weapon_panic()
+		-- Apply offset based on facing direction
+		local dir = p.facing_dir or "east"
+		if dir == "east" then
+			spawn_x = spawn_x + offset_x
+			spawn_y = spawn_y + offset_y
+		elseif dir == "west" then
+			spawn_x = spawn_x - offset_x
+			spawn_y = spawn_y + offset_y
+		elseif dir == "north" then
+			spawn_x = spawn_x + offset_n_x
+			spawn_y = spawn_y - offset_n_y
+		elseif dir == "south" then
+			spawn_x = spawn_x + offset_n_x
+			spawn_y = spawn_y + offset_n_y
+		end
+
+		-- Check if beam weapon
+		if weapon.is_beam then
+			-- Fire beam (hits everything in path instantly)
+			fire_beam(spawn_x, spawn_y, p.facing_dir, weapon_key, "player")
+		else
+			-- Create projectile from calculated position
+			create_projectile(spawn_x, spawn_y, p.facing_dir, weapon_key, "player")
+			-- Trigger NPC panic
+			trigger_weapon_panic()
+		end
 
 		return true
 	end
@@ -352,45 +576,41 @@ function update_melee_attack()
 		return
 	end
 
+	local cfg = WEAPON_CONFIG
 	local now = time()
 	local elapsed = now - p.attack_timer
-	local progress = elapsed / weapon.swing_speed
+	local swing_time = cfg.melee_swing_time
+	local return_time = cfg.melee_return_time
+	local total_time = swing_time + return_time
 
-	if progress >= 1 then
+	if elapsed >= total_time then
 		-- Attack finished
 		p.is_attacking = false
-		p.attack_angle = 0
+		p.attack_hit_checked = false
 	else
-		-- Update swing angle (-45 to +90 degrees)
-		p.attack_angle = -45 + (135 * progress)
-
-		-- Check for hit at peak of swing (around 50% progress)
-		if progress > 0.4 and progress < 0.6 and not p.attack_hit_checked then
+		-- Check for hit near end of forward swing (80-100% of swing phase)
+		local swing_progress = elapsed / swing_time
+		if swing_progress > 0.8 and swing_progress <= 1.0 and not p.attack_hit_checked then
 			check_melee_hit(weapon)
 			p.attack_hit_checked = true
 		end
-	end
-
-	-- Reset hit check when attack ends
-	if not p.is_attacking then
-		p.attack_hit_checked = false
 	end
 end
 
 -- Check if melee attack hits anything
 function check_melee_hit(weapon)
 	local p = game.player
+	local cfg = WEAPON_CONFIG
+	local dir = p.facing_dir or "east"
 
-	-- Calculate hit position based on facing direction
-	local dir_vectors = {
-		north = { dx = 0, dy = -1 },
-		south = { dx = 0, dy = 1 },
-		east  = { dx = 1, dy = 0 },
-		west  = { dx = -1, dy = 0 },
-	}
-	local vec = dir_vectors[p.facing_dir]
-	local hit_x = p.x + vec.dx * weapon.range
-	local hit_y = p.y + vec.dy * weapon.range
+	-- Calculate weapon center position (same logic as draw_melee_weapon)
+	local facing_east = (dir == "east")
+	local offset_x = facing_east and cfg.melee_offset_x or -cfg.melee_offset_x
+	local offset_y = cfg.melee_offset_y
+
+	-- Hit position is at the weapon sprite center
+	local hit_x = p.x + offset_x
+	local hit_y = p.y + offset_y
 
 	-- Check dealers (any state except dead)
 	if arms_dealers then
@@ -408,17 +628,43 @@ function check_melee_hit(weapon)
 		end
 	end
 
-	-- Check NPCs (popularity loss only)
+	-- Check vehicles (damage them, lose popularity)
+	if visible_vehicles_cache then
+		for _, vehicle in ipairs(visible_vehicles_cache) do
+			if vehicle.state ~= "destroyed" and vehicle.state ~= "exploding" then
+				-- Use vehicle dimensions for hit detection
+				local vw = vehicle.vtype.w / 2
+				local vh = vehicle.vtype.h / 2
+				local dx = abs(hit_x - vehicle.x)
+				local dy = abs(hit_y - vehicle.y)
+				if dx < vw + weapon.range / 2 and dy < vh + weapon.range / 2 then
+					vehicle.health = vehicle.health - weapon.damage
+					change_popularity(-WEAPON_CONFIG.npc_hit_popularity_loss)
+					return true
+				end
+			end
+		end
+	end
+
+	-- Check NPCs (popularity loss, damaged sprite, then flee)
 	for _, npc in ipairs(npcs) do
 		local dx = hit_x - npc.x
 		local dy = hit_y - npc.y
 		local dist = sqrt(dx * dx + dy * dy)
 		if dist < weapon.range then
 			change_popularity(-WEAPON_CONFIG.npc_hit_popularity_loss)
+			-- Show damaged sprite briefly
+			npc.damaged = true
+			npc.damaged_end_time = time() + 0.5
+			-- Then flee
 			npc.state = "surprised"
 			npc.state_end_time = time() + 0.3
 			npc.scare_player_x = p.x
 			npc.scare_player_y = p.y
+
+			-- If this NPC was a fan or lover, remove them from those lists
+			remove_fan_status(npc)
+
 			return true
 		end
 	end
@@ -464,7 +710,7 @@ function draw_weapon_hud()
 	end
 
 	-- Weapon name
-	print_shadow(weapon.name, x, y, 7)
+	print_shadow(weapon.name, x, y, 33)
 
 	-- Ammo count for ranged weapons
 	if wtype == "ranged" then
@@ -506,7 +752,7 @@ function tquad(coords, tex, dx, dy)
 		for y = cy0, min(ceil(y1) - 1, screen_max) do
 			local span = spans[y]
 			if span then
-				tline3d(tex, span.x, y, x0, y, span.u, span.v, u0, v0)
+				tline3d(tex, span.x, y, x0, y, span.u, span.v, u0, v0, 1, 1, 0x300)
 			else
 				spans[y] = { x = x0, u = u0, v = v0 }
 			end
@@ -523,20 +769,34 @@ end
 -- cx, cy: center position on screen
 -- sx, sy: scale (1 = normal)
 -- rot: rotation in turns (0-1 = 0-360 degrees)
-function rspr(sprite, cx, cy, sx, sy, rot)
-	sx = sx and sx or 1
-	sy = sy and sy or 1
-	rot = rot and rot or 0
+-- flip_x: flip horizontally
+-- pivot_x, pivot_y: rotation pivot offset from center (flipped with flip_x)
+function rspr(sprite, cx, cy, sx, sy, rot, flip_x, pivot_x, pivot_y)
+	sx = sx or 1
+	sy = sy or 1
+	rot = rot or 0
+	pivot_x = pivot_x or 0
+	pivot_y = pivot_y or 0
 	local tex = get_spr(sprite)
-	local dx, dy = tex:width() * sx, tex:height() * sy
+	local tw, th = tex:width(), tex:height()
+	local dx, dy = tw * sx, th * sy
+
+	-- UV coords (flip_x swaps u values)
+	local u0, u1 = 0, tw - 0.001
+	if flip_x then
+		u0, u1 = u1, u0
+		pivot_x = -pivot_x  -- flip pivot x when sprite is flipped
+	end
+
 	local quad = {
-		{ x = 0,  y = 0,  u = 0,                  v = 0 },
-		{ x = dx, y = 0,  u = tex:width() - 0.001, v = 0 },
-		{ x = dx, y = dy, u = tex:width() - 0.001, v = tex:height() - 0.001 },
-		{ x = 0,  y = dy, u = 0,                  v = tex:height() - 0.001 },
+		{ x = 0,  y = 0,  u = u0, v = 0 },
+		{ x = dx, y = 0,  u = u1, v = 0 },
+		{ x = dx, y = dy, u = u1, v = th - 0.001 },
+		{ x = 0,  y = dy, u = u0, v = th - 0.001 },
 	}
 	local c, s = cos(rot), -sin(rot)
-	local w, h = (dx - 1) / 2, (dy - 1) / 2
+	-- Pivot point: center + offset
+	local w, h = (dx - 1) / 2 + pivot_x, (dy - 1) / 2 + pivot_y
 	for _, v in pairs(quad) do
 		local x, y = v.x - w, v.y - h
 		v.x = c * x - s * y
@@ -545,9 +805,54 @@ function rspr(sprite, cx, cy, sx, sy, rot)
 	tquad(quad, tex, cx, cy)
 end
 
+-- Draw equipped ranged weapon on player
+-- Weapon sprite faces east by default
+-- W: flip, -x offset
+-- E: no flip, +x offset
+function draw_ranged_weapon()
+	local p = game.player
+	local weapon, wtype = get_equipped_weapon()
+	if not weapon or wtype ~= "ranged" then return end
+	if not weapon.weapon_sprite then return end
+
+	local screen_x, screen_y = world_to_screen(p.x, p.y)
+	local dir = p.facing_dir or "east"
+	local cfg = WEAPON_CONFIG
+
+	-- Calculate offset and rotation based on direction
+	-- Weapon sprite faces east by default (0 rotation)
+	local offset_x, offset_y = 0, 0
+	local rot = 0
+	local flip_x = false
+
+	if dir == "east" then
+		offset_x = cfg.ranged_offset_x
+		offset_y = cfg.ranged_offset_y
+		rot = 0
+	elseif dir == "west" then
+		offset_x = -cfg.ranged_offset_x
+		offset_y = cfg.ranged_offset_y
+		rot = 0
+		flip_x = true
+	elseif dir == "north" then
+		offset_x = cfg.ranged_offset_y  -- Use y offset for x when vertical
+		offset_y = -cfg.ranged_offset_x
+		rot = 0.75  -- 270 degrees (pointing up)
+	elseif dir == "south" then
+		offset_x = cfg.ranged_offset_y
+		offset_y = cfg.ranged_offset_x
+		rot = 0.25  -- 90 degrees (pointing down)
+	end
+
+	-- Draw the weapon sprite with rotation
+	rspr(weapon.weapon_sprite, screen_x + offset_x, screen_y + offset_y, 1, 1, rot, flip_x, 0, 0)
+end
+
 -- Draw equipped melee weapon on player
 -- Weapon sprite faces west by default
--- Uses quad rotation for proper swing animation
+-- N/S: keep last horizontal facing for weapon position
+-- W: no flip, -x offset
+-- E: flip, +x offset
 function draw_melee_weapon()
 	local p = game.player
 	local weapon, wtype = get_equipped_weapon()
@@ -557,50 +862,41 @@ function draw_melee_weapon()
 	local dir = p.facing_dir or "east"
 	local cfg = WEAPON_CONFIG
 
-	-- Determine facing direction for weapon positioning
-	-- facing_right = true means player is facing LEFT (west) due to input.lua logic
-	local facing_east = not p.facing_right
-	local offset_x = 0
+	-- Only E/W affect weapon position, N/S keep last horizontal
+	local facing_east = (dir == "east")
+	local offset_x = facing_east and cfg.melee_offset_x or -cfg.melee_offset_x
+	local flip_x = facing_east
 
-	-- Base rotation in turns (0-1 range) from config
-	local base_rot = 0
+	-- Base rotation
+	local base_rot = facing_east and cfg.melee_base_rot_east or cfg.melee_base_rot_west
 
-	if dir == "east" or (dir == "north" and facing_east) or (dir == "south" and facing_east) then
-		-- Facing east - weapon on right side
-		offset_x = 6
-		base_rot = cfg.melee_base_rot_east
-	else
-		-- Facing west - weapon on left side
-		offset_x = -6
-		base_rot = cfg.melee_base_rot_west
-	end
-
-	-- Calculate swing rotation when attacking
+	-- Calculate swing rotation when attacking or returning
 	local swing_rot = 0
-	if p.is_attacking then
-		local progress = 0
-		if p.attack_timer then
-			local elapsed = time() - p.attack_timer
-			progress = elapsed / weapon.swing_speed
-			if progress > 1 then progress = 1 end
-		end
-		-- Swing arc from config (0 to 0.25 turns = 0 to 90 degrees)
-		local swing_range = cfg.melee_swing_end - cfg.melee_swing_start
-		swing_rot = cfg.melee_swing_start + (swing_range * progress)
+	local swing_range = cfg.melee_swing_end - cfg.melee_swing_start
 
-		-- Mirror swing direction when facing west
-		if not facing_east then
-			swing_rot = -swing_rot
+	if p.is_attacking and p.attack_timer then
+		local elapsed = time() - p.attack_timer
+		local swing_time = cfg.melee_swing_time
+		local return_time = cfg.melee_return_time
+		local total_time = swing_time + return_time
+
+		if elapsed < swing_time then
+			-- Forward swing phase
+			local progress = elapsed / swing_time
+			swing_rot = cfg.melee_swing_start + (swing_range * progress)
+		elseif elapsed < total_time then
+			-- Return phase - smoothly rotate back
+			local return_progress = (elapsed - swing_time) / return_time
+			swing_rot = cfg.melee_swing_end - (swing_range * return_progress)
+		else
+			-- Attack complete
+			p.is_attacking = false
+			swing_rot = 0
 		end
+
+		if not facing_east then swing_rot = -swing_rot end
 	end
 
-	-- Final rotation
-	local rot = base_rot + swing_rot
-
-	-- Draw position (offset from player center)
-	local wx = screen_x + offset_x
-	local wy = screen_y - 4
-
-	-- Draw rotated weapon sprite
-	rspr(weapon.sprite, wx, wy, 1, 1, rot)
+	-- Draw rotated weapon sprite with pivot offset
+	rspr(weapon.sprite, screen_x + offset_x, screen_y + cfg.melee_offset_y, 1, 1, base_rot + swing_rot, flip_x, cfg.melee_pivot_x, cfg.melee_pivot_y)
 end

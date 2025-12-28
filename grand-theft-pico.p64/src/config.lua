@@ -271,8 +271,8 @@ PLAYER_CONFIG = {
 	popularity_loss_crash = 2,   -- popularity lost per car crash
 	popularity_loss_flirt_fail = 2, -- popularity lost when fan gives up (3 strikes)
 	popularity_text_duration = 1.5, -- seconds to show +/- popularity text
-	popularity_gain_color = 11,  -- green for gain
-	popularity_loss_color = 8,   -- red for loss
+	popularity_gain_color = 33,  -- green for gain
+	popularity_loss_color = 12,   -- red for loss
 
 	-- Fan system (chance scales with popularity)
 	fan_chance_min = 0.10,       -- 10% chance at 0 popularity
@@ -286,7 +286,7 @@ PLAYER_CONFIG = {
 
 	-- Money system
 	starting_money = 10000,        -- player starts with $100
-	money_color = 11,            -- green for money text
+	money_color = 33,            -- green for money text
 	money_display_x = 8,
 	money_display_y = 48,        -- below popularity bar
 
@@ -387,7 +387,7 @@ PLAYER_CONFIG = {
 	dialog_line_height = 10,         -- pixels per line of text
 	dialog_bg_color = 1,
 	dialog_border_color = 6,
-	dialog_text_color = 7,
+	dialog_text_color = 33,
 	dialog_option_color = 14,
 	dialog_selected_color = 22,
 }
@@ -397,7 +397,7 @@ PLAYER_CONFIG = {
 -- ============================================
 WEAPON_CONFIG = {
 	-- Weapon order for cycling (melee first, then ranged)
-	weapon_order = { "hammer", "pickaxe", "sword", "pistol", "laser_pistol", "plasma_rifle" },
+	weapon_order = { "hammer", "pickaxe", "sword", "pistol", "laser_pistol", "plasma_rifle", "beam_cannon" },
 
 	-- Melee weapons (rendered as rotating quads)
 	melee = {
@@ -445,6 +445,13 @@ WEAPON_CONFIG = {
 			bullet_speed = 300,   -- pixels per second
 			sprite_ew = 112,      -- bullet sprite for east/west
 			sprite_ns = 113,      -- bullet sprite for north/south
+			weapon_sprite = 158,  -- gun sprite when held
+			weapon_w = 8,
+			weapon_h = 8,
+			bullet_offset_x = 12, -- bullet spawn x offset (flipped for west)
+			bullet_offset_y = 2,  -- bullet spawn y offset
+			bullet_offset_n_x = 2,  -- bullet spawn x offset for north (mirrored for south)
+			bullet_offset_n_y = 12, -- bullet spawn y offset for north (negated for south)
 		},
 		laser_pistol = {
 			name = "Laser Pistol",
@@ -456,6 +463,13 @@ WEAPON_CONFIG = {
 			bullet_speed = 400,
 			sprite_frames = { 114, 115 },  -- animated bullet
 			animation_speed = 0.05,
+			weapon_sprite = 31,   -- gun sprite when held
+			weapon_w = 8,
+			weapon_h = 8,
+			bullet_offset_x = 12,
+			bullet_offset_y = 2,
+			bullet_offset_n_x = 2,
+			bullet_offset_n_y = 12,
 		},
 		plasma_rifle = {
 			name = "Plasma Rifle",
@@ -467,6 +481,32 @@ WEAPON_CONFIG = {
 			bullet_speed = 250,
 			sprite_frames = { 54, 55, 62, 63 },  -- 4-frame animation
 			animation_speed = 0.05,
+			weapon_sprite = 39,   -- gun sprite when held
+			weapon_w = 8,
+			weapon_h = 16,
+			bullet_offset_x = 14,
+			bullet_offset_y = 0,
+			bullet_offset_n_x = 0,
+			bullet_offset_n_y = 14,
+		},
+		beam_cannon = {
+			name = "Beam Cannon",
+			price = 10000,
+			ammo_price = 500,
+			ammo_count = 5,
+			damage = 100,         -- massive damage
+			fire_rate = 1.5,      -- slow fire rate
+			is_beam = true,       -- special beam weapon type
+			beam_sprite = 43,     -- beam texture sprite
+			beam_duration = 0.3,  -- how long beam stays visible
+			beam_width = 16,      -- beam thickness
+			weapon_sprite = 159,  -- gun sprite when held
+			weapon_w = 8,
+			weapon_h = 16,
+			bullet_offset_x = 16, -- beam spawn x offset
+			bullet_offset_y = 0,  -- beam spawn y offset
+			bullet_offset_n_x = 0,
+			bullet_offset_n_y = 16,
 		},
 	},
 
@@ -475,9 +515,19 @@ WEAPON_CONFIG = {
 
 	-- Melee animation settings (rotation in turns, 0-1 = 0-360 degrees)
 	melee_swing_start = 0,        -- start angle in turns (0 degrees)
-	melee_swing_end = 0.25,       -- end angle in turns (90 degrees)
+	melee_swing_end = 0.5,        -- end angle in turns (180 degrees)
 	melee_base_rot_east = 0.875,  -- base rotation when facing east (315 degrees)
 	melee_base_rot_west = 0.125,  -- base rotation when facing west (45 degrees)
+	melee_offset_x = 8,           -- weapon x offset from player center
+	melee_offset_y = 2,          -- weapon y offset from player center (negative = up)
+	melee_swing_time = 0.08,       -- seconds for forward swing
+	melee_return_time = 0.20,     -- seconds to return to rest position
+	melee_pivot_x = 0,            -- rotation pivot x offset from sprite center
+	melee_pivot_y = 6,            -- rotation pivot y offset from sprite center (positive = down)
+
+	-- Ranged weapon display settings
+	ranged_offset_x = 8,          -- weapon x offset from player center
+	ranged_offset_y = 2,          -- weapon y offset from player center
 }
 
 -- ============================================
@@ -621,7 +671,7 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = true,  -- set to false to disable debug features
+	enabled = false,  -- set to false to disable debug features
 }
 
 -- ============================================

@@ -39,7 +39,11 @@ function handle_input()
 				end
 			else
 				-- Horizontal movement dominates (or equal)
-				game.player.facing_dir = "east"  -- east/west use same sprites with flip
+				if dx > 0 then
+					game.player.facing_dir = "east"
+				else
+					game.player.facing_dir = "west"
+				end
 				game.player.facing_right = (dx < 0)
 			end
 		end
@@ -58,8 +62,8 @@ function handle_input()
 		end
 	end
 
-	-- Weapon controls (only when not in vehicle and not in dialog)
-	if not player_vehicle and not (dialog and dialog.active) then
+	-- Weapon controls (only when not in vehicle, dialog, or shop)
+	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
 		-- Q: cycle weapon backward
 		if keyp("q") then
 			cycle_weapon_backward()
@@ -70,8 +74,8 @@ function handle_input()
 			cycle_weapon_forward()
 		end
 
-		-- X or Space: attack/fire
-		if btn(5) or key("space") then
+		-- Z or Space: attack/fire
+		if btn(4) or key("space") then
 			try_attack()
 		end
 	end

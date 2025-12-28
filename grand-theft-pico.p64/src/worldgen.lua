@@ -31,7 +31,7 @@ function draw_loading_screen()
 	local bar_y = 135
 
 	-- Draw loading text
-	print(loading_message, bar_x, bar_y - 20, 7)
+	print(loading_message, bar_x, bar_y - 20, 33)
 
 	-- Draw progress bar background
 	rectfill(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 1)
@@ -45,7 +45,7 @@ function draw_loading_screen()
 
 	-- Draw percentage
 	local pct_text = tostr(flr(loading_progress)) .. "%"
-	print(pct_text, bar_x + bar_w / 2 - 8, bar_y + 4, 7)
+	print(pct_text, bar_x + bar_w / 2 - 8, bar_y + 4, 33)
 
 	flip()
 end

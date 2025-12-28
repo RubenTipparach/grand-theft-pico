@@ -4,6 +4,9 @@
 -- Global NPC list
 npcs = {}
 
+-- Visible NPCs list (populated once per frame for collision optimization)
+visible_npcs = {}
+
 -- Check if an NPC is a fan (referenced in the fans table)
 function is_npc_fan(npc)
 	for _, fan_data in ipairs(fans) do
@@ -332,6 +335,11 @@ function update_npc(npc, player_x, player_y)
 	local now = time()
 	local dt = now - npc.last_update_time
 	npc.last_update_time = now
+
+	-- Clear damaged state after timer expires
+	if npc.damaged and npc.damaged_end_time and now >= npc.damaged_end_time then
+		npc.damaged = false
+	end
 
 	-- If NPC is in dialog, don't move - just face the player
 	if npc.in_dialog then
@@ -769,6 +777,9 @@ local function update_npcs_persistent(player_x, player_y)
 	local sw, sh = SCREEN_W, SCREEN_H
 	local margin = OFFSCREEN_MARGIN
 
+	-- Clear visible_npcs list (rebuilt each frame)
+	visible_npcs = {}
+
 	for _, npc in ipairs(npcs) do
 		-- Distance check from player (squared to avoid sqrt)
 		local dx = npc.x - player_x
@@ -794,6 +805,8 @@ local function update_npcs_persistent(player_x, player_y)
 				-- Visible and within distance: update every frame
 				update_npc(npc, player_x, player_y)
 				npc.offscreen_update_time = now
+				-- Add to visible_npcs for collision optimization
+				add(visible_npcs, npc)
 			else
 				-- Offscreen but within distance: throttled update
 				if now >= npc.offscreen_update_time + offscreen_interval then
@@ -823,6 +836,9 @@ local function update_npcs_streaming(player_x, player_y)
 	local sw, sh = SCREEN_W, SCREEN_H
 	local margin = OFFSCREEN_MARGIN
 
+	-- Clear visible_npcs list (rebuilt each frame)
+	visible_npcs = {}
+
 	-- Pass 1: Update visible NPCs, mark distant ones for removal
 	local to_remove = {}
 	for i, npc in ipairs(npcs) do
@@ -843,6 +859,8 @@ local function update_npcs_streaming(player_x, player_y)
 			if is_visible then
 				-- Visible: update every frame
 				update_npc(npc, player_x, player_y)
+				-- Add to visible_npcs for collision optimization
+				add(visible_npcs, npc)
 			end
 			-- Offscreen NPCs within despawn distance: don't update (frozen)
 		end
@@ -875,7 +893,8 @@ end
 -- Get the current sprite for an NPC
 function get_npc_sprite(npc)
 	if npc.damaged then
-		return npc.npc_type.damaged
+		-- Use the surprised sprite for damaged state (same sprite works for both)
+		return npc.npc_type.surprised
 	end
 
 	-- Use normal directional sprites for all states (including surprised/fleeing)

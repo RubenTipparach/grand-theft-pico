@@ -356,6 +356,9 @@ function get_road_orientation_at(wx, wy)
 		return cached ~= false and cached or nil
 	end
 
+	-- Track road checks for profiling
+	vehicle_profile_stats.road_checks = vehicle_profile_stats.road_checks + 1
+
 	-- Not in cache, compute it (use main road only)
 	if not is_on_main_road(wx, wy) then
 		road_orientation_cache[cache_key] = false
@@ -1139,7 +1142,8 @@ function check_vehicle_collisions(visible_vehicles)
 	end
 end
 
--- Check vehicle collision with NPCs (OPTIMIZED: only visible vehicles)
+-- Check vehicle collision with NPCs (OPTIMIZED: only visible vehicles and visible NPCs)
+-- Uses the global visible_npcs list computed once per frame in npc.lua
 function check_vehicle_npc_collisions(visible_vehicles)
 	local cfg = VEHICLE_CONFIG
 
@@ -1147,10 +1151,12 @@ function check_vehicle_npc_collisions(visible_vehicles)
 		if vehicle.state ~= "destroyed" and vehicle.state ~= "exploding" then
 			local vw = vehicle.vtype.w / 2
 			local vh = vehicle.vtype.h / 2
+			local vx, vy = vehicle.x, vehicle.y
 
-			for _, npc in ipairs(npcs) do
-				local dx = npc.x - vehicle.x
-				local dy = npc.y - vehicle.y
+			-- Use visible_npcs (computed once per frame) instead of all npcs
+			for _, npc in ipairs(visible_npcs) do
+				local dx = npc.x - vx
+				local dy = npc.y - vy
 
 				if abs(dx) < vw + 4 and abs(dy) < vh + 4 then
 					-- Push NPC away from vehicle center
@@ -1166,8 +1172,8 @@ function check_vehicle_npc_collisions(visible_vehicles)
 							npc.state = "surprised"
 							npc.state_end_time = time() + NPC_CONFIG.surprise_duration
 							npc.show_surprise = true
-							npc.scare_player_x = vehicle.x
-							npc.scare_player_y = vehicle.y
+							npc.scare_player_x = vx
+							npc.scare_player_y = vy
 						end
 					end
 				end
@@ -1363,11 +1369,25 @@ end
 -- MAIN UPDATE FUNCTION
 -- ============================================
 
+-- Profiler counters for vehicle system (reset each frame)
+vehicle_profile_stats = {
+	total_vehicles = 0,
+	visible_vehicles = 0,
+	ai_updates = 0,
+	road_checks = 0,
+}
+
 function update_vehicles()
 	local now = time()
 	local player_x = game.player.x
 	local player_y = game.player.y
 	local cfg = VEHICLE_CONFIG
+
+	-- Reset per-frame stats
+	vehicle_profile_stats.total_vehicles = #vehicles
+	vehicle_profile_stats.visible_vehicles = 0
+	vehicle_profile_stats.ai_updates = 0
+	vehicle_profile_stats.road_checks = 0
 
 	-- Cache screen constants for visibility check
 	local cx, cy = SCREEN_CX, SCREEN_CY
@@ -1377,7 +1397,9 @@ function update_vehicles()
 	local update_dist_sq = update_dist * update_dist
 	local offscreen_interval = cfg.offscreen_update_interval
 
-	-- Single pass: collect visible vehicles AND update in one loop
+	profile(" v:cull")
+	-- First pass: collect visible vehicles and mark which to update
+	-- Store update flag on vehicle to avoid table allocations
 	local visible_vehicles = {}
 
 	for _, vehicle in ipairs(vehicles) do
@@ -1392,31 +1414,34 @@ function update_vehicles()
 		local is_visible = sx > -margin and sx < sw + margin and
 		                   sy > -margin and sy < sh + margin
 
+		-- Store visibility for later use (avoid table allocation)
+		vehicle._is_visible = is_visible
+		vehicle._should_update = false
+
 		-- Track visible vehicles for collision detection AND ahead checks
 		if is_visible or vehicle.is_player_vehicle then
 			add(visible_vehicles, vehicle)
 		end
 
 		-- Determine if we should update this frame
-		local should_update = false
-
 		if vehicle.is_player_vehicle then
-			-- Always update player vehicle
-			should_update = true
+			vehicle._should_update = true
 		elseif is_visible then
-			-- Visible vehicles always update
-			should_update = true
+			vehicle._should_update = true
 			vehicle.offscreen_update_time = now
 		elseif dist_sq <= update_dist_sq then
-			-- Within update distance but offscreen: throttled update
 			if now >= vehicle.offscreen_update_time + offscreen_interval then
-				should_update = true
+				vehicle._should_update = true
 				vehicle.offscreen_update_time = now
 			end
 		end
-		-- Far away vehicles are FROZEN (no update at all) - removed the "rarely update" case
+	end
+	profile(" v:cull")
 
-		if should_update then
+	profile(" v:ai")
+	-- Second pass: update vehicles that were marked
+	for _, vehicle in ipairs(vehicles) do
+		if vehicle._should_update then
 			local dt = now - vehicle.last_update_time
 			vehicle.last_update_time = now
 
@@ -1426,27 +1451,35 @@ function update_vehicles()
 			if vehicle.is_player_vehicle then
 				update_player_vehicle(vehicle, dt)
 			else
+				vehicle_profile_stats.ai_updates = vehicle_profile_stats.ai_updates + 1
 				update_vehicle_ai(vehicle, dt)
 			end
 
 			update_vehicle_state(vehicle, dt)
 
 			-- Check if AI vehicle is stuck on sidewalk (only for visible vehicles)
-			if is_visible and not vehicle.is_player_vehicle then
+			if vehicle._is_visible and not vehicle.is_player_vehicle then
 				check_and_unstick_vehicle(vehicle)
 			end
 		end
 	end
+	profile(" v:ai")
+
+	vehicle_profile_stats.visible_vehicles = #visible_vehicles
 
 	-- Set cache so vehicle_ahead() can use it
 	visible_vehicles_cache = visible_vehicles
 
+	profile(" v:collide")
 	-- Handle collisions (ONLY for visible/nearby vehicles now)
 	check_vehicle_collisions(visible_vehicles)
 	check_vehicle_npc_collisions(visible_vehicles)
+	profile(" v:collide")
 
+	profile(" v:respawn")
 	-- Process respawns and cleanup destroyed vehicles
 	process_vehicle_respawns(player_x, player_y)
+	profile(" v:respawn")
 
 	-- Check for vehicle stealing (with cooldown after exiting)
 	-- Use input_utils for proper single-press detection (same key as exit)
@@ -1551,6 +1584,23 @@ function draw_steal_prompt()
 		local tw = #text * 4
 		print_shadow(text, sx - tw/2, sy - 20, PLAYER_CONFIG.prompt_color)
 	end
+end
+
+-- Draw vehicle profiler stats (for debugging)
+function draw_vehicle_profiler()
+	local stats = vehicle_profile_stats
+	local x, y = 8, 100
+	local color = 7  -- white
+
+	print_shadow("=== VEHICLES ===", x, y, 11)
+	y = y + 10
+	print_shadow("total: " .. stats.total_vehicles, x, y, color)
+	y = y + 8
+	print_shadow("visible: " .. stats.visible_vehicles, x, y, color)
+	y = y + 8
+	print_shadow("ai updates: " .. stats.ai_updates, x, y, color)
+	y = y + 8
+	print_shadow("road chks: " .. stats.road_checks, x, y, color)
 end
 
 -- Draw and update collision effects (explosion frame 1 for 0.5s)

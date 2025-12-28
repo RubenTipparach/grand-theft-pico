@@ -2215,7 +2215,7 @@ function draw_finished(tt)
 	local str="★ stage clear ★  "
 	
 	print(str,64-#str*2,31,14)
-	print(str,64-#str*2,30,7)
+	print(str,64-#str*2,30,3)
 	
 	-- gems
 	local n = total_gems

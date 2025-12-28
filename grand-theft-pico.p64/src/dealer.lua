@@ -548,7 +548,7 @@ function draw_shop()
 
 	-- Shop box dimensions
 	local box_w = 200
-	local box_h = 160
+	local box_h = 172  -- Increased to fit 7 items
 	local box_x = (SCREEN_W - box_w) / 2
 	local box_y = (SCREEN_H - box_h) / 2
 
@@ -559,7 +559,7 @@ function draw_shop()
 	-- Draw title
 	local title = "ARMS DEALER " .. shop.dealer.name
 	local title_w = #title * 4
-	print_shadow(title, box_x + (box_w - title_w) / 2, box_y + 4, 7)
+	print_shadow(title, box_x + (box_w - title_w) / 2, box_y + 4, 33)
 
 	-- Draw money
 	local money_text = "$" .. game.player.money
@@ -567,7 +567,7 @@ function draw_shop()
 
 	-- Draw items
 	local item_y = box_y + 20
-	local visible_items = 6
+	local visible_items = 7  -- Show all 7 weapons without scrolling
 	local start_idx = shop.scroll_offset + 1
 	local end_idx = min(#items, start_idx + visible_items - 1)
 
@@ -578,7 +578,7 @@ function draw_shop()
 
 		-- Selection indicator
 		if is_selected then
-			print_shadow(">", box_x + 4, item_y, 7)
+			print_shadow(">", box_x + 4, item_y, 33)
 		end
 
 		-- Item name
@@ -594,7 +594,7 @@ function draw_shop()
 			if item.type == "ranged" and is_selected then
 				local ammo_text = "< " .. shop.ammo_quantity .. " >"
 				local ammo_cost = item.ammo_price * shop.ammo_quantity
-				print_shadow(ammo_text, price_x + 45, item_y, 7)
+				print_shadow(ammo_text, price_x + 45, item_y, 33)
 				print_shadow("$" .. ammo_cost, price_x + 85, item_y, 11)
 			end
 		else
