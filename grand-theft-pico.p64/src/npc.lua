@@ -762,6 +762,14 @@ function spawn_npc_near_player(player_x, player_y)
 	return nil
 end
 
+-- Spawn a single NPC at a specific position (used for vehicle ejection)
+function spawn_single_npc(x, y)
+	local npc_type_index = flr(rnd(#NPC_TYPES)) + 1
+	local npc = create_npc(x, y, npc_type_index)
+	add(npcs, npc)
+	return npc
+end
+
 -- Mode 1: Persistent NPCs with distance-based throttling
 local function update_npcs_persistent(player_x, player_y)
 	local now = time()
@@ -919,4 +927,22 @@ end
 -- Get NPC sprite height
 function get_npc_height(npc)
 	return npc.npc_type.h
+end
+
+-- Draw NPC debug stats (for debugging)
+function draw_npc_profiler()
+	if not DEBUG_CONFIG.show_all_npcs then return end
+
+	local x, y = SCREEN_W - 100, 110  -- below vehicle debug
+	local color = 33
+
+	print_shadow("== DEBUG NPC ==", x, y, 11)
+	y = y + 10
+	print_shadow("total: " .. #npcs, x, y, color)
+	y = y + 8
+	print_shadow("visible: " .. #visible_npcs, x, y, color)
+	y = y + 8
+	print_shadow("fans: " .. #fans, x, y, color)
+	y = y + 8
+	print_shadow("lovers: " .. #lovers, x, y, color)
 end

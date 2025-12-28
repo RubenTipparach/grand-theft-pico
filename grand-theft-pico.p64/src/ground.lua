@@ -10,6 +10,44 @@ TILE_SIDEWALK_NS = 4
 TILE_SIDEWALK_EW = 5
 TILE_WATER = 6
 
+-- Grass tile variants (populated after SPRITES is loaded)
+local grass_variants = nil
+
+-- Initialize grass variants (called after config loads)
+function init_grass_variants()
+	grass_variants = {
+		SPRITES.GRASS.id,
+		--SPRITES.GRASS_2.id,
+		--SPRITES.GRASS_3.id,
+		--SPRITES.GRASS_4.id,
+		--SPRITES.GRASS_5.id,
+		SPRITES.GRASS_6.id,
+	}
+end
+
+-- Deterministic hash function for tile coordinates
+-- Returns a consistent pseudo-random value 0-1 for any (x, y)
+local function tile_hash(x, y)
+	-- Simple but effective hash combining coordinates
+	-- Uses prime multipliers for good distribution
+	local h = x * 374761393 + y * 668265263
+	h = h ~ (h >> 13)
+	h = h * 1274126177
+	h = h ~ (h >> 16)
+	-- Normalize to 0-1 range
+	return (h % 1000) / 1000
+end
+
+-- Get grass sprite for a specific tile coordinate (deterministic)
+local function get_grass_sprite(mx, my)
+	if not grass_variants then
+		init_grass_variants()
+	end
+	local hash = tile_hash(mx, my)
+	local index = flr(hash * #grass_variants) + 1
+	return grass_variants[index]
+end
+
 -- Scanline buffer for batched ground rendering (11 values per scanline)
 -- Format per row: spr, x0, y, x1, y, u0, v0, u1, v1, w0, w1
 local ground_scanlines = userdata("f64", 11, 270)
@@ -166,7 +204,6 @@ function render_grass_to_buffer(buf_cam_x, buf_cam_y)
 	local half_w = map_w / 2
 	local half_h = map_h / 2
 
-	local grass_spr = SPRITES.GRASS.id
 	local buf_w = SCREEN_W + GROUND_BUFFER_PADDING * 2
 	local buf_h = SCREEN_H + GROUND_BUFFER_PADDING * 2
 
@@ -186,7 +223,7 @@ function render_grass_to_buffer(buf_cam_x, buf_cam_y)
 	local screen_ox = SCREEN_CX + GROUND_BUFFER_PADDING - buf_cam_x
 	local screen_oy = SCREEN_CY + GROUND_BUFFER_PADDING - buf_cam_y
 
-	-- Draw grass tiles
+	-- Draw grass tiles with deterministic variation
 	for my = my1, my2 do
 		local wy = (my - half_h) * tile_size
 		local sy = wy + screen_oy
@@ -195,6 +232,7 @@ function render_grass_to_buffer(buf_cam_x, buf_cam_y)
 			if tile == MAP_TILE_GRASS or tile == MAP_TILE_BUILDING_ZONE then
 				local wx = (mx - half_w) * tile_size
 				local sx = wx + screen_ox
+				local grass_spr = get_grass_sprite(mx, my)
 				spr(grass_spr, sx, sy)
 			end
 		end
@@ -315,8 +353,6 @@ function draw_grass_from_map(world_x_offset, world_y_offset)
 	local half_w = map_w / 2
 	local half_h = map_h / 2
 
-	local grass_spr = SPRITES.GRASS.id
-
 	-- Calculate visible world bounds
 	local left_wx = cam_x - SCREEN_CX - tile_size
 	local top_wy = cam_y - SCREEN_CY - tile_size
@@ -333,7 +369,7 @@ function draw_grass_from_map(world_x_offset, world_y_offset)
 	local screen_ox = SCREEN_CX - cam_x
 	local screen_oy = SCREEN_CY - cam_y
 
-	-- Draw grass tiles in visible range
+	-- Draw grass tiles in visible range with deterministic variation
 	for my = my1, my2 do
 		local wy = (my - half_h) * tile_size
 		local sy = wy + screen_oy
@@ -343,6 +379,7 @@ function draw_grass_from_map(world_x_offset, world_y_offset)
 			if tile == MAP_TILE_GRASS or tile == MAP_TILE_BUILDING_ZONE then
 				local wx = (mx - half_w) * tile_size
 				local sx = wx + screen_ox
+				local grass_spr = get_grass_sprite(mx, my)
 				spr(grass_spr, sx, sy)
 			end
 		end

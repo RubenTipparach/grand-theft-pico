@@ -2,6 +2,46 @@
 -- config.lua - Game design configuration (sprites, buildings, tuning)
 
 -- ============================================
+-- COLOR PALETTE REFERENCE (thispallete.hex)
+-- ============================================
+-- Index  Hex       Name
+-- -----  ------    ----------------
+--  0     #000000   black
+--  1     #000000   black2 (duplicate)
+--  2     #753e1e   brown
+--  3     #472e3e   dark_purple
+--  4     #0d2140   dark_navy
+--  5     #243966   navy
+--  6     #791551   magenta
+--  7     #116061   teal
+--  8     #434445   dark_gray
+--  9     #6e4250   mauve
+--  10    #495169   slate
+--  11    #696570   gray
+--  12    #c40c2e   red
+--  13    #e9721d   orange
+--  14    #f53141   bright_red
+--  15    #875d58   dusty_brown
+--  16    #ad6a45   rust
+--  17    #9e7767   tan
+--  18    #ff7070   salmon
+--  19    #179c43   green
+--  20    #20806c   sea_green
+--  21    #faa032   gold
+--  22    #fad937   yellow
+--  23    #b58c7f   light_tan
+--  24    #3553a6   blue
+--  25    #1c75bd   sky_blue
+--  26    #5cb888   mint
+--  27    #76dca7   light_mint
+--  28    #25acf5   bright_blue
+--  29    #a69a9c   silver
+--  30    #d9a798   peach
+--  31    #c4bbb3   light_gray
+--  32    #ffc49e   light_peach
+--  33    #f2f2da   white
+
+-- ============================================
 -- SPRITE REGISTRY
 -- ============================================
 SPRITES = {
@@ -33,6 +73,11 @@ SPRITES = {
 	DIRT_HEAVY    = { id = 5, w = 16, h = 16 },
 	DIRT_LIGHT    = { id = 6, w = 16, h = 16 },
 	GRASS         = { id = 7, w = 16,  h = 16  },
+	GRASS_2       = { id = 134, w = 16, h = 16 },
+	GRASS_3       = { id = 230, w = 16, h = 16 },
+	GRASS_4       = { id = 231, w = 16, h = 16 },
+	GRASS_5       = { id = 238, w = 16, h = 16 },
+	GRASS_6       = { id = 239, w = 16, h = 16 },
 
 	-- Sidewalks (16x16)
 	SIDEWALK_NS   = { id = 132, w = 16, h = 16 },  -- north-south oriented
@@ -449,9 +494,11 @@ WEAPON_CONFIG = {
 			weapon_w = 8,
 			weapon_h = 8,
 			bullet_offset_x = 8, -- bullet spawn x offset (flipped for west)
-			bullet_offset_y = 0,  -- bullet spawn y offset
-			bullet_offset_n_x = 2,  -- bullet spawn x offset for north (mirrored for south)
-			bullet_offset_n_y = 12, -- bullet spawn y offset for north (negated for south)
+			bullet_offset_y = -1,  -- bullet spawn y offset
+			bullet_offset_n_x = -2,  -- bullet spawn x offset for north
+			bullet_offset_n_y = 12, -- bullet spawn y offset for north
+			bullet_offset_s_x = -1,  -- bullet spawn x offset for south
+			bullet_offset_s_y = 12, -- bullet spawn y offset for south
 		},
 		laser_pistol = {
 			name = "Laser Pistol",
@@ -466,10 +513,12 @@ WEAPON_CONFIG = {
 			weapon_sprite = 31,   -- gun sprite when held
 			weapon_w = 8,
 			weapon_h = 8,
-			bullet_offset_x = 6,
-			bullet_offset_y = -2,
-			bullet_offset_n_x = 2,
+			bullet_offset_x = 12,
+			bullet_offset_y = -1,
+			bullet_offset_n_x = -4,  -- centered on player for north
 			bullet_offset_n_y = 12,
+			bullet_offset_s_x = -2,  -- centered on player for south
+			bullet_offset_s_y = 12,
 		},
 		plasma_rifle = {
 			name = "Plasma Rifle",
@@ -484,10 +533,12 @@ WEAPON_CONFIG = {
 			weapon_sprite = 39,   -- gun sprite when held
 			weapon_w = 8,
 			weapon_h = 16,
-			bullet_offset_x = 6,
-			bullet_offset_y = -2,
-			bullet_offset_n_x = 0,
+			bullet_offset_x = 10,
+			bullet_offset_y = -4,
+			bullet_offset_n_x = -4,
 			bullet_offset_n_y = 14,
+			bullet_offset_s_x = 0,
+			bullet_offset_s_y = 14,
 		},
 		beam_cannon = {
 			name = "Beam Cannon",
@@ -504,9 +555,11 @@ WEAPON_CONFIG = {
 			weapon_w = 8,
 			weapon_h = 16,
 			bullet_offset_x = 16, -- beam spawn x offset
-			bullet_offset_y = 4,  -- beam spawn y offset
-			bullet_offset_n_x = 0,
+			bullet_offset_y = 2,  -- beam spawn y offset
+			bullet_offset_n_x = 1,
 			bullet_offset_n_y = 16,
+			bullet_offset_s_x = 3,
+			bullet_offset_s_y = 16,
 		},
 	},
 
@@ -671,7 +724,10 @@ GROUND_CONFIG = {
 -- DEBUG CONFIG
 -- ============================================
 DEBUG_CONFIG = {
-	enabled = true,  -- set to false to disable debug features
+	enabled = false,         -- set to false to disable debug features (FPS, profiler, etc.)
+	debug_weapons = true,    -- set to true to start with all weapons and 999 ammo
+	show_all_npcs = true,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
+	show_all_vehicles = true, -- set to true to show all vehicles on minimap and vehicle debug info
 }
 
 -- ============================================

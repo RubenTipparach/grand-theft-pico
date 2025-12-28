@@ -781,7 +781,7 @@ function draw_minimap()
 	end
 
 	-- Draw NPCs (and lovers in special color)
-	if cfg.show_npcs then
+	if cfg.show_npcs or DEBUG_CONFIG.show_all_npcs then
 		for _, npc in ipairs(npcs) do
 			local nx = mx + (npc.x / tile_size + half_map_w - px + half_mw)
 			local ny = my + (npc.y / tile_size + half_map_h - py + half_mh)
@@ -809,8 +809,8 @@ function draw_minimap()
 	for _, vehicle in ipairs(vehicles) do
 		if vehicle.state ~= "destroyed" then
 			local is_boat = vehicle.vtype.water_only
-			-- Check if this type should be shown
-			if (is_boat and cfg.show_boats) or (not is_boat and cfg.show_vehicles) then
+			-- Check if this type should be shown (debug flag shows all)
+			if DEBUG_CONFIG.show_all_vehicles or (is_boat and cfg.show_boats) or (not is_boat and cfg.show_vehicles) then
 				local vx = mx + (vehicle.x / tile_size + half_map_w - px + half_mw)
 				local vy = my + (vehicle.y / tile_size + half_map_h - py + half_mh)
 				if vx >= mx and vx <= mx + mw and vy >= my and vy <= my + mh then
@@ -968,8 +968,8 @@ function _init()
 	-- Spawn arms dealers
 	spawn_arms_dealers()
 
-	-- Debug mode: give player all weapons with ammo
-	if DEBUG_CONFIG.enabled then
+	-- Debug weapons: give player all weapons with ammo
+	if DEBUG_CONFIG.debug_weapons then
 		local p = game.player
 		p.weapons = {}
 		p.ammo = {}
@@ -1699,11 +1699,12 @@ function _draw()
 		-- Draw profiler output
 		profile.draw()
 
-		-- Draw vehicle-specific profiler stats
-		draw_vehicle_profiler()
-
 		-- Print profiler stats to console every 10 seconds
 		profile.printh_periodic()
 	end
+
+	-- Draw debug stats (independent of DEBUG_CONFIG.enabled)
+	draw_vehicle_profiler()
+	draw_npc_profiler()
 	profile("ui")
 end

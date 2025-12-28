@@ -300,6 +300,7 @@ end
 -- Process the respawn queue and clean up destroyed vehicles
 function process_vehicle_respawns(player_x, player_y)
 	local now = time()
+	local cfg = VEHICLE_CONFIG
 
 	-- Process respawn queue
 	local i = 1
@@ -325,6 +326,40 @@ function process_vehicle_respawns(player_x, player_y)
 			-- Don't increment i since we removed an element
 		else
 			i = i + 1
+		end
+	end
+
+	-- Maintain vehicle count: spawn new vehicles if below target
+	-- Count active vehicles (non-destroyed) and boats separately
+	local active_vehicles = 0
+	local active_boats = 0
+	for _, v in ipairs(vehicles) do
+		if v.state ~= "destroyed" then
+			if v.vtype.water_only then
+				active_boats = active_boats + 1
+			else
+				active_vehicles = active_vehicles + 1
+			end
+		end
+	end
+
+	-- Spawn road vehicles if below target
+	local road_types = { "truck", "van" }
+	while active_vehicles < cfg.max_vehicles do
+		local vtype_name = road_types[flr(rnd(#road_types)) + 1]
+		if spawn_replacement_vehicle(vtype_name, false, player_x, player_y) then
+			active_vehicles = active_vehicles + 1
+		else
+			break  -- couldn't find valid spawn point, try again next frame
+		end
+	end
+
+	-- Spawn boats if below target
+	while active_boats < cfg.max_boats do
+		if spawn_replacement_vehicle("boat", true, player_x, player_y) then
+			active_boats = active_boats + 1
+		else
+			break  -- couldn't find valid spawn point, try again next frame
 		end
 	end
 end
@@ -1203,6 +1238,18 @@ function update_vehicle_state(vehicle, dt)
 			game.player.health = max(0, game.player.health - cfg.explosion_player_damage)
 			player_vehicle = nil
 			vehicle.is_player_vehicle = false
+		elseif vehicle.has_driver and not vehicle.vtype.water_only then
+			-- AI vehicle with driver (not a boat) - eject NPC
+			-- Spawn a fleeing NPC at the vehicle position
+			local npc = spawn_single_npc(vehicle.x, vehicle.y)
+			if npc then
+				-- Make the NPC immediately flee
+				npc.state = "fleeing"
+				npc.state_end_time = time() + 5  -- flee for 5 seconds
+				npc.scare_player_x = vehicle.x
+				npc.scare_player_y = vehicle.y
+			end
+			vehicle.has_driver = false
 		end
 	end
 
@@ -1588,11 +1635,13 @@ end
 
 -- Draw vehicle profiler stats (for debugging)
 function draw_vehicle_profiler()
+	if not DEBUG_CONFIG.show_all_vehicles then return end
+
 	local stats = vehicle_profile_stats
 	local x, y = SCREEN_W - 100, 40
-	local color = 7  -- white
+	local color = 33
 
-	print_shadow("=== VEHICLES ===", x, y, 11)
+	print_shadow("== DEBUG VEHICLE ==", x, y, 11)
 	y = y + 10
 	print_shadow("total: " .. stats.total_vehicles, x, y, color)
 	y = y + 8

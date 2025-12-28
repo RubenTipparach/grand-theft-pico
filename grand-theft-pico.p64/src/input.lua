@@ -110,6 +110,10 @@ function handle_input()
 	-- Smooth interpolation towards target
 	cam_x = cam_x + (target_x - cam_x) * smooth
 	cam_y = cam_y + (target_y - cam_y) * smooth
+
+	-- Round camera to integers to eliminate sub-pixel jitter
+	cam_x = flr(cam_x + 0.5)
+	cam_y = flr(cam_y + 0.5)
 end
 
 -- Get current player sprite based on facing direction and walk frame

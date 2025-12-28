@@ -294,7 +294,7 @@ end
 
 -- Check projectile collision with entities
 function check_projectile_collision(proj)
-	-- Player projectiles can hit: dealers (hostile), enemies
+	-- Player projectiles can hit: dealers (hostile), enemies, vehicles
 	-- Dealer/enemy projectiles can hit: player
 	-- All projectiles can hit NPCs (no damage, but popularity loss)
 
@@ -310,6 +310,25 @@ function check_projectile_collision(proj)
 						-- Hit dealer - damage and make hostile
 						dealer.health = dealer.health - proj.damage
 						make_dealer_hostile(dealer)
+						return true
+					end
+				end
+			end
+		end
+
+		-- Check collision with vehicles (exclude boats and player's vehicle)
+		if vehicles then
+			for _, vehicle in ipairs(vehicles) do
+				if vehicle.state ~= "destroyed" and vehicle.state ~= "exploding"
+				   and not vehicle.is_player_vehicle
+				   and not vehicle.vtype.water_only then
+					local vw = vehicle.vtype.w / 2
+					local vh = vehicle.vtype.h / 2
+					local dx = abs(proj.x - vehicle.x)
+					local dy = abs(proj.y - vehicle.y)
+					if dx < vw and dy < vh then
+						-- Hit vehicle - apply damage
+						vehicle.health = vehicle.health - proj.damage
 						return true
 					end
 				end
@@ -529,8 +548,10 @@ function try_attack()
 		local spawn_y = p.y
 		local offset_x = weapon.bullet_offset_x or 0
 		local offset_y = weapon.bullet_offset_y or 0
-		local offset_n_x = weapon.bullet_offset_n_x or offset_y  -- fallback to swapped E/W offsets
+		local offset_n_x = weapon.bullet_offset_n_x or 0
 		local offset_n_y = weapon.bullet_offset_n_y or offset_x
+		local offset_s_x = weapon.bullet_offset_s_x or 0
+		local offset_s_y = weapon.bullet_offset_s_y or offset_x
 
 		-- Apply offset based on facing direction
 		local dir = p.facing_dir or "east"
@@ -544,8 +565,8 @@ function try_attack()
 			spawn_x = spawn_x + offset_n_x
 			spawn_y = spawn_y - offset_n_y
 		elseif dir == "south" then
-			spawn_x = spawn_x + offset_n_x
-			spawn_y = spawn_y + offset_n_y
+			spawn_x = spawn_x + offset_s_x
+			spawn_y = spawn_y + offset_s_y
 		end
 
 		-- Check if beam weapon
