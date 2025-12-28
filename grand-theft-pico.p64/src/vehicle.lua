@@ -33,9 +33,15 @@ local vehicle_exit_cooldown = 0
 -- Respawn queue for destroyed vehicles (list of {respawn_time, vehicle_type, is_boat})
 local vehicle_respawn_queue = {}
 
--- Collision effects (visual feedback when hitting cars)
+-- Collision effects (visual feedback when hitting cars/bullets)
 -- Each entry: {x, y, end_time}
-local collision_effects = {}
+collision_effects = {}  -- global so weapon.lua can add effects
+
+-- Add a collision effect at the given world position
+function add_collision_effect(x, y, duration)
+	duration = duration or 0.5
+	add(collision_effects, { x = x, y = y, end_time = time() + duration })
+end
 
 -- Check if a vehicle at position collides with any building
 -- Uses raw building footprint (no perspective offset - that's just visual)
@@ -1530,10 +1536,13 @@ function update_vehicles()
 
 	-- Check for vehicle stealing (with cooldown after exiting)
 	-- Use input_utils for proper single-press detection (same key as exit)
+	-- Don't allow stealing while in dialog or shop
 	if not player_vehicle and time() > vehicle_exit_cooldown then
-		local nearby = get_nearest_stealable_vehicle(game.player.x, game.player.y)
-		if nearby and input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
-			steal_vehicle(nearby)
+		if not (dialog and dialog.active) and not (shop and shop.active) then
+			local nearby = get_nearest_stealable_vehicle(game.player.x, game.player.y)
+			if nearby and input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
+				steal_vehicle(nearby)
+			end
 		end
 	end
 end

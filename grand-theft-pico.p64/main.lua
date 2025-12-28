@@ -59,6 +59,8 @@ include("src/npc.lua")
 include("src/vehicle.lua")
 include("src/weapon.lua")
 include("src/dealer.lua")
+include("src/fox.lua")
+include("src/quest.lua")
 
 -- Load input utilities module (for single-press detection)
 input_utils = require("src/input_utils")
@@ -147,7 +149,11 @@ dialog = {
 	phase = "choose",    -- "choose" = picking line, "result" = showing result
 	result_text = "",    -- text to show after choosing
 	result_timer = 0,    -- time until dialog closes
+	close_cooldown = 0,  -- prevents weapon firing right after closing dialog
 }
+
+-- NOTE: Quest system (mission, quest_complete_visual, and all quest functions)
+-- has been moved to src/quest.lua
 
 -- Popularity change display (shows +/- text near bar)
 popularity_change = {
@@ -186,6 +192,16 @@ end
 player_dead = false
 death_timer = 0
 death_fade = 0  -- 0-1 for fade effect
+
+-- Player hit flash state (show sprite 11 when hit)
+player_hit_flash = 0  -- end time for hit flash
+player_hit_sprite = 11  -- sprite to show when hit
+player_death_sprite = 36  -- sprite to show when dead
+
+-- Trigger player hit flash (call when player takes damage)
+function trigger_player_hit_flash()
+	player_hit_flash = time() + 0.15  -- show hit sprite for 0.15 seconds
+end
 
 -- Handle player death
 function handle_player_death()
@@ -228,29 +244,41 @@ function handle_player_death()
 	end
 end
 
+-- Death sequence darken colors (similar to night transition)
+death_darken_sequence = { 33, 30, 20, 25, 11, 1 }  -- progressively darker, ends at black
+death_darken_index = 0
+
 -- Update death sequence
+-- Timeline: 0-1s show death sprite + text, 1-4s darken screen, 4-5s fade back in
 function update_death()
 	if not player_dead then
 		-- Check if player should die
 		if game.player.health <= 0 then
 			handle_player_death()
+			death_darken_index = 0  -- reset darken index
 		end
 		return
 	end
 
 	local elapsed = time() - death_timer
 
-	-- Fade to black over 1 second
+	-- Phase 1 (0-1s): Show death sprite and "DEEP FRIED" text, no darkening yet
 	if elapsed < 1 then
-		death_fade = elapsed
-	-- Show "WASTED" for 1 second
-	elseif elapsed < 2 then
-		death_fade = 1
-	-- Fade back in over 1 second
-	elseif elapsed < 3 then
-		death_fade = 1 - (elapsed - 2)
+		death_fade = 0
+		death_darken_index = 0
+	-- Phase 2 (1-4s): Progressively darken screen using night-style transition
+	elseif elapsed < 4 then
+		-- Map elapsed 1-4 to darken index 1-6
+		local progress = (elapsed - 1) / 3  -- 0 to 1
+		death_darken_index = flr(progress * #death_darken_sequence) + 1
+		death_darken_index = min(death_darken_index, #death_darken_sequence)
+		death_fade = progress  -- for additional overlay if needed
+	-- Phase 3 (4-5s): Hold at full dark, then respawn and fade back in
+	elseif elapsed < 5 then
+		death_fade = 1 - (elapsed - 4)  -- fade from 1 to 0
+		death_darken_index = flr((1 - (elapsed - 4)) * #death_darken_sequence)
 		-- Respawn player at start position (once, at start of fade-in)
-		if elapsed < 2.1 then
+		if elapsed < 4.1 then
 			game.player.x = 0
 			game.player.y = 0
 			game.player.health = PLAYER_CONFIG.max_health
@@ -261,32 +289,33 @@ function update_death()
 		-- Death sequence complete
 		player_dead = false
 		death_fade = 0
+		death_darken_index = 0
 	end
 end
 
--- Draw death overlay
+-- Draw death overlay using color table (like night mode transition)
 function draw_death_overlay()
-	if not player_dead and death_fade <= 0 then return end
+	if not player_dead and death_fade <= 0 and death_darken_index <= 0 then return end
 
-	-- Draw black overlay with fade
-	local alpha = flr(death_fade * 255)
-	if alpha > 0 then
-		-- Use dark color for fade effect
-		for y = 0, SCREEN_H - 1, 4 do
-			for x = 0, SCREEN_W - 1, 4 do
-				if rnd(255) < alpha then
-					rectfill(x, y, x + 3, y + 3, 0)
-				end
-			end
-		end
+	local elapsed = time() - death_timer
+
+	-- Draw darkening overlay using color table (same technique as night mode)
+	if death_darken_index > 0 and death_darken_index <= #death_darken_sequence then
+		local darken_color = death_darken_sequence[death_darken_index]
+		-- Enable color table and draw full screen rect with darken color
+		local coltab_sprite = get_spr(shadow_coltab_mode)
+		memmap(0x8000, coltab_sprite)
+		poke(0x550b, 0x3f)  -- enable color table
+		rectfill(0, 0, SCREEN_W - 1, SCREEN_H - 1, darken_color)
+		unmap(coltab_sprite)
+		poke(0x550b, 0x00)  -- disable color table
 	end
 
-	-- Show "WASTED" text
-	local elapsed = time() - death_timer
-	if elapsed > 1 and elapsed < 2.5 then
-		local text = "WASTED"
+	-- Show "DEEP FRIED" text immediately and throughout most of death sequence
+	if elapsed < 4 then
+		local text = "DEEP FRIED"
 		local tw = #text * 8  -- Larger font assumption
-		print_shadow(text, (SCREEN_W - tw) / 2, SCREEN_H / 2 - 8, 8)
+		print_shadow(text, (SCREEN_W - tw) / 2, SCREEN_H / 2 - 8, 12)  -- red (color 12)
 
 		-- Show what was lost
 		local loss_text = "Lost money and popularity"
@@ -833,6 +862,47 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw foxes on minimap (quest enemies - always visible, clamped to edge if far)
+	if foxes_spawned and mission.current_quest == "protect_city" then
+		for _, fox in ipairs(foxes) do
+			if fox.state ~= "dead" then
+				local fx = mx + (fox.x / tile_size + half_map_w - px + half_mw)
+				local fy = my + (fox.y / tile_size + half_map_h - py + half_mh)
+
+				-- Clamp fox position to minimap edge if outside bounds
+				local margin = 2  -- keep a small margin from edge
+				local clamped = false
+				if fx < mx + margin then
+					fx = mx + margin
+					clamped = true
+				elseif fx > mx + mw - margin then
+					fx = mx + mw - margin
+					clamped = true
+				end
+				if fy < my + margin then
+					fy = my + margin
+					clamped = true
+				elseif fy > my + mh - margin then
+					fy = my + mh - margin
+					clamped = true
+				end
+
+				-- Draw fox marker (smaller if clamped/far away)
+				local fox_color = FOX_CONFIG.minimap_color
+				if clamped then
+					-- Draw as blinking triangle pointing toward fox when clamped
+					local blink = flr(time() * 3) % 2 == 0
+					if blink then
+						pset(fx, fy, fox_color)
+					end
+				else
+					-- Draw normally when on screen
+					circfill(fx, fy, FOX_CONFIG.minimap_size, fox_color)
+				end
+			end
+		end
+	end
+
 	-- Draw player (center of minimap)
 	if cfg.show_player then
 		local player_mx = mx + half_mw
@@ -984,6 +1054,19 @@ function _init()
 		printh("Debug: gave player all weapons")
 	end
 
+	-- Debug: skip to quest immediately
+	if DEBUG_CONFIG.skip_to_quest then
+		mission.fox_quest_offered = true
+		mission.fox_quest_accepted = true
+		start_quest("protect_city")
+		spawn_foxes()
+		printh("Debug: started fox quest immediately")
+	else
+		-- Start with the intro quest (meet 5 people, then talk to dealer)
+		start_quest("intro")
+		-- Note: intro NPC will be spawned when player meets 5th person (see npc.lua)
+	end
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -1023,6 +1106,9 @@ function _update()
 	update_arms_dealers()
 	update_shop()
 	check_dealer_interaction()
+
+	-- Update foxes (if quest active)
+	update_foxes()
 
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
@@ -1066,6 +1152,22 @@ function _update()
 
 	-- Update death sequence (checks for player death, handles respawn)
 	update_death()
+
+	-- Update quest objectives
+	update_quests()
+end
+
+-- Update quest system
+function update_quests()
+	-- Update quest completion visual (handles linger time and advancing)
+	update_quest_complete_visual()
+
+	if not mission.current_quest then return end
+
+	-- Check quest completion periodically
+	check_quest_completion()
+
+	-- Quest advancement is now handled by update_quest_complete_visual after linger time
 end
 
 -- Update nearby entity cache (called once per frame)
@@ -1188,6 +1290,73 @@ function draw_lover_count()
 	print_shadow("x" .. count, x + 10, y, cfg.popularity_color)
 end
 
+-- Draw quest HUD (current objectives)
+function draw_quest_hud()
+	if not mission.current_quest then return end
+
+	-- Position in top-right area, below weapon HUD
+	local x = SCREEN_W - 180
+	local y = 32
+
+	-- Draw quest name
+	local quest_name = get_quest_name(mission.current_quest)
+	print_shadow(quest_name, x, y, 22)  -- yellow for quest title
+	y = y + 10
+
+	-- Draw objectives
+	local objectives = get_quest_objectives()
+	for _, obj in ipairs(objectives) do
+		-- Check if complete (starts with [X])
+		local color = 33  -- white default
+		local display_obj = obj
+		if sub(obj, 1, 3) == "[X]" then
+			color = 19  -- green for complete
+			-- If quest is complete, make the X blink
+			if quest_complete_visual.active then
+				local blink = flr(time() * 4) % 2 == 0
+				if blink then
+					-- Replace [X] with [ ] to create blink effect
+					display_obj = "[ ]" .. sub(obj, 4)
+				end
+			end
+		end
+		print_shadow(display_obj, x, y, color)
+		y = y + 10
+	end
+end
+
+-- Draw big quest completed text in center of screen
+function draw_quest_complete_banner()
+	if not quest_complete_visual.active then return end
+
+	local elapsed = time() - quest_complete_visual.start_time
+
+	-- Blink the text for first 3 seconds, then stay solid
+	local show_text = true
+	if elapsed < 3 then
+		show_text = flr(time() * 3) % 2 == 0
+	end
+
+	if show_text then
+		local text = "QUEST COMPLETED"
+		-- Center the text on screen
+		local text_width = #text * 8  -- approximate width (8 pixels per char for large text)
+		local cx = (SCREEN_W - text_width) / 2
+		local cy = SCREEN_H / 2 - 20
+
+		-- Draw with shadow for visibility
+		-- Large text effect: draw each char scaled or use print with offset
+		print_shadow(text, cx + 1, cy + 1, 1)   -- shadow
+		print_shadow(text, cx, cy, 22)          -- yellow text
+
+		-- Show completed quest name below
+		local name = quest_complete_visual.completed_quest_name
+		local name_width = #name * 4
+		local nx = (SCREEN_W - name_width) / 2
+		print_shadow(name, nx, cy + 14, 33)  -- white
+	end
+end
+
 -- Draw player money display
 function draw_money()
 	local cfg = PLAYER_CONFIG
@@ -1244,9 +1413,33 @@ function start_dialog(npc, fan_data)
 	-- Build options based on fan/lover status
 	dialog.options = {}
 
+	-- Check if this is the intro NPC
+	printh("start_dialog: is_intro_npc=" .. tostring(npc.is_intro_npc) .. " quest=" .. tostring(mission.current_quest) .. " talked=" .. tostring(mission.talked_to_dealer))
+	if npc.is_intro_npc and mission.current_quest == "intro" and not mission.talked_to_dealer then
+		printh("Setting up intro dialog!")
+		dialog.phase = "quest"
+		dialog.quest_text = "Hey, you're new around here! Welcome to the city! If you want to survive, you should talk to an arms dealer first. Look for Doug or Bill - they sell weapons. Check your minimap for their location!"
+		add(dialog.options, { text = "Thanks for the tip!", action = "accept_intro" })
+		add(dialog.options, { text = "I'll figure it out myself.", action = "decline_intro" })
+		return
+	end
+
+	-- Check if this is the quest giver NPC (5th fan with fox quest) - legacy support
+	if npc.is_quest_giver and not mission.fox_quest_offered then
+		dialog.phase = "quest"
+		dialog.quest_text = "Help! Monsters have been spotted outside the city! Please protect us from the foxes! You should buy a weapon from Doug or Bill - they're arms dealers somewhere in the city."
+		add(dialog.options, { text = "I'll help!", action = "accept_quest" })
+		add(dialog.options, { text = "Not now...", action = "decline_quest" })
+		return
+	end
+
 	if fan_data.is_lover then
 		-- Lovers always have heal option
 		add(dialog.options, { text = "Heal me!", action = "heal" })
+		-- If on "Find Missions" quest, add option to talk about troubles
+		if mission.current_quest == "find_missions" and not mission.talked_to_lover then
+			add(dialog.options, { text = "What troubles you?", action = "ask_troubles" })
+		end
 		add(dialog.options, { text = "Nevermind", action = "cancel" })
 	else
 		-- Non-lovers get flirting options based on archetype
@@ -1316,12 +1509,61 @@ function select_dialog_option()
 		return
 	end
 
+	-- Intro dialog actions
+	if opt.action == "accept_intro" then
+		dialog.phase = "result"
+		dialog.result_text = "Good luck out there! The dealers are marked on your minimap."
+		dialog.result_timer = time() + 1.5
+		-- Mark intro NPC as done with intro dialog
+		dialog.npc.is_intro_npc = false
+		return
+	end
+
+	if opt.action == "decline_intro" then
+		dialog.phase = "result"
+		dialog.result_text = "Suit yourself! But seriously, get a weapon soon."
+		dialog.result_timer = time() + 1.5
+		dialog.npc.is_intro_npc = false
+		return
+	end
+
+	-- Quest actions (legacy fox quest)
+	if opt.action == "accept_quest" then
+		mission.fox_quest_offered = true
+		mission.fox_quest_accepted = true
+		dialog.npc.is_quest_giver = false  -- no longer shows quest dialog
+		dialog.phase = "result"
+		dialog.result_text = "Thank you! Be careful out there!"
+		dialog.result_timer = time() + 1.5
+		-- Start the first quest and spawn foxes
+		start_quest("protect_city")
+		spawn_foxes()
+		return
+	end
+
+	if opt.action == "decline_quest" then
+		-- Player declined, but quest can be offered again later
+		dialog.phase = "result"
+		dialog.result_text = "Please reconsider... we need your help!"
+		dialog.result_timer = time() + 1.5
+		return
+	end
+
 	if opt.action == "heal" then
 		-- Heal the player
 		game.player.health = min(PLAYER_CONFIG.max_health, game.player.health + PLAYER_CONFIG.heal_amount)
 		dialog.phase = "result"
 		dialog.result_text = "You feel better! +" .. PLAYER_CONFIG.heal_amount .. " HP"
 		dialog.result_timer = time() + 1.5
+		return
+	end
+
+	if opt.action == "ask_troubles" then
+		-- Complete the "Find Missions" quest objective
+		mission.talked_to_lover = true
+		dialog.phase = "result"
+		dialog.result_text = "I've heard rumors of more monsters appearing... Come back after you've dealt with them and I'll tell you more!"
+		dialog.result_timer = time() + 2.5
 		return
 	end
 
@@ -1423,9 +1665,11 @@ function update_dialog()
 		select_dialog_option()
 	end
 
-	-- Cancel with O key
+	-- Cancel with O key (Z button)
 	if btnp(4) then
+		if dialog.npc then dialog.npc.in_dialog = false end
 		dialog.active = false
+		dialog.close_cooldown = time() + 0.1  -- prevent weapon fire for 0.1s
 	end
 end
 
@@ -1479,6 +1723,19 @@ function draw_dialog()
 		if dialog.love_gained and dialog.love_gained > 0 then
 			content_height = content_height + 14  -- extra line for love gain
 		end
+	elseif dialog.phase == "quest" then
+		-- Quest phase: show quest text + options
+		local quest_lines = wrap_text(dialog.quest_text or "", max_chars)
+		content_height = #quest_lines * line_h + 16  -- quest text + spacing
+		-- Add height for options
+		for i, opt in ipairs(dialog.options) do
+			local prefix = (i == dialog.selected) and "> " or "  "
+			local text = prefix .. opt.text
+			local lines = wrap_text(text, max_chars)
+			wrapped_options[i] = lines
+			content_height = content_height + #lines * line_h + 4
+		end
+		content_height = content_height + 12  -- extra padding
 	else
 		-- Choose phase: calculate height for all options with wrapping
 		for i, opt in ipairs(dialog.options) do
@@ -1491,8 +1748,8 @@ function draw_dialog()
 		content_height = content_height + 22  -- padding for love bar area
 	end
 
-	-- Add space for love bar if showing
-	if dialog.fan_data and not dialog.fan_data.is_lover then
+	-- Add space for love bar if showing (not during quest phase)
+	if dialog.fan_data and not dialog.fan_data.is_lover and dialog.phase ~= "quest" then
 		content_height = content_height + 16
 	end
 
@@ -1503,9 +1760,9 @@ function draw_dialog()
 	rectfill(x, y, x + w, y + h, cfg.dialog_bg_color)
 	rect(x, y, x + w, y + h, cfg.dialog_border_color)
 
-	-- Always show love meter at the top if flirting (not a lover yet)
+	-- Show love meter at the top if flirting (not a lover yet, not quest phase)
 	local content_start_y = y + 8
-	if dialog.fan_data and not dialog.fan_data.is_lover then
+	if dialog.fan_data and not dialog.fan_data.is_lover and dialog.phase ~= "quest" then
 		local love_pct = dialog.fan_data.love / cfg.love_meter_max
 		local bar_w = w - 16
 		local bar_x = x + 8
@@ -1547,6 +1804,35 @@ function draw_dialog()
 			local ltw = #love_text * 4
 			print(love_text, x + (w - ltw) / 2, result_y + 4, cfg.love_gain_color)
 		end
+	elseif dialog.phase == "quest" then
+		-- Show quest text first, then options below
+		local oy = y + 8
+		local quest_lines = wrap_text(dialog.quest_text or "", max_chars)
+
+		-- Draw quest text in yellow
+		for _, line in ipairs(quest_lines) do
+			print(line, x + 8, oy, 22)  -- yellow for quest text
+			oy = oy + line_h
+		end
+
+		oy = oy + 8  -- gap between quest text and options
+
+		-- Draw options
+		for i, opt in ipairs(dialog.options) do
+			local col = (i == dialog.selected) and cfg.dialog_selected_color or cfg.dialog_option_color
+			local prefix = (i == dialog.selected) and "> " or "  "
+			local text = prefix .. opt.text
+			local lines = wrap_text(text, max_chars)
+
+			for j, line in ipairs(lines) do
+				if j > 1 then
+					line = "  " .. line
+				end
+				print(line, x + 8, oy, col)
+				oy = oy + line_h
+			end
+			oy = oy + 2
+		end
 	else
 		-- Show options with text wrapping
 		local oy = content_start_y
@@ -1567,6 +1853,11 @@ function draw_dialog()
 			oy = oy + 2  -- small gap between options
 		end
 	end
+
+	-- Show [Z] Quit indicator in bottom right corner
+	local quit_text = "[Z] Quit"
+	local quit_w = #quit_text * 4
+	print_shadow(quit_text, x + w - quit_w - 6, y + h - 10, 6)
 end
 
 -- Check for fan interaction (E key near fan)
@@ -1667,9 +1958,16 @@ function _draw()
 	-- Draw weapon HUD (equipped weapon and ammo)
 	draw_weapon_hud()
 
+	-- Draw quest HUD (current objectives)
+	draw_quest_hud()
+
+	-- Draw quest completed banner (big center text)
+	draw_quest_complete_banner()
+
 	-- Draw dealer prompt and boss health bar
 	draw_dealer_prompt()
 	draw_boss_health_bar()
+	draw_defeat_message()
 
 	-- Draw dialog box (if talking to fan)
 	draw_dialog()

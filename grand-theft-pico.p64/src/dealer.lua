@@ -19,6 +19,13 @@ shop = {
 	message_timer = 0,
 }
 
+-- Defeat message state
+defeat_message = {
+	active = false,
+	text = "",
+	end_time = 0,
+}
+
 -- ============================================
 -- DEALER CREATION AND SPAWNING
 -- ============================================
@@ -44,6 +51,9 @@ function create_arms_dealer(x, y, name)
 		death_time = 0,       -- When died (for respawn)
 		spawn_x = x,          -- Original spawn position
 		spawn_y = y,
+		hit_flash = 0,        -- Timer for damage flash visual
+		damaged_frame = 0,    -- Current frame of damaged animation
+		damaged_anim_timer = 0, -- Timer for damaged animation
 	}
 
 	add(arms_dealers, dealer)
@@ -122,6 +132,15 @@ function update_arms_dealers()
 		if dealer.health <= 0 and dealer.state ~= "dead" then
 			dealer.state = "dead"
 			dealer.death_time = now
+			-- Spawn big explosion at dealer position
+			add_collision_effect(dealer.x, dealer.y, 1.0)  -- Longer duration
+			add_collision_effect(dealer.x - 8, dealer.y - 8, 0.8)
+			add_collision_effect(dealer.x + 8, dealer.y - 8, 0.9)
+			add_collision_effect(dealer.x, dealer.y + 8, 0.7)
+			-- Show defeat message
+			defeat_message.active = true
+			defeat_message.text = dealer.name .. " ARMS DEALER DEFEATED"
+			defeat_message.end_time = now + 3.0  -- Show for 3 seconds
 		end
 	end
 end
@@ -176,18 +195,22 @@ function update_hostile_dealer(dealer, now)
 	local cfg = ARMS_DEALER_CONFIG
 	local p = game.player
 
-	-- Chase player
+	-- Calculate distance to player
 	local dx = p.x - dealer.x
 	local dy = p.y - dealer.y
 	local dist = sqrt(dx * dx + dy * dy)
 
-	if dist > 0 then
-		-- Normalize and move
+	-- Only chase if player is farther than target distance
+	local target_dist = cfg.target_distance or 150
+	if dist > target_dist then
+		-- Normalize and move toward player
 		local speed = cfg.chase_speed / 60
 		dealer.x = dealer.x + (dx / dist) * speed
 		dealer.y = dealer.y + (dy / dist) * speed
+	end
 
-		-- Update facing direction
+	-- Always update facing direction toward player
+	if dist > 0 then
 		dealer.facing_right = dx >= 0
 	end
 
@@ -208,9 +231,14 @@ function fire_dealer_bullet(dealer)
 	local cfg = ARMS_DEALER_CONFIG
 	local p = game.player
 
+	-- Calculate dealer center (sprite is drawn with feet at dealer.y, center is half sprite height up)
+	local dst_size = cfg.sprite_size * cfg.sprite_scale  -- 32 * 0.5 = 16
+	local dealer_center_x = dealer.x
+	local dealer_center_y = dealer.y - dst_size / 2  -- center of sprite (8 pixels up from feet)
+
 	-- Calculate direction to player
-	local dx = p.x - dealer.x
-	local dy = p.y - dealer.y
+	local dx = p.x - dealer_center_x
+	local dy = p.y - dealer_center_y
 	local dist = sqrt(dx * dx + dy * dy)
 
 	if dist <= 0 then return end
@@ -219,19 +247,20 @@ function fire_dealer_bullet(dealer)
 	dx = dx / dist
 	dy = dy / dist
 
-	-- Create projectile
+	-- Create projectile (use bullet sprites directly from 0.gfx: 110/111)
+	local bullet_sprite = cfg.bullet_sprites[1]  -- 110
 	local proj = {
-		x = dealer.x,
-		y = dealer.y,
+		x = dealer_center_x,
+		y = dealer_center_y,
 		dx = dx,
 		dy = dy,
 		speed = 200,  -- Dealer bullet speed
 		damage = cfg.damage,
 		owner = dealer,  -- Not "player"
-		sprite = cfg.sprite_base + cfg.bullet_sprites[1],
+		sprite = bullet_sprite,
 		sprite_frames = {
-			cfg.sprite_base + cfg.bullet_sprites[1],
-			cfg.sprite_base + cfg.bullet_sprites[2],
+			cfg.bullet_sprites[1],  -- 110
+			cfg.bullet_sprites[2],  -- 111
 		},
 		frame_index = 1,
 		frame_timer = 0,
@@ -244,6 +273,19 @@ end
 -- Update dealer animation
 function update_dealer_animation(dealer, now)
 	local cfg = ARMS_DEALER_CONFIG
+
+	-- Update damaged animation if currently flashing from hit
+	if dealer.hit_flash and now < dealer.hit_flash then
+		-- Animate through damaged frames quickly
+		if now >= dealer.damaged_anim_timer + 0.03 then  -- Fast animation
+			dealer.damaged_anim_timer = now
+			dealer.damaged_frame = dealer.damaged_frame + 1
+			if dealer.damaged_frame >= cfg.damaged_frames then
+				dealer.damaged_frame = 0
+			end
+		end
+		return  -- Skip normal animation while showing damage
+	end
 
 	-- Determine animation speed and max frames based on state
 	local anim_speed, max_frames
@@ -276,8 +318,13 @@ function get_dealer_sprite(dealer)
 	local base = cfg.sprite_base
 
 	if dealer.state == "dead" then
-		-- Show damaged sprite
+		-- Show damaged sprite (static)
 		return base + cfg.damaged_start
+	elseif dealer.hit_flash and time() < dealer.hit_flash then
+		-- Show damaged animation when taking damage
+		-- Use damaged_frame for animation (0 to damaged_frames-1)
+		local frame = dealer.damaged_frame or 0
+		return base + cfg.damaged_start + frame
 	elseif dealer.state == "walking" or dealer.state == "hostile" then
 		return base + cfg.walk_start + dealer.walk_frame
 	else
@@ -323,9 +370,12 @@ function draw_dealer(dealer, sx, sy)
 	local sprite = get_spr(sprite_id)
 
 	-- Draw scaled sprite centered horizontally, with feet at sy
+	-- The sprite has some padding at bottom, so offset upward less to bring feet to ground
 	-- sspr(sprite_userdata, src_x, src_y, src_w, src_h, dst_x, dst_y, dst_w, dst_h, flip_x)
+	local draw_x = sx - dst_size / 2
+	local draw_y = sy - dst_size + 4  -- +4 to lower sprite so feet touch ground
 	sspr(sprite, 0, 0, src_size, src_size,
-		sx - dst_size / 2, sy - dst_size,
+		draw_x, draw_y,
 		dst_size, dst_size, flip_x)
 end
 
@@ -344,30 +394,58 @@ function draw_boss_health_bar()
 
 	local cfg = ARMS_DEALER_CONFIG
 
-	-- Draw at top center of screen
+	-- Draw at top center of screen (moved down from y=8)
 	local bar_w = 120
 	local bar_h = 8
 	local bar_x = (SCREEN_W - bar_w) / 2
-	local bar_y = 8
+	local bar_y = 24  -- moved down
 
-	-- Draw name
+	-- Draw name in red (color 12 = red)
 	local name = "Arms Dealer " .. hostile_dealer.name
 	local name_w = #name * 4
-	print_shadow(name, (SCREEN_W - name_w) / 2, bar_y - 10, 8)
+	print_shadow(name, (SCREEN_W - name_w) / 2, bar_y - 10, 12)
 
 	-- Health percentage
 	local health_pct = hostile_dealer.health / hostile_dealer.max_health
 	health_pct = max(0, min(1, health_pct))
 	local fill_w = flr(bar_w * health_pct)
 
-	-- Draw border
-	rect(bar_x - 1, bar_y - 1, bar_x + bar_w, bar_y + bar_h, 6)
-	-- Draw background
+	-- Draw border (red, color 12)
+	rect(bar_x - 1, bar_y - 1, bar_x + bar_w, bar_y + bar_h, 12)
+	-- Draw background (dark, color 1)
 	rectfill(bar_x, bar_y, bar_x + bar_w - 1, bar_y + bar_h - 1, 1)
-	-- Draw health fill (red for boss)
+	-- Draw health fill (bright red, color 14)
 	if fill_w > 0 then
-		rectfill(bar_x, bar_y, bar_x + fill_w - 1, bar_y + bar_h - 1, 8)
+		rectfill(bar_x, bar_y, bar_x + fill_w - 1, bar_y + bar_h - 1, 14)
 	end
+end
+
+-- Draw defeat message when dealer is killed
+function draw_defeat_message()
+	if not defeat_message.active then return end
+
+	local now = time()
+	if now >= defeat_message.end_time then
+		defeat_message.active = false
+		return
+	end
+
+	-- Calculate fade/pulse effect
+	local time_left = defeat_message.end_time - now
+	local alpha = min(1, time_left / 0.5)  -- Fade out in last 0.5 seconds
+
+	-- Draw big centered text
+	local text = defeat_message.text
+	local text_w = #text * 4
+	local text_x = (SCREEN_W - text_w) / 2
+	local text_y = SCREEN_H / 2 - 20
+
+	-- Pulsing effect
+	local pulse = sin(now * 4) * 0.5 + 0.5
+	local color = pulse > 0.5 and 14 or 12  -- Alternate bright_red and red
+
+	-- Draw with shadow for visibility
+	print_shadow(text, text_x, text_y, color)
 end
 
 -- ============================================
@@ -415,6 +493,12 @@ function open_shop(dealer)
 	shop.ammo_quantity = 1
 	shop.scroll_offset = 0
 	shop.message = nil
+
+	-- Mark intro quest objective as complete
+	if mission.current_quest == "intro" and not mission.talked_to_dealer then
+		mission.talked_to_dealer = true
+		printh("Talked to arms dealer - intro quest objective complete!")
+	end
 end
 
 -- Close shop

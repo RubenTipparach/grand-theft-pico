@@ -588,11 +588,12 @@ WEAPON_CONFIG = {
 -- ============================================
 ARMS_DEALER_CONFIG = {
 	names = { "Doug", "Bill" },
-	health = 200,
-	damage = 25,              -- damage per bullet to player
+	health = 1000,
+	damage = 25,               -- damage per bullet to player (reduced from 25)
 	fire_rate = 0.8,          -- seconds between shots
 	chase_speed = 40,         -- pixels per second when hostile
 	walk_speed = 15,          -- pixels per second when peaceful
+	target_distance = 150,    -- stop chasing when within this distance of player
 	respawn_time = 30,        -- seconds after death to respawn
 	minimap_color = 16,       -- always visible on minimap
 	minimap_size = 1,         -- radius of dealer marker on minimap
@@ -610,7 +611,7 @@ ARMS_DEALER_CONFIG = {
 	idle_start = 0,
 	walk_start = 16,
 	damaged_start = 32,
-	bullet_sprites = { 110, 111 },  -- relative to sprite_base
+	bullet_sprites = { 110, 111 },  --  ITS ON THE SPRITE BASE
 
 	-- Interaction
 	interact_distance = 24,   -- distance to show shop prompt
@@ -618,6 +619,41 @@ ARMS_DEALER_CONFIG = {
 	-- Rendering
 	sprite_scale = 0.5,       -- scale factor for dealer sprites (0.5 = 50%)
 	sprite_size = 32,         -- original sprite size (32x32)
+}
+
+-- ============================================
+-- FOX ENEMY CONFIG
+-- ============================================
+FOX_CONFIG = {
+	names = { "Rusty", "Sly", "Ember", "Shadow", "Blaze", "Fang", "Copper", "Ash" },
+	health = 200,
+	damage = 10,              -- damage per bullet to player
+	fire_rate = 1.0,          -- seconds between shots
+	chase_speed = 60,         -- pixels per second when chasing (faster than dealer)
+	wander_speed = 20,        -- pixels per second when wandering
+	target_distance = 100,    -- stop and shoot when within this distance of player
+	aggro_distance = 200,     -- distance at which fox notices player
+	spawn_count = 8,          -- number of foxes to spawn
+	minimap_color = 12,       -- red on minimap (color 12 = red)
+	minimap_size = 1,
+	bullet_speed = 150,       -- bullet speed (slightly slower than dealer)
+
+	-- Animation settings (same offsets as dealer)
+	idle_animation_speed = 0.08,
+	walk_animation_speed = 0.05,
+	idle_frames = 11,             -- frames 0-10
+	walk_frames = 12,             -- frames 16-27
+	damaged_frames = 7,           -- frames 32-38
+
+	-- Sprite IDs (1.gfx sprites, foxes start at 64)
+	sprite_base = 256 + 64,   -- offset for fox sprites in 1.gfx (256 + 64 = 320)
+	idle_start = 0,
+	walk_start = 16,
+	damaged_start = 32,
+
+	-- Rendering
+	sprite_scale = 0.5,
+	sprite_size = 32,
 }
 
 -- ============================================
@@ -726,8 +762,9 @@ GROUND_CONFIG = {
 DEBUG_CONFIG = {
 	enabled = false,         -- set to false to disable debug features (FPS, profiler, etc.)
 	debug_weapons = true,    -- set to true to start with all weapons and 999 ammo
-	show_all_npcs = true,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
-	show_all_vehicles = true, -- set to true to show all vehicles on minimap and vehicle debug info
+	show_all_npcs = false,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
+	show_all_vehicles = false, -- set to true to show all vehicles on minimap and vehicle debug info
+	skip_to_quest = false,    -- set to true to start with fox quest already active
 }
 
 -- ============================================

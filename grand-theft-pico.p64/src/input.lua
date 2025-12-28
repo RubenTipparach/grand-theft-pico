@@ -1,11 +1,24 @@
 --[[pod_format="raw"]]
 -- input.lua - Input handling and camera control
 
--- Animation timer (global so it persists)
+-- Animation timer (global so it persists, now time-based)
 walk_timer = 0
+player_last_update_time = nil  -- for delta time calculation
+
+-- Import input utilities for single-trigger key detection
+local input_utils = require("src/input_utils")
 
 -- Handle player input and update camera
 function handle_input()
+	-- Calculate delta time for frame-independent movement
+	local now = time()
+	if not player_last_update_time then
+		player_last_update_time = now
+	end
+	local dt = now - player_last_update_time
+	player_last_update_time = now
+	-- Clamp dt to prevent huge jumps (e.g., after pause or lag)
+	if dt > 0.1 then dt = 0.1 end
 	-- Skip walking input if player is in a vehicle (vehicle handles its own input)
 	-- Also skip if dialog or shop is active (player shouldn't move while in menus)
 	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
@@ -16,8 +29,8 @@ function handle_input()
 		if btn(2) then dy = -1 end  -- up
 		if btn(3) then dy = 1 end   -- down
 
-		-- Get speed from config
-		local speed = PLAYER_CONFIG.walk_speed
+		-- Get speed from config (pixels per second, scaled by delta time)
+		local speed = PLAYER_CONFIG.walk_speed * dt * 60  -- multiply by 60 to convert to per-second rate
 
 		-- Move player with collision detection
 		local new_x, new_y = move_with_collision(
@@ -48,13 +61,14 @@ function handle_input()
 			end
 		end
 
-		-- Update walking animation
+		-- Update walking animation (time-based)
 		local is_moving = (dx ~= 0 or dy ~= 0)
 		if is_moving then
-			walk_timer = walk_timer + 1
-			local anim_speed = PLAYER_CONFIG.animation_speed
+			walk_timer = walk_timer + dt
+			-- animation_speed is frames at 60fps, convert to seconds (e.g., 8 frames = 8/60 seconds)
+			local anim_duration = PLAYER_CONFIG.animation_speed / 60
 			-- 2-frame walk cycle: alternate between 1 and 2 (not 0 which is idle)
-			local frame_index = flr(walk_timer / anim_speed) % 2 + 1
+			local frame_index = flr(walk_timer / anim_duration) % 2 + 1
 			game.player.walk_frame = frame_index  -- 1 or 2
 		else
 			walk_timer = 0
@@ -63,29 +77,34 @@ function handle_input()
 	end
 
 	-- Weapon controls (only when not in vehicle, dialog, or shop)
+	-- Also check dialog.close_cooldown to prevent firing right after closing dialog with Z
+	local dialog_cooldown_active = dialog and dialog.close_cooldown and time() < dialog.close_cooldown
 	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
-		-- Q: cycle weapon backward
-		if keyp("q") then
+		-- Q: cycle weapon backward (single-trigger)
+		if input_utils.key_pressed("q") then
 			cycle_weapon_backward()
 		end
 
-		-- T: cycle weapon forward
-		if keyp("t") then
+		-- T: cycle weapon forward (single-trigger)
+		if input_utils.key_pressed("t") then
 			cycle_weapon_forward()
 		end
 
-		-- Z or Space: attack/fire
-		if btn(4) or key("space") then
+		-- Z or Space: attack/fire (skip if dialog just closed)
+		if not dialog_cooldown_active and (btn(4) or key("space")) then
 			try_attack()
 		end
 	end
 
-	-- Smooth follow camera with deadzone
+	-- Smooth follow camera with deadzone (time-based smoothing)
 	-- Player can move within deadzone without camera moving
 	-- When outside deadzone, camera smoothly follows to keep player at edge
 	local dz_hw = CAMERA_CONFIG.deadzone_half_w
 	local dz_hh = CAMERA_CONFIG.deadzone_half_h
-	local smooth = CAMERA_CONFIG.follow_smoothing
+	-- Convert frame-based smoothing to time-based using exponential decay
+	-- smooth_factor = 1 - (1 - base_smooth)^(dt * 60)
+	local base_smooth = CAMERA_CONFIG.follow_smoothing
+	local smooth = 1 - (1 - base_smooth) ^ (dt * 60)
 
 	-- Calculate player offset from camera center
 	local offset_x = game.player.x - cam_x
@@ -107,7 +126,7 @@ function handle_input()
 		target_y = game.player.y + dz_hh
 	end
 
-	-- Smooth interpolation towards target
+	-- Smooth interpolation towards target (now frame-rate independent)
 	cam_x = cam_x + (target_x - cam_x) * smooth
 	cam_y = cam_y + (target_y - cam_y) * smooth
 
@@ -118,6 +137,16 @@ end
 
 -- Get current player sprite based on facing direction and walk frame
 function get_player_sprite()
+	-- Check if player is dead - show death sprite
+	if player_dead then
+		return player_death_sprite  -- sprite 36
+	end
+
+	-- Check if player is hit - show hit sprite
+	if player_hit_flash and time() < player_hit_flash then
+		return player_hit_sprite  -- sprite 11
+	end
+
 	local frame = game.player.walk_frame
 	local dir = game.player.facing_dir or "east"
 

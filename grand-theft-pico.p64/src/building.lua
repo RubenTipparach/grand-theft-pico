@@ -227,6 +227,11 @@ profile("cull")
 		add_dealers_to_visible(visible)
 	end
 
+	-- Add visible foxes to the list (frustum cull)
+	if foxes_spawned then
+		add_foxes_to_visible(visible)
+	end
+
 	-- Add visible street lamps to the list (frustum cull)
 	local lamp_cfg = NIGHT_CONFIG
 	local lamp_w = lamp_cfg.lamp_width
@@ -294,6 +299,18 @@ profile("cull")
 			local sx_off = NPC_CONFIG.shadow_x_offset
 			local sy_off = NPC_CONFIG.shadow_y_offset
 			ovalfill(obj.sx - sr + sx_off, obj.sy + sy_off, obj.sx + sr + sx_off, obj.sy + sy_off + sh, NPC_CONFIG.shadow_color)
+		elseif obj.type == "dealer" then
+			-- Dealer shadow (similar to player but slightly smaller for scaled sprite)
+			local sr = 6
+			local sh = 3
+			local sy_off = 2
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "fox" then
+			-- Fox shadow (small since fox sprites are scaled down)
+			local sr = 4
+			local sh = 2
+			local sy_off = 2
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
 		end
 		-- No shadow for vehicles (doesn't look great)
 	end
@@ -379,6 +396,9 @@ profile("cull")
 		elseif obj.type == "dealer" then
 			-- Draw arms dealer
 			draw_dealer(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "fox" then
+			-- Draw fox
+			draw_fox(obj.data, obj.sx, obj.sy)
 		elseif obj.type == "player_melee_weapon" then
 			-- Draw player melee weapon (depth sorted)
 			draw_melee_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)

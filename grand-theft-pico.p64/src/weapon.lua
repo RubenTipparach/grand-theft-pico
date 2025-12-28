@@ -82,6 +82,13 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 		end
 
 		if owner == "player" then
+			-- Check foxes
+			local fox = check_fox_hit(check_x, check_y, 12)
+			if fox and not hit_dealers[fox] then  -- reuse hit_dealers table for foxes
+				damage_fox(fox, damage)
+				hit_dealers[fox] = true
+			end
+
 			-- Check dealers
 			if arms_dealers then
 				for _, dealer in ipairs(arms_dealers) do
@@ -141,6 +148,7 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 			local dist = sqrt(pdx * pdx + pdy * pdy)
 			if dist < 10 then
 				game.player.health = max(0, game.player.health - damage)
+				trigger_player_hit_flash()  -- show hit sprite
 				return  -- Player hit, stop checking
 			end
 		end
@@ -273,14 +281,14 @@ function update_projectiles()
 			end
 		end
 
-		-- Check if off screen (despawn)
-		local sx, sy = world_to_screen(proj.x, proj.y)
-		if sx < -16 or sx > SCREEN_W + 16 or sy < -16 or sy > SCREEN_H + 16 then
+		-- Check collisions FIRST (before off-screen check)
+		local hit = check_projectile_collision(proj)
+		if hit then
 			add(to_remove, i)
 		else
-			-- Check collisions
-			local hit = check_projectile_collision(proj)
-			if hit then
+			-- Check if off screen (despawn) - only if no hit
+			local sx, sy = world_to_screen(proj.x, proj.y)
+			if sx < -16 or sx > SCREEN_W + 16 or sy < -16 or sy > SCREEN_H + 16 then
 				add(to_remove, i)
 			end
 		end
@@ -306,10 +314,14 @@ function check_projectile_collision(proj)
 					local dx = proj.x - dealer.x
 					local dy = proj.y - dealer.y
 					local dist = sqrt(dx * dx + dy * dy)
-					if dist < 12 then
+					if dist < 16 then  -- 16px radius for 32x32 sprite scaled to 0.5
 						-- Hit dealer - damage and make hostile
 						dealer.health = dealer.health - proj.damage
+						dealer.hit_flash = time() + 0.25  -- Show damaged animation for 0.25 seconds
+						dealer.damaged_frame = 0  -- Reset damaged animation
+						dealer.damaged_anim_timer = time()
 						make_dealer_hostile(dealer)
+						add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
 						return true
 					end
 				end
@@ -329,10 +341,19 @@ function check_projectile_collision(proj)
 					if dx < vw and dy < vh then
 						-- Hit vehicle - apply damage
 						vehicle.health = vehicle.health - proj.damage
+						add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
 						return true
 					end
 				end
 			end
+		end
+
+		-- Check collision with foxes
+		local fox = check_fox_hit(proj.x, proj.y, 12)
+		if fox then
+			damage_fox(fox, proj.damage)
+			add_collision_effect(proj.x, proj.y, 0.3)
+			return true
 		end
 
 		-- Check collision with regular NPCs (no damage, popularity loss)
@@ -348,6 +369,7 @@ function check_projectile_collision(proj)
 				npc.state_end_time = time() + 0.3
 				npc.scare_player_x = game.player.x
 				npc.scare_player_y = game.player.y
+				add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
 				return true
 			end
 		end
@@ -359,6 +381,8 @@ function check_projectile_collision(proj)
 		if dist < 10 then
 			-- Hit player
 			game.player.health = max(0, game.player.health - proj.damage)
+			trigger_player_hit_flash()  -- show hit sprite
+			add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
 			return true
 		end
 	end
@@ -370,8 +394,18 @@ end
 function draw_projectiles()
 	for _, proj in ipairs(projectiles) do
 		local sx, sy = world_to_screen(proj.x, proj.y)
-		-- Center the sprite (assuming 8x8)
-		spr(proj.sprite, sx - 4, sy - 4)
+		-- Check if sprite is from extended gfx (dealer bullets use sprite_base 256+)
+		if proj.sprite >= 256 then
+			-- Use get_spr for extended sprites and sspr to draw
+			local sprite_ud = get_spr(proj.sprite)
+			if sprite_ud then
+				local w, h = sprite_ud:width(), sprite_ud:height()
+				sspr(sprite_ud, 0, 0, w, h, sx - w/2, sy - h/2, w, h)
+			end
+		else
+			-- Regular sprite, center it (assuming 8x8)
+			spr(proj.sprite, sx - 4, sy - 4)
+		end
 	end
 end
 
@@ -632,6 +666,13 @@ function check_melee_hit(weapon)
 	-- Hit position is at the weapon sprite center
 	local hit_x = p.x + offset_x
 	local hit_y = p.y + offset_y
+
+	-- Check foxes
+	local fox = check_fox_hit(hit_x, hit_y, weapon.range)
+	if fox then
+		damage_fox(fox, weapon.damage)
+		return true
+	end
 
 	-- Check dealers (any state except dead)
 	if arms_dealers then

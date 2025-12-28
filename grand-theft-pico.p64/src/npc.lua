@@ -387,11 +387,22 @@ function update_npc(npc, player_x, player_y)
 		local dist = sqrt(dx * dx + dy * dy)
 		if dist < PLAYER_CONFIG.fan_detect_distance then
 			npc.fan_checked = true  -- only check once per NPC
+
+			-- During "intro" quest, track NPCs encountered
+			local is_fifth_person = false
+			if mission.current_quest == "intro" then
+				mission.npcs_encountered = mission.npcs_encountered + 1
+				printh("Met person " .. mission.npcs_encountered .. "/5")
+				if mission.npcs_encountered == 5 and not mission.intro_npc_spawned then
+					is_fifth_person = true
+				end
+			end
+
 			-- Calculate fan chance based on popularity (higher popularity = more fans)
 			local popularity_pct = game.player.popularity / PLAYER_CONFIG.max_popularity
 			local fan_chance = PLAYER_CONFIG.fan_chance_min +
 				(popularity_pct * (PLAYER_CONFIG.fan_chance_max - PLAYER_CONFIG.fan_chance_min))
-			if rnd(1) < fan_chance then
+			if is_fifth_person or rnd(1) < fan_chance then
 				-- This NPC is a fan! Add to fans list
 				-- Assign a random archetype from config
 				local archetypes = PLAYER_CONFIG.archetypes
@@ -399,6 +410,27 @@ function update_npc(npc, player_x, player_y)
 				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype })
 				-- Gain popularity for meeting a fan
 				change_popularity(PLAYER_CONFIG.popularity_per_fan)
+
+				-- Track total fans met
+				mission.total_fans_met = mission.total_fans_met + 1
+
+				-- 5th person during intro quest becomes the intro NPC
+				if is_fifth_person then
+					npc.is_intro_npc = true
+					mission.intro_npc = npc
+					mission.intro_npc_spawned = true
+					printh("5th person is now intro NPC! Starting dialog immediately.")
+
+					-- Start dialog immediately for the intro NPC
+					local fan_data = get_fan_data(npc)
+					if fan_data and not dialog.active then
+						start_dialog(npc, fan_data)
+						npc.state = "idle"
+						npc.in_dialog = true
+						return
+					end
+				end
+
 				-- Stop fleeing if they were about to flee
 				if npc.state == "surprised" then
 					npc.state = "fan_greeting"
@@ -421,10 +453,56 @@ function update_npc(npc, player_x, player_y)
 			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
 		end
 		if now >= npc.state_end_time then
+			-- If this is the intro NPC (5th person met), transition to approaching player
+			if npc.is_intro_npc and mission.current_quest == "intro" and not mission.talked_to_dealer then
+				printh("Intro NPC transitioning to approaching_player state!")
+				npc.state = "approaching_player"
+				return
+			end
 			-- Return to idle after greeting
 			npc.state = "idle"
 			local cfg = NPC_CONFIG.idle_time
 			npc.state_end_time = now + cfg.min + rnd(cfg.max - cfg.min)
+		end
+		return  -- skip other state processing
+	end
+
+	-- Quest giver approaching player state: walk toward player and auto-start dialog
+	if npc.state == "approaching_player" then
+		if player_x and player_y then
+			local dx = player_x - npc.x
+			local dy = player_y - npc.y
+			local dist = sqrt(dx * dx + dy * dy)
+
+			-- Face the player
+			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
+
+			-- If close enough, auto-start dialog
+			if dist < 32 then
+				-- Start dialog automatically
+				local fan_data = get_fan_data(npc)
+				printh("Approaching player - dist=" .. flr(dist) .. " fan_data=" .. tostring(fan_data ~= nil) .. " dialog.active=" .. tostring(dialog.active) .. " is_intro=" .. tostring(npc.is_intro_npc))
+				if fan_data and not dialog.active then
+					printh("Starting dialog! is_intro_npc=" .. tostring(npc.is_intro_npc) .. " quest=" .. tostring(mission.current_quest))
+					start_dialog(npc, fan_data)
+					npc.state = "idle"
+					npc.in_dialog = true
+				end
+				return
+			end
+
+			-- Walk toward player (faster than normal walk)
+			local speed = NPC_CONFIG.walk_speed * 1.5 * dt
+			if dist > 0 then
+				npc.x = npc.x + (dx / dist) * speed
+				npc.y = npc.y + (dy / dist) * speed
+			end
+
+			-- Animate walking
+			if now >= npc.walk_time + 0.12 then
+				npc.walk_frame = (npc.walk_frame + 1) % 3
+				npc.walk_time = now
+			end
 		end
 		return  -- skip other state processing
 	end
@@ -769,6 +847,10 @@ function spawn_single_npc(x, y)
 	add(npcs, npc)
 	return npc
 end
+
+-- Note: spawn_intro_npc() is no longer needed
+-- The 5th person encountered during the intro quest becomes the intro NPC naturally
+-- See the fan detection code in update_npc()
 
 -- Mode 1: Persistent NPCs with distance-based throttling
 local function update_npcs_persistent(player_x, player_y)
