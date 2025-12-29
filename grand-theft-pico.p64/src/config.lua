@@ -830,7 +830,9 @@ DEBUG_CONFIG = {
 		-- "a_prick",
 		-- "talk_to_companion_3",  -- leads to beyond_the_sea
 		-- "beyond_the_sea",
-		-- "talk_to_companion_4",  -- leads to more quests
+		-- "talk_to_companion_4",  -- leads to mega_race
+		-- "mega_race",
+		-- "talk_to_companion_5",
 		-- "find_missions"
 
 		-- sketch:
@@ -843,7 +845,7 @@ DEBUG_CONFIG = {
 			 -- checkpoiints are as follows (using aseprite coords):
 			    -- start[133, 96], [154, 96], [154,112], [174,112], [174, 127], [175,142], [115,141],  [115, 96]
 				--
-		-- q2 part to of the rally, is that one of your companions work for a corrupt insurance company
+		-- one of your companions work for a corrupt insurance company
 			-- they need you to wreck as many cars in the city as possible in 30 seconds. 
 			-- if you wreck 12+ cars you win this mission, else go back to a companion to start the quest again
 		
@@ -858,7 +860,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_3",
+	start_quest = "talk_to_companion_4",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text
@@ -1058,6 +1060,37 @@ NIGHT_CONFIG = {
 	lamp_sprite = 192,           -- sprite ID for lamp
 	lamp_width = 24,             -- lamp sprite width
 	lamp_height = 24,            -- lamp sprite height
+	-- Entity light radii (for enemies and NPCs that glow at night)
+	enemy_light_radius = 18,     -- radius of light around foxes/cactus
+	dealer_light_radius = 15,    -- radius of light around arms dealers
+}
+
+-- ============================================
+-- DAY-NIGHT CYCLE CONFIG
+-- ============================================
+DAY_NIGHT_CYCLE_CONFIG = {
+	-- Cycle timing (in real seconds)
+	day_duration = 12 * 60,      -- 12 minutes of daytime (720 seconds)
+	night_duration = 12 * 60,    -- 12 minutes of nighttime (720 seconds)
+	-- Full cycle = 24 minutes = 1440 seconds
+
+	-- In-game time mapping
+	-- 1440 real seconds = 24 in-game hours
+	-- So 1 real second = 1 in-game minute
+	start_hour = 15,             -- game starts at 3:00 PM
+
+	-- Night time range (inclusive)
+	night_start_hour = 18,       -- 6:00 PM - night begins
+	night_end_hour = 6,          -- 6:00 AM - night ends
+
+	-- Time skip (N key)
+	time_skip_hours = 3,         -- pressing N skips 3 hours
+
+	-- Clock HUD settings
+	clock_x = 8,                 -- x position (above minimap)
+	clock_y = 192,               -- y position (above minimap which is at y=202)
+	clock_color = 33,            -- white text
+	clock_shadow_color = 1,      -- black shadow
 }
 
 -- ============================================
@@ -1394,6 +1427,53 @@ VEHICLE_CONFIG = {
 	offscreen_update_interval = 2,      -- seconds between updates for offscreen vehicles
 	update_distance = 250,              -- pixels from player; vehicles beyond this are FROZEN
 	flee_duration = 10,                 -- seconds to flee after being hit by player
+}
+
+-- ============================================
+-- RACE CONFIG
+-- ============================================
+RACE_CONFIG = {
+	-- Checkpoint positions (Aseprite coordinates, will be converted to world coords)
+	-- Forms a loop around the city
+	checkpoints = {
+		{x = 133, y = 96},   -- start/finish line
+		{x = 154, y = 96},
+		{x = 154, y = 112},
+		{x = 174, y = 112},
+		{x = 174, y = 127},
+		{x = 175, y = 142},
+		{x = 115, y = 141},
+		{x = 115, y = 96},
+	},
+
+	-- Race settings
+	total_laps = 3,
+	num_racers = 8,
+
+	-- Checkpoint detection
+	checkpoint_radius = 48,        -- world units for player/racer to hit checkpoint
+	start_line_radius = 64,        -- radius to detect player at start line
+
+	-- AI racer settings
+	racer_speed_multiplier = 1.7,  -- multiplier on base vehicle speed (competitive!)
+	racer_health_multiplier = 4,   -- same as player vehicles (tanky)
+
+	-- Visual settings
+	checkpoint_world_radius = 20,  -- visual size of checkpoint circle in world
+	checkpoint_color = 21,         -- gold for inactive checkpoints
+	checkpoint_active_color = 22,  -- bright yellow for current checkpoint
+	minimap_checkpoint_color = 22, -- yellow on minimap
+	minimap_checkpoint_size = 2,   -- pixel radius on minimap
+
+	-- HUD settings
+	hud_x = 8,
+	hud_y = 50,
+
+	-- Time limit
+	time_limit = 300,  -- 5 minutes (300 seconds)
+
+	-- AI direction commitment (prevent twitching)
+	direction_commit_distance = 48,  -- travel ~3 tiles before changing direction
 }
 
 -- ============================================

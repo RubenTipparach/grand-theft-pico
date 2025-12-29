@@ -19,7 +19,8 @@ QUEST_CONFIG = {
 		"a_prick",
 		"talk_to_companion_3",  -- leads to beyond_the_sea
 		"beyond_the_sea",
-		"talk_to_companion_4",  -- leads to more quests
+		"talk_to_companion_4",  -- leads to mega_race
+		"mega_race",
 		"find_missions"
 	},
 
@@ -36,6 +37,7 @@ QUEST_CONFIG = {
 		talk_to_companion_3 = "Talk to Companion",
 		beyond_the_sea = "Beyond The Sea",
 		talk_to_companion_4 = "Talk to Companion",
+		mega_race = "Mega Race",
 		find_missions = "Find Missions",
 	},
 
@@ -96,6 +98,12 @@ QUEST_CONFIG = {
 		money_reward = 0,
 	},
 
+	mega_race = {
+		money_reward = 500,
+		popularity_finish = 10,   -- +10 popularity for finishing race
+		popularity_win = 50,      -- +50 popularity for winning (1st place)
+	},
+
 	find_missions = {
 		money_reward = 100,
 	},
@@ -151,6 +159,19 @@ mission = {
 	hermit_location = nil,       -- {x, y} world coords
 	hermit_npc = nil,            -- reference to hermit NPC
 
+	-- Quest 7: Mega Race
+	race_started = false,        -- has the race begun?
+	race_finished = false,       -- did player finish?
+	race_won = false,            -- did player win (1st place)?
+	race_completed_once = false, -- has player ever completed the race? (enables replay)
+	player_lap = 0,              -- current lap (0 = before start, 1-3 = racing)
+	player_checkpoint = 1,       -- next checkpoint to hit (1-8)
+	player_position = 1,         -- current race position (1st, 2nd, etc)
+	race_checkpoints = nil,      -- world coordinates of checkpoints
+	race_start_time = nil,       -- when race started
+	racers = nil,                -- AI racer vehicles (references)
+	racer_progress = nil,        -- {lap, checkpoint} for each racer
+
 	-- Talk to Companion checkpoints (between main quests)
 	talked_to_companion_1 = false,  -- before fix_home
 	talked_to_companion_2 = false,  -- before a_prick
@@ -186,6 +207,15 @@ function sprite_map_to_world(sx, sy)
 	local world_x = (sx - map_center) * tile_size
 	local world_y = (sy - map_center) * tile_size
 	return world_x, world_y
+end
+
+-- Get ordinal suffix for a number (1st, 2nd, 3rd, etc)
+function get_ordinal_suffix(n)
+	if n == 1 then return "st"
+	elseif n == 2 then return "nd"
+	elseif n == 3 then return "rd"
+	else return "th"
+	end
 end
 
 -- ============================================
@@ -286,6 +316,12 @@ function check_quest_completion()
 
 	elseif mission.current_quest == "talk_to_companion_4" then
 		if mission.talked_to_companion_4 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "mega_race" then
+		-- Race finished (player completed 3 laps)
+		if mission.race_finished then
 			complete_current_quest()
 		end
 
@@ -423,7 +459,23 @@ function start_quest(quest_id)
 
 	elseif quest_id == "talk_to_companion_4" then
 		mission.talked_to_companion_4 = false
-		printh("Started quest: Talk to Companion (before Find Missions)")
+		printh("Started quest: Talk to Companion (before Mega Race)")
+
+	elseif quest_id == "mega_race" then
+		mission.race_started = false
+		mission.race_finished = false
+		mission.player_lap = 0
+		mission.player_checkpoint = 1
+		mission.player_position = 1
+		mission.racers = {}
+		mission.racer_progress = {}
+		-- Convert Aseprite checkpoints to world coords
+		mission.race_checkpoints = {}
+		for _, cp in ipairs(RACE_CONFIG.checkpoints) do
+			local wx, wy = sprite_map_to_world(cp.x, cp.y)
+			add(mission.race_checkpoints, {x = wx, y = wy})
+		end
+		printh("Started quest: Mega Race - " .. #mission.race_checkpoints .. " checkpoints")
 
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
@@ -463,6 +515,10 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "beyond_the_sea" then
 		next_quest = "talk_to_companion_4"
 	elseif mission.current_quest == "talk_to_companion_4" then
+		next_quest = "mega_race"
+	elseif mission.current_quest == "mega_race" then
+		-- Clean up race
+		cleanup_race()
 		next_quest = "find_missions"
 	elseif mission.current_quest == "find_missions" then
 		-- Quest chain complete - can add more later
@@ -557,6 +613,20 @@ function get_quest_objectives()
 		if mission.stole_boat then
 			local deliver_status = mission.delivered_package and "[X]" or "[ ]"
 			add(objectives, deliver_status .. " Deliver to the island hermit")
+		end
+
+	elseif mission.current_quest == "mega_race" then
+		if not mission.race_started then
+			-- Before race: drive to start line
+			add(objectives, "[ ] Drive to the start line")
+		else
+			-- During race: show lap progress
+			local total_laps = RACE_CONFIG.total_laps
+			local lap_status = mission.race_finished and "[X]" or "[ ]"
+			add(objectives, lap_status .. " Complete " .. total_laps .. " laps (" .. mission.player_lap .. "/" .. total_laps .. ")")
+			-- Show position
+			local pos_suffix = get_ordinal_suffix(mission.player_position)
+			add(objectives, "    Position: " .. mission.player_position .. pos_suffix)
 		end
 
 	elseif mission.current_quest == "find_missions" then

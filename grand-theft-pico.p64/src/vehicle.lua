@@ -9,7 +9,8 @@ player_vehicle = nil
 
 -- Directions for vehicle movement
 local VEHICLE_DIRS = { "north", "south", "east", "west" }
-local VEHICLE_DIR_VECTORS = {
+-- Global so race.lua can access it
+VEHICLE_DIR_VECTORS = {
 	north = { dx = 0, dy = -1 },
 	south = { dx = 0, dy = 1 },
 	east  = { dx = 1, dy = 0 },
@@ -828,6 +829,7 @@ end
 -- Update a single AI vehicle
 function update_vehicle_ai(vehicle, dt)
 	if vehicle.is_player_vehicle then return end  -- skip player-controlled vehicles
+	if vehicle.is_racer then return end  -- racers use race AI, not traffic AI
 	if vehicle.state == "destroyed" then return end
 	if vehicle.state == "exploding" then return end
 	if not vehicle.has_driver then return end  -- no driver = no AI movement
@@ -1210,8 +1212,10 @@ function check_vehicle_collisions(visible_vehicles)
 								local cy = (v1.y + v2.y) / 2
 								add(collision_effects, { x = cx, y = cy, end_time = now + 0.5 })
 								effect_spawned = true
-								-- Lose popularity for crashing
-								change_popularity(-PLAYER_CONFIG.popularity_loss_crash)
+								-- Lose popularity for crashing (but not when hitting racer AI)
+								if not v1.is_racer and not v2.is_racer then
+									change_popularity(-PLAYER_CONFIG.popularity_loss_crash)
+								end
 							end
 
 							-- If hit by player, start fleeing
@@ -1282,8 +1286,8 @@ function check_vehicle_npc_collisions(visible_vehicles)
 						npc.x = npc.x + push_x
 						npc.y = npc.y + push_y
 
-						-- Make NPC flee if not already
-						if npc.state ~= "fleeing" and npc.state ~= "surprised" then
+						-- Make NPC flee if not already (only scared by player-controlled vehicles)
+						if vehicle.is_player_vehicle and npc.state ~= "fleeing" and npc.state ~= "surprised" then
 							npc.state = "surprised"
 							npc.state_end_time = time() + NPC_CONFIG.surprise_duration
 							npc.show_surprise = true

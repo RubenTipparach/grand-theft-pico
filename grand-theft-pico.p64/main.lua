@@ -62,6 +62,7 @@ include("src/dealer.lua")
 include("src/fox.lua")
 include("src/cactus.lua")
 include("src/quest.lua")
+include("src/race.lua")
 
 -- Load input utilities module (for single-press detection)
 input_utils = require("src/input_utils")
@@ -339,6 +340,11 @@ day_night_state = "day"  -- "day", "to_night", "night", "to_day"
 day_night_transition_index = 0  -- current index in transition sequence
 day_night_transition_timer = 0  -- frames until next step
 
+-- In-game time tracking (24-minute cycle = 24 in-game hours)
+-- Time is stored as hours (0-23.99) and advances at 1 hour per real minute
+game_time_hours = 8  -- start at 8:00 AM
+game_time_start = nil  -- real time() when game started
+
 -- Buildings created from level data in config
 buildings = {}
 
@@ -384,8 +390,77 @@ function reset_colortable()
 	poke(0x550b, 0x00)
 end
 
+-- Check if current game time is during night hours (6 PM to 6 AM)
+function is_night_time()
+	local cfg = DAY_NIGHT_CYCLE_CONFIG
+	local hour = game_time_hours
+	-- Night is from night_start_hour (18) to night_end_hour (6)
+	-- This wraps around midnight, so: hour >= 18 OR hour < 6
+	return hour >= cfg.night_start_hour or hour < cfg.night_end_hour
+end
+
+-- Update game time (advances 1 in-game hour per real minute)
+function update_game_time()
+	-- Initialize start time if needed
+	if not game_time_start then
+		game_time_start = time()
+		game_time_hours = DAY_NIGHT_CYCLE_CONFIG.start_hour
+	end
+
+	-- Calculate elapsed real seconds since start
+	local elapsed = time() - game_time_start
+	-- 1 real minute = 1 in-game hour, so 1 real second = 1/60 in-game hour
+	local hours_elapsed = elapsed / 60
+	-- Add to start hour and wrap at 24
+	game_time_hours = (DAY_NIGHT_CYCLE_CONFIG.start_hour + hours_elapsed) % 24
+end
+
+-- Skip time by a certain number of hours (N key)
+function skip_time(hours)
+	-- Adjust the start time backwards to effectively skip forward
+	-- Skipping 3 hours = subtracting 3 * 60 = 180 seconds from start time
+	game_time_start = game_time_start - (hours * 60)
+	printh("Skipped " .. hours .. " hours, now " .. get_time_string())
+end
+
+-- Get formatted time string (e.g., "8:00 AM")
+function get_time_string()
+	local hour = flr(game_time_hours)
+	local minute = flr((game_time_hours - hour) * 60)
+	local period = "AM"
+
+	local display_hour = hour
+	if hour >= 12 then
+		period = "PM"
+		if hour > 12 then display_hour = hour - 12 end
+	end
+	if hour == 0 then display_hour = 12 end
+
+	-- Format minutes with leading zero
+	local min_str = tostr(minute)
+	if minute < 10 then min_str = "0" .. min_str end
+
+	return tostr(display_hour) .. ":" .. min_str .. " " .. period
+end
+
 -- Update day-night cycle transitions
 function update_day_night_cycle()
+	-- First, update game time
+	update_game_time()
+
+	-- Check if we should be in night or day based on time
+	local should_be_night = is_night_time()
+
+	-- Handle automatic transitions based on game time
+	if should_be_night and day_night_state == "day" then
+		-- Start transition to night
+		start_night_transition()
+	elseif not should_be_night and day_night_state == "night" then
+		-- Start transition to day
+		start_day_transition()
+	end
+
+	-- Process ongoing transitions
 	if day_night_state == "to_night" then
 		-- Transitioning to night
 		day_night_transition_timer = day_night_transition_timer - 1
@@ -400,7 +475,6 @@ function update_day_night_cycle()
 				-- Apply next color in sequence
 				NIGHT_CONFIG.darken_color = NIGHT_CONFIG.day_to_night[day_night_transition_index]
 				day_night_transition_timer = NIGHT_CONFIG.transition_speed
-				printh("Transition to night: " .. NIGHT_CONFIG.darken_color)
 			end
 		end
 	elseif day_night_state == "to_day" then
@@ -417,33 +491,37 @@ function update_day_night_cycle()
 				-- Apply next color in sequence
 				NIGHT_CONFIG.darken_color = NIGHT_CONFIG.night_to_day[day_night_transition_index]
 				day_night_transition_timer = NIGHT_CONFIG.transition_speed
-				printh("Transition to day: " .. NIGHT_CONFIG.darken_color)
 			end
 		end
 	end
 end
 
--- Start transitioning to night or day
-function toggle_day_night()
-	if day_night_state == "day" then
-		-- Start transition to night
-		day_night_state = "to_night"
-		day_night_transition_index = 1
-		day_night_transition_timer = NIGHT_CONFIG.transition_speed
-		night_mode = true  -- enable overlay
-		street_lights_on = false  -- lights off during transition
-		NIGHT_CONFIG.darken_color = NIGHT_CONFIG.day_to_night[1]
-		printh("Starting transition to night: " .. NIGHT_CONFIG.darken_color)
-	elseif day_night_state == "night" then
-		-- Start transition to day
-		day_night_state = "to_day"
-		day_night_transition_index = 1
-		day_night_transition_timer = NIGHT_CONFIG.transition_speed
-		street_lights_on = false  -- turn off street lights immediately
-		NIGHT_CONFIG.darken_color = NIGHT_CONFIG.night_to_day[1]
-		printh("Starting transition to day (lights OFF): " .. NIGHT_CONFIG.darken_color)
-	end
-	-- If already transitioning, ignore the press
+-- Start transition to night
+function start_night_transition()
+	if day_night_state == "to_night" or day_night_state == "night" then return end
+	day_night_state = "to_night"
+	day_night_transition_index = 1
+	day_night_transition_timer = NIGHT_CONFIG.transition_speed
+	night_mode = true  -- enable overlay
+	street_lights_on = false  -- lights off during transition
+	NIGHT_CONFIG.darken_color = NIGHT_CONFIG.day_to_night[1]
+	printh("Starting transition to night: " .. NIGHT_CONFIG.darken_color)
+end
+
+-- Start transition to day
+function start_day_transition()
+	if day_night_state == "to_day" or day_night_state == "day" then return end
+	day_night_state = "to_day"
+	day_night_transition_index = 1
+	day_night_transition_timer = NIGHT_CONFIG.transition_speed
+	street_lights_on = false  -- turn off street lights immediately
+	NIGHT_CONFIG.darken_color = NIGHT_CONFIG.night_to_day[1]
+	printh("Starting transition to day (lights OFF): " .. NIGHT_CONFIG.darken_color)
+end
+
+-- Skip time forward by configured hours (N key handler)
+function handle_time_skip()
+	skip_time(DAY_NIGHT_CYCLE_CONFIG.time_skip_hours)
 end
 
 -- Night mode settings (initialized from config in _init)
@@ -1028,6 +1106,43 @@ function draw_night_mode(player_sx, player_sy)
 		end
 	end
 
+	-- Enemy lights (foxes) - draw individual circles
+	local enemy_radius = NIGHT_CONFIG.enemy_light_radius
+	if foxes and foxes_spawned then
+		for _, fox in ipairs(foxes) do
+			if fox.state ~= "dead" then
+				local sx, sy = world_to_screen(fox.x, fox.y)
+				if sx > -enemy_radius and sx < SCREEN_W + enemy_radius and
+				   sy > -enemy_radius and sy < SCREEN_H + enemy_radius then
+					circfill(sx, sy, enemy_radius, 0)
+				end
+			end
+		end
+	end
+
+	-- Cactus boss light
+	if cactus and cactus.state ~= "dead" then
+		local sx, sy = world_to_screen(cactus.x, cactus.y)
+		if sx > -enemy_radius and sx < SCREEN_W + enemy_radius and
+		   sy > -enemy_radius and sy < SCREEN_H + enemy_radius then
+			circfill(sx, sy, enemy_radius + 5, 0)  -- slightly larger for boss
+		end
+	end
+
+	-- Arms dealer lights
+	local dealer_radius = NIGHT_CONFIG.dealer_light_radius
+	if arms_dealers then
+		for _, dealer in ipairs(arms_dealers) do
+			if dealer.state ~= "dead" then
+				local sx, sy = world_to_screen(dealer.x, dealer.y)
+				if sx > -dealer_radius and sx < SCREEN_W + dealer_radius and
+				   sy > -dealer_radius and sy < SCREEN_H + dealer_radius then
+					circfill(sx, sy, dealer_radius, 0)
+				end
+			end
+		end
+	end
+
 	-- Reset draw target to screen
 	set_draw_target()
 
@@ -1190,9 +1305,9 @@ function _update()
 		printh("Shadow color table: " .. shadow_coltab_mode)
 	end
 
-	-- Toggle day/night cycle with N key
+	-- Skip time forward with N key (adds 3 hours)
 	if keyp("n") then
-		toggle_day_night()
+		handle_time_skip()
 	end
 
 	-- Update day-night cycle transitions
@@ -1213,6 +1328,9 @@ function _update()
 
 	-- Update beyond the sea quest (package pickup/delivery)
 	update_beyond_the_sea()
+
+	-- Update race quest
+	update_race()
 end
 
 -- Update quest system
@@ -1346,6 +1464,15 @@ function draw_lover_count()
 	spr(heart_sprite, x, y - 2)
 	-- Draw count next to heart
 	print_shadow("x" .. count, x + 10, y, cfg.popularity_color)
+end
+
+-- Draw clock HUD (above minimap)
+function draw_clock()
+	local cfg = DAY_NIGHT_CYCLE_CONFIG
+	local time_str = get_time_string()
+
+	-- Draw time with shadow
+	print_shadow(time_str, cfg.clock_x, cfg.clock_y, cfg.clock_color, cfg.clock_shadow_color)
 end
 
 -- Draw quest HUD (current objectives)
@@ -1531,6 +1658,10 @@ function start_dialog(npc, fan_data)
 		elseif mission.current_quest == "talk_to_companion_4" and not mission.talked_to_companion_4 then
 			add(dialog.options, { text = "What's new?", action = "talk_companion_4" })
 		end
+		-- Race replay option (available after completing mega_race once, and not currently racing)
+		if mission.race_completed_once and mission.current_quest ~= "mega_race" then
+			add(dialog.options, { text = "Let's race again!", action = "start_race" })
+		end
 		add(dialog.options, { text = "Nevermind", action = "cancel" })
 	else
 		-- Non-lovers get flirting options based on archetype
@@ -1695,8 +1826,18 @@ function select_dialog_option()
 	if opt.action == "talk_companion_4" then
 		mission.talked_to_companion_4 = true
 		dialog.phase = "result"
-		dialog.result_text = "Thanks for helping the hermit! Keep exploring - there's more to discover!"
-		dialog.result_timer = time() + 4
+		dialog.result_text = "My ex is in the big street race today! I need you to beat them for me. Steal a car and get to the starting line - show them who's boss!"
+		dialog.result_timer = time() + 5
+		return
+	end
+
+	-- Start race replay (after completing mega_race once)
+	if opt.action == "start_race" then
+		dialog.phase = "result"
+		dialog.result_text = "Another race? Let's do it! Get to the starting line!"
+		dialog.result_timer = time() + 3
+		-- Start the race without changing quest chain
+		start_race_replay()
 		return
 	end
 
@@ -2077,8 +2218,14 @@ function _draw()
 	-- Draw traffic signals AFTER night overlay so they stay bright/visible
 	draw_traffic_signals()
 
+	-- Draw clock above minimap
+	draw_clock()
+
 	-- Draw minimap
 	draw_minimap()
+
+	-- Draw race checkpoints on minimap
+	draw_race_minimap()
 
 	-- Draw vehicle health bar (if in vehicle)
 	draw_vehicle_health_bar()
@@ -2092,6 +2239,9 @@ function _draw()
 	-- Draw beyond the sea quest prompts (package is now depth-sorted in building.lua)
 	draw_beyond_the_sea_prompts()
 
+	-- Draw race checkpoint markers (world space)
+	draw_race_checkpoint()
+
 	-- Draw player health, popularity, and money
 	draw_health_bar()
 	draw_popularity_bar()
@@ -2103,6 +2253,9 @@ function _draw()
 
 	-- Draw quest HUD (current objectives)
 	draw_quest_hud()
+
+	-- Draw race HUD (lap counter, position)
+	draw_race_hud()
 
 	-- Draw repair progress bar (fix_home quest)
 	draw_repair_progress_bar()
