@@ -1212,8 +1212,8 @@ function check_vehicle_collisions(visible_vehicles)
 								local cy = (v1.y + v2.y) / 2
 								add(collision_effects, { x = cx, y = cy, end_time = now + 0.5 })
 								effect_spawned = true
-								-- Lose popularity for crashing (but not when hitting racer AI)
-								if not v1.is_racer and not v2.is_racer then
+								-- Lose popularity for crashing (but not when hitting racer AI or during car_wrecker quest)
+								if not v1.is_racer and not v2.is_racer and mission.current_quest ~= "car_wrecker" then
 									change_popularity(-PLAYER_CONFIG.popularity_loss_crash)
 								end
 							end
@@ -1315,6 +1315,11 @@ function update_vehicle_state(vehicle, dt)
 		vehicle.state = "exploding"
 		vehicle.explosion_frame = 1
 		vehicle.explosion_timer = now
+
+		-- Track car wreck for car_wrecker quest (only count non-player vehicles)
+		if not vehicle.is_player_vehicle then
+			track_car_wreck()
+		end
 
 		-- If player was in this vehicle, exit and take damage
 		if vehicle.is_player_vehicle then
@@ -1434,6 +1439,11 @@ function steal_vehicle(vehicle)
 			mission.stole_boat = true
 			printh("Beyond The Sea: Player stole a boat!")
 		end
+	end
+
+	-- Start car wrecker timer when stealing a car during the quest
+	if mission and mission.current_quest == "car_wrecker" then
+		start_wrecker_timer()
 	end
 end
 

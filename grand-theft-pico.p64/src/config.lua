@@ -833,6 +833,7 @@ DEBUG_CONFIG = {
 		-- "talk_to_companion_4",  -- leads to mega_race
 		-- "mega_race",
 		-- "talk_to_companion_5",
+		-- car_wrecker
 		-- "find_missions"
 
 		-- sketch:
@@ -860,7 +861,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_4",
+	start_quest = "talk_to_companion_5",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text

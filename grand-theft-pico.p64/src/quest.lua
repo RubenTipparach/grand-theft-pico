@@ -21,6 +21,8 @@ QUEST_CONFIG = {
 		"beyond_the_sea",
 		"talk_to_companion_4",  -- leads to mega_race
 		"mega_race",
+		"talk_to_companion_5",  -- leads to car_wrecker
+		"car_wrecker",
 		"find_missions"
 	},
 
@@ -38,6 +40,8 @@ QUEST_CONFIG = {
 		beyond_the_sea = "Beyond The Sea",
 		talk_to_companion_4 = "Talk to Companion",
 		mega_race = "Mega Race",
+		talk_to_companion_5 = "Talk to Companion",
+		car_wrecker = "Insurance Fraud",
 		find_missions = "Find Missions",
 	},
 
@@ -102,6 +106,17 @@ QUEST_CONFIG = {
 		money_reward = 500,
 		popularity_finish = 10,   -- +10 popularity for finishing race
 		popularity_win = 50,      -- +50 popularity for winning (1st place)
+	},
+
+	talk_to_companion_5 = {
+		money_reward = 0,
+	},
+
+	car_wrecker = {
+		money_reward = 300,
+		time_limit = 90,          -- 60 seconds to wreck cars
+		cars_needed = 12,         -- need to wreck 12+ cars to win
+		popularity_reward = 25,   -- bonus popularity for completing
 	},
 
 	find_missions = {
@@ -176,9 +191,17 @@ mission = {
 	talked_to_companion_1 = false,  -- before fix_home
 	talked_to_companion_2 = false,  -- before a_prick
 	talked_to_companion_3 = false,  -- before beyond_the_sea
-	talked_to_companion_4 = false,  -- before find_missions
+	talked_to_companion_4 = false,  -- before mega_race
+	talked_to_companion_5 = false,  -- before car_wrecker
 
-	-- Quest 8: Find Missions
+	-- Quest 8: Car Wrecker (Insurance Fraud)
+	wrecker_active = false,      -- is the wrecker timer running?
+	wrecker_start_time = nil,    -- when the timer started
+	wrecker_cars_wrecked = 0,    -- cars wrecked during this mission
+	wrecker_completed = false,   -- did player complete the mission?
+	wrecker_failed = false,      -- did player fail (time ran out)?
+
+	-- Quest 9: Find Missions
 	talked_to_lover = false,     -- talked to a lover about troubles
 
 	-- General tracking
@@ -216,6 +239,30 @@ function get_ordinal_suffix(n)
 	elseif n == 3 then return "rd"
 	else return "th"
 	end
+end
+
+-- Check if current quest is at or after a given quest in the chain
+-- Used for unlocking features after certain points in the story
+function is_quest_at_or_after(quest_id)
+	if not mission.current_quest then return false end
+
+	local chain = QUEST_CONFIG.quest_chain
+	local current_index = nil
+	local target_index = nil
+
+	for i, q in ipairs(chain) do
+		if q == mission.current_quest then
+			current_index = i
+		end
+		if q == quest_id then
+			target_index = i
+		end
+	end
+
+	if current_index and target_index then
+		return current_index >= target_index
+	end
+	return false
 end
 
 -- ============================================
@@ -322,6 +369,17 @@ function check_quest_completion()
 	elseif mission.current_quest == "mega_race" then
 		-- Race finished (player completed 3 laps)
 		if mission.race_finished then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_5" then
+		if mission.talked_to_companion_5 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "car_wrecker" then
+		-- Check if wrecker mission completed successfully
+		if mission.wrecker_completed then
 			complete_current_quest()
 		end
 
@@ -477,6 +535,18 @@ function start_quest(quest_id)
 		end
 		printh("Started quest: Mega Race - " .. #mission.race_checkpoints .. " checkpoints")
 
+	elseif quest_id == "talk_to_companion_5" then
+		mission.talked_to_companion_5 = false
+		printh("Started quest: Talk to Companion (before Car Wrecker)")
+
+	elseif quest_id == "car_wrecker" then
+		mission.wrecker_active = false
+		mission.wrecker_start_time = nil
+		mission.wrecker_cars_wrecked = 0
+		mission.wrecker_completed = false
+		mission.wrecker_failed = false
+		printh("Started quest: Insurance Fraud - Wreck " .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars in " .. QUEST_CONFIG.car_wrecker.time_limit .. " seconds!")
+
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
 		printh("Started quest: Find Missions")
@@ -519,6 +589,10 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "mega_race" then
 		-- Clean up race
 		cleanup_race()
+		next_quest = "talk_to_companion_5"
+	elseif mission.current_quest == "talk_to_companion_5" then
+		next_quest = "car_wrecker"
+	elseif mission.current_quest == "car_wrecker" then
 		next_quest = "find_missions"
 	elseif mission.current_quest == "find_missions" then
 		-- Quest chain complete - can add more later
@@ -600,6 +674,10 @@ function get_quest_objectives()
 		local status = mission.talked_to_companion_4 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
+	elseif mission.current_quest == "talk_to_companion_5" then
+		local status = mission.talked_to_companion_5 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
 	elseif mission.current_quest == "beyond_the_sea" then
 		-- Objective 1: Pick up package
 		local pkg_status = mission.has_package and "[X]" or "[ ]"
@@ -629,12 +707,182 @@ function get_quest_objectives()
 			add(objectives, "    Position: " .. mission.player_position .. pos_suffix)
 		end
 
+	elseif mission.current_quest == "car_wrecker" then
+		local cfg = QUEST_CONFIG.car_wrecker
+		if not mission.wrecker_active then
+			-- Before starting: tell player to steal a car
+			add(objectives, "[ ] Steal a car and start wrecking!")
+		elseif mission.wrecker_failed then
+			-- Failed - need to talk to companion again
+			add(objectives, "[X] Time's up! Talk to your companion to try again")
+		elseif mission.wrecker_completed then
+			-- Completed successfully
+			add(objectives, "[X] Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
+		else
+			-- Active timer - show progress
+			local status = (mission.wrecker_cars_wrecked >= cfg.cars_needed) and "[X]" or "[ ]"
+			add(objectives, status .. " Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
+		end
+
 	elseif mission.current_quest == "find_missions" then
 		local status = mission.talked_to_lover and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to a lover about their troubles")
 	end
 
 	return objectives
+end
+
+-- ============================================
+-- CAR WRECKER QUEST FUNCTIONS
+-- ============================================
+
+-- Start the car wrecker timer (called when player steals a car during quest)
+function start_wrecker_timer()
+	if mission.current_quest ~= "car_wrecker" then return end
+	if mission.wrecker_active then return end  -- already started
+	if mission.wrecker_completed then return end  -- already completed
+
+	mission.wrecker_active = true
+	mission.wrecker_start_time = time()
+	mission.wrecker_cars_wrecked = 0
+	mission.wrecker_failed = false
+	printh("Car Wrecker timer started! Wreck " .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars in " .. QUEST_CONFIG.car_wrecker.time_limit .. " seconds!")
+end
+
+-- Track a car wreck (called when a vehicle explodes)
+function track_car_wreck()
+	if mission.current_quest ~= "car_wrecker" then return end
+	if not mission.wrecker_active then return end
+	if mission.wrecker_completed or mission.wrecker_failed then return end
+
+	mission.wrecker_cars_wrecked = mission.wrecker_cars_wrecked + 1
+	printh("Car wrecked! " .. mission.wrecker_cars_wrecked .. "/" .. QUEST_CONFIG.car_wrecker.cars_needed)
+
+	-- Check if we've reached the goal
+	if mission.wrecker_cars_wrecked >= QUEST_CONFIG.car_wrecker.cars_needed then
+		mission.wrecker_completed = true
+		mission.wrecker_active = false
+		-- Award bonus popularity
+		change_popularity(QUEST_CONFIG.car_wrecker.popularity_reward)
+		printh("Car Wrecker complete! +" .. QUEST_CONFIG.car_wrecker.popularity_reward .. " popularity!")
+	end
+end
+
+-- Update car wrecker timer (call from main update)
+function update_car_wrecker()
+	if mission.current_quest ~= "car_wrecker" then return end
+	if not mission.wrecker_active then return end
+	if mission.wrecker_completed or mission.wrecker_failed then return end
+
+	local elapsed = time() - mission.wrecker_start_time
+	local time_limit = QUEST_CONFIG.car_wrecker.time_limit
+
+	-- Check if time ran out
+	if elapsed >= time_limit then
+		if mission.wrecker_cars_wrecked >= QUEST_CONFIG.car_wrecker.cars_needed then
+			-- Made it just in time!
+			mission.wrecker_completed = true
+			mission.wrecker_active = false
+			change_popularity(QUEST_CONFIG.car_wrecker.popularity_reward)
+			printh("Car Wrecker complete! +" .. QUEST_CONFIG.car_wrecker.popularity_reward .. " popularity!")
+		else
+			-- Failed - time ran out, revert to talk_to_companion_5
+			fail_car_wrecker()
+		end
+	end
+end
+
+-- Fail car wrecker mission and revert to talk_to_companion_5
+function fail_car_wrecker()
+	mission.wrecker_failed = true
+	mission.wrecker_active = false
+	printh("Car Wrecker failed! Only wrecked " .. mission.wrecker_cars_wrecked .. "/" .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars")
+
+	-- Show failure message briefly, then revert quest
+	mission.wrecker_fail_timer = time() + 3  -- 3 seconds to show failure message
+end
+
+-- Check if we need to revert quest after failure (call from main update)
+function update_car_wrecker_failure()
+	if not mission.wrecker_fail_timer then return end
+
+	if time() >= mission.wrecker_fail_timer then
+		-- Revert to talk_to_companion_5
+		mission.wrecker_fail_timer = nil
+		mission.talked_to_companion_5 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_5"
+		mission.quest_complete = false
+
+		-- Reset wrecker state for retry
+		mission.wrecker_active = false
+		mission.wrecker_start_time = nil
+		mission.wrecker_cars_wrecked = 0
+		mission.wrecker_completed = false
+		mission.wrecker_failed = false
+
+		printh("Reverted to talk_to_companion_5 - try again!")
+	end
+end
+
+-- Retry car wrecker mission (called from companion dialog)
+function retry_car_wrecker()
+	mission.wrecker_active = false
+	mission.wrecker_start_time = nil
+	mission.wrecker_cars_wrecked = 0
+	mission.wrecker_completed = false
+	mission.wrecker_failed = false
+	printh("Car Wrecker reset - ready to try again!")
+end
+
+-- Get remaining time for car wrecker (returns seconds, or nil if not active)
+function get_wrecker_time_remaining()
+	if mission.current_quest ~= "car_wrecker" then return nil end
+	if not mission.wrecker_active then return nil end
+
+	local elapsed = time() - mission.wrecker_start_time
+	local remaining = QUEST_CONFIG.car_wrecker.time_limit - elapsed
+	return max(0, remaining)
+end
+
+-- Draw car wrecker HUD (timer only - wreck count is in mission objectives)
+function draw_wrecker_hud()
+	if mission.current_quest ~= "car_wrecker" then return end
+	if not mission.wrecker_active then return end
+	if mission.wrecker_completed or mission.wrecker_failed then return end
+
+	-- Position on right side, below quest objectives
+	local x = SCREEN_W - 180
+	local y = 75  -- Below mission objectives
+
+	-- Get remaining time
+	local remaining = get_wrecker_time_remaining()
+	local secs = flr(remaining)
+
+	-- Draw timer (big, urgent)
+	local timer_color = remaining < 10 and 12 or 22  -- red if < 10s, yellow otherwise
+	print_shadow("TIME: " .. secs .. "s", x, y, timer_color)
+end
+
+-- Draw car wrecker failure message
+function draw_wrecker_failure()
+	if not mission.wrecker_failed then return end
+	if not mission.wrecker_fail_timer then return end
+
+	-- Show failure message in center of screen
+	local msg = "TOO SLOW!"
+	local msg2 = "Talk to your companion to try again."
+	local x = SCREEN_W / 2
+	local y = SCREEN_H / 2 - 20
+
+	-- Draw semi-transparent background
+	rectfill(x - 120, y - 10, x + 120, y + 30, 1)
+	rect(x - 120, y - 10, x + 120, y + 30, 8)
+
+	-- Draw text centered
+	local tw1 = print(msg, 0, -100)
+	local tw2 = print(msg2, 0, -100)
+	print_shadow(msg, x - tw1/2, y, 8)  -- red
+	print_shadow(msg2, x - tw2/2, y + 14, 7)  -- white
 end
 
 -- ============================================

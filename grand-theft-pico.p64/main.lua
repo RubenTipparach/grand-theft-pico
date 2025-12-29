@@ -152,6 +152,7 @@ dialog = {
 	result_text = "",    -- text to show after choosing
 	result_timer = 0,    -- time until dialog closes
 	close_cooldown = 0,  -- prevents weapon firing right after closing dialog
+	mission_dialog = false, -- if true, wait for Z press instead of timer
 }
 
 -- NOTE: Quest system (mission, quest_complete_visual, and all quest functions)
@@ -1331,6 +1332,10 @@ function _update()
 
 	-- Update race quest
 	update_race()
+
+	-- Update car wrecker quest timer
+	update_car_wrecker()
+	update_car_wrecker_failure()
 end
 
 -- Update quest system
@@ -1648,19 +1653,26 @@ function start_dialog(npc, fan_data)
 		if mission.current_quest == "find_missions" and not mission.talked_to_lover then
 			add(dialog.options, { text = "What troubles you?", action = "ask_troubles" })
 		end
-		-- Talk to companion quests - add chat option
+		-- Talk to companion quests - offer mission with accept/decline
 		if mission.current_quest == "talk_to_companion_1" and not mission.talked_to_companion_1 then
-			add(dialog.options, { text = "What's new?", action = "talk_companion_1" })
+			add(dialog.options, { text = "What's new?", action = "offer_companion_1" })
 		elseif mission.current_quest == "talk_to_companion_2" and not mission.talked_to_companion_2 then
-			add(dialog.options, { text = "What's new?", action = "talk_companion_2" })
+			add(dialog.options, { text = "What's new?", action = "offer_companion_2" })
 		elseif mission.current_quest == "talk_to_companion_3" and not mission.talked_to_companion_3 then
-			add(dialog.options, { text = "What's new?", action = "talk_companion_3" })
+			add(dialog.options, { text = "What's new?", action = "offer_companion_3" })
 		elseif mission.current_quest == "talk_to_companion_4" and not mission.talked_to_companion_4 then
-			add(dialog.options, { text = "What's new?", action = "talk_companion_4" })
+			add(dialog.options, { text = "What's new?", action = "offer_companion_4" })
+		elseif mission.current_quest == "talk_to_companion_5" and not mission.talked_to_companion_5 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_5" })
 		end
 		-- Race replay option (available after completing mega_race once, and not currently racing)
-		if mission.race_completed_once and mission.current_quest ~= "mega_race" then
+		-- Also available during talk_to_companion_5 or later (unlocks racing as side activity)
+		if (mission.race_completed_once or is_quest_at_or_after("talk_to_companion_5")) and mission.current_quest ~= "mega_race" then
 			add(dialog.options, { text = "Let's race again!", action = "start_race" })
+		end
+		-- Retry car wrecker if failed
+		if mission.current_quest == "car_wrecker" and mission.wrecker_failed then
+			add(dialog.options, { text = "Let me try wrecking cars again!", action = "retry_wrecker" })
 		end
 		add(dialog.options, { text = "Nevermind", action = "cancel" })
 	else
@@ -1785,7 +1797,8 @@ function select_dialog_option()
 		mission.talked_to_lover = true
 		dialog.phase = "result"
 		dialog.result_text = "I've heard rumors of more monsters appearing... Come back after you've dealt with them and I'll tell you more!"
-		dialog.result_timer = time() + 4
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		return
 	end
 
@@ -1794,40 +1807,128 @@ function select_dialog_option()
 		mission.lover_asked_troubles = true
 		dialog.phase = "result"
 		dialog.result_text = "A cactus monster is terrorizing downtown! Please help us!"
-		dialog.result_timer = time() + 4
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		return
 	end
 
-	-- Talk to companion quest actions
-	if opt.action == "talk_companion_1" then
+	-- Talk to companion quest actions - OFFER phase (shows mission description with accept/decline)
+	if opt.action == "offer_companion_1" then
+		dialog.phase = "quest"
+		dialog.quest_text = "My home was damaged in the last attack! Can you help fix it? You'll need a hammer."
+		dialog.options = {
+			{ text = "I'll help!", action = "accept_companion_1" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_2" then
+		dialog.phase = "quest"
+		dialog.quest_text = "Thank you for fixing my home! But I heard there's a giant cactus monster downtown... Can you defeat it?"
+		dialog.options = {
+			{ text = "I'll take it down!", action = "accept_companion_2" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_3" then
+		dialog.phase = "quest"
+		dialog.quest_text = "A hermit on a nearby island needs a package delivered. Can you pick it up and bring it to him?"
+		dialog.options = {
+			{ text = "I'm on it!", action = "accept_companion_3" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_4" then
+		dialog.phase = "quest"
+		dialog.quest_text = "My ex is in the big street race today! I need you to beat them for me. Steal a car and get to the starting line!"
+		dialog.options = {
+			{ text = "Let's race!", action = "accept_companion_4" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_5" then
+		dialog.phase = "quest"
+		dialog.quest_text = "I work for a corrupt insurance company. We need you to wreck 12+ cars in 60 seconds! Steal a car and start smashing!"
+		dialog.options = {
+			{ text = "Time to wreck!", action = "accept_companion_5" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	-- ACCEPT companion missions - these advance the quest
+	if opt.action == "accept_companion_1" then
 		mission.talked_to_companion_1 = true
 		dialog.phase = "result"
-		dialog.result_text = "My home was damaged in the last attack! Can you help fix it? You'll need a hammer."
-		dialog.result_timer = time() + 4
+		dialog.result_text = "Great! Find a hammer and fix the damaged building!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		return
 	end
 
-	if opt.action == "talk_companion_2" then
+	if opt.action == "accept_companion_2" then
 		mission.talked_to_companion_2 = true
 		dialog.phase = "result"
-		dialog.result_text = "Thank you for fixing my home! But I heard there's a giant cactus monster downtown..."
-		dialog.result_timer = time() + 4
+		dialog.result_text = "Be careful! That cactus is dangerous!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		return
 	end
 
-	if opt.action == "talk_companion_3" then
+	if opt.action == "accept_companion_3" then
 		mission.talked_to_companion_3 = true
 		dialog.phase = "result"
-		dialog.result_text = "A hermit on a nearby island needs a package delivered. Can you pick it up and bring it to him?"
-		dialog.result_timer = time() + 4
+		dialog.result_text = "The package is on an island to the east. You'll need a boat!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		return
 	end
 
-	if opt.action == "talk_companion_4" then
+	if opt.action == "accept_companion_4" then
 		mission.talked_to_companion_4 = true
 		dialog.phase = "result"
-		dialog.result_text = "My ex is in the big street race today! I need you to beat them for me. Steal a car and get to the starting line - show them who's boss!"
-		dialog.result_timer = time() + 5
+		dialog.result_text = "Show them who's boss! Get to the starting line!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		return
+	end
+
+	if opt.action == "accept_companion_5" then
+		mission.talked_to_companion_5 = true
+		dialog.phase = "result"
+		dialog.result_text = "Wreck 12 cars in 60 seconds! Go go go!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		return
+	end
+
+	-- DECLINE companion missions - does NOT advance the quest
+	if opt.action == "decline_companion" then
+		dialog.phase = "result"
+		dialog.result_text = "Come back when you're ready!"
+		dialog.result_timer = time() + 1.0
+		return
+	end
+
+	-- Retry car wrecker mission (if failed)
+	if opt.action == "retry_wrecker" then
+		dialog.phase = "result"
+		dialog.result_text = "Alright, let's try again! Steal a car and wreck 12 vehicles in 60 seconds!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		retry_car_wrecker()
 		return
 	end
 
@@ -1835,7 +1936,8 @@ function select_dialog_option()
 	if opt.action == "start_race" then
 		dialog.phase = "result"
 		dialog.result_text = "Another race? Let's do it! Get to the starting line!"
-		dialog.result_timer = time() + 3
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
 		-- Start the race without changing quest chain
 		start_race_replay()
 		return
@@ -1895,15 +1997,33 @@ function update_dialog()
 	if not dialog.active then return end
 
 	if dialog.phase == "result" then
-		-- Allow X to skip result phase
-		if btnp(5) then
+		-- Allow X to skip result phase (for non-mission dialogs only)
+		if not dialog.mission_dialog and btnp(5) then
 			if dialog.npc then dialog.npc.in_dialog = false end
 			dialog.active = false
+			dialog.mission_dialog = false
 			dialog.close_cooldown = time() + 0.1
 			return
 		end
-		-- Wait for result timer
-		if time() >= dialog.result_timer then
+
+		-- For mission dialogs, wait for E press; for others, wait for timer
+		local should_close = false
+		if dialog.mission_dialog then
+			-- Mission dialogs require E to continue (with small delay to avoid instant close)
+			-- Use input_utils.key_pressed for proper single-press detection
+			if dialog.result_start_time and time() > dialog.result_start_time + 0.2 then
+				if input_utils.key_pressed("e") then
+					should_close = true
+				end
+			end
+		else
+			-- Regular dialogs use timer
+			if time() >= dialog.result_timer then
+				should_close = true
+			end
+		end
+
+		if should_close then
 			-- Clear dialog flag on NPC so they can move again
 			if dialog.npc then dialog.npc.in_dialog = false end
 
@@ -1928,6 +2048,7 @@ function update_dialog()
 			end
 
 			dialog.active = false
+			dialog.mission_dialog = false
 		end
 		return
 	end
@@ -2084,6 +2205,12 @@ function draw_dialog()
 			local love_text = "+" .. dialog.love_gained .. " love"
 			local ltw = print(love_text, 0, -100)  -- measure text width properly
 			print(love_text, x + (w - ltw) / 2, result_y + 4, cfg.love_gain_color)
+		end
+
+		-- Show "E to continue" for mission dialogs (bottom left)
+		if dialog.mission_dialog then
+			local continue_text = "[E] Continue"
+			print_shadow(continue_text, x + 6, y + h - 10, 22)  -- yellow
 		end
 	elseif dialog.phase == "quest" then
 		-- Show quest text first, then options below
@@ -2256,6 +2383,10 @@ function _draw()
 
 	-- Draw race HUD (lap counter, position)
 	draw_race_hud()
+
+	-- Draw car wrecker HUD (timer, wreck count)
+	draw_wrecker_hud()
+	draw_wrecker_failure()
 
 	-- Draw repair progress bar (fix_home quest)
 	draw_repair_progress_bar()

@@ -391,6 +391,28 @@ profile("cull")
 					spr(exp_spr, draw_x + vw/2 - 8, draw_y - 8)
 				end
 			end
+
+			-- Draw green arrow indicator above player's vehicle
+			if vehicle.is_player_vehicle and vehicle.state ~= "destroyed" and vehicle.state ~= "exploding" then
+				local arrow_x = draw_x + vw/2
+				local arrow_y = draw_y - 12
+				-- Bobbing animation
+				local bob = sin(time() * 4) * 3
+				arrow_y = arrow_y + bob
+				-- Draw downward-pointing green arrow (triangle)
+				local ax, ay = arrow_x, arrow_y + 6  -- bottom point
+				local bx, by = arrow_x - 4, arrow_y  -- top left
+				local cx, cy = arrow_x + 4, arrow_y  -- top right
+				-- Draw filled triangle (green - palette color 19)
+				line(ax, ay, bx, by, 19)
+				line(ax, ay, cx, cy, 19)
+				line(bx, by, cx, cy, 19)
+				-- Fill center
+				line(ax, ay - 1, bx + 1, by + 1, 19)
+				line(ax, ay - 1, cx - 1, by + 1, 19)
+				line(ax, ay - 2, bx + 2, by + 2, 19)
+				line(ax, ay - 2, cx - 2, by + 2, 19)
+			end
 		elseif obj.type == "npc" then
 			local npc = obj.data
 			local npc_spr = get_npc_sprite(npc)
