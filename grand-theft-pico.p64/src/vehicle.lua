@@ -260,6 +260,72 @@ function spawn_vehicles()
 	end
 
 	printh("Spawned " .. #vehicles .. " vehicles (" .. boats_spawned .. " boats)")
+
+	-- Spawn shore boats (accessible boats on beaches near player spawn)
+	spawn_shore_boats(0, 0, 5)  -- player starts at (0,0), spawn 5 boats
+end
+
+-- Spawn boats on shores by walking from a point in random directions until hitting water
+-- This makes boats accessible for reaching islands
+function spawn_shore_boats(start_x, start_y, count)
+	local shore_boats = 0
+	local step_size = 16  -- pixels per step
+	local max_steps = 100  -- max distance to walk before giving up
+
+	-- Use fixed angles spread around the compass (not purely random, to get good coverage)
+	local base_angles = { 0, 0.25, 0.5, 0.75, 0.125, 0.375, 0.625, 0.875 }  -- 8 directions in turns
+
+	for i = 1, count do
+		-- Pick a direction - use spread angles plus some randomness
+		local angle = base_angles[((i - 1) % #base_angles) + 1] + rnd(0.1) - 0.05
+
+		local dx = cos(angle)
+		local dy = sin(angle)
+
+		-- Walk from start point until we hit water
+		local x = start_x
+		local y = start_y
+		local found_shore = false
+		local last_land_x, last_land_y = x, y
+
+		for step = 1, max_steps do
+			x = x + dx * step_size
+			y = y + dy * step_size
+
+			if is_water(x, y) then
+				-- Found water! Place boat here, but remember last land position
+				found_shore = true
+				break
+			else
+				-- Still on land, remember this position
+				last_land_x = x
+				last_land_y = y
+			end
+		end
+
+		if found_shore then
+			-- Place the boat at the water position (first water tile hit)
+			-- Make sure it's not too close to other vehicles
+			if not is_too_close_to_vehicles(x, y, 48) then
+				-- Determine boat direction (facing toward shore/land for easy boarding)
+				local boat_dir
+				if abs(dx) > abs(dy) then
+					boat_dir = dx > 0 and "west" or "east"  -- face back toward land
+				else
+					boat_dir = dy > 0 and "north" or "south"
+				end
+
+				local boat = create_vehicle(x, y, "boat", boat_dir)
+				boat.has_driver = false  -- parked boat - no AI movement
+				boat.state = "stopped"   -- not driving
+				add(vehicles, boat)
+				shore_boats = shore_boats + 1
+				printh("Shore boat " .. shore_boats .. " placed at " .. flr(x) .. ", " .. flr(y))
+			end
+		end
+	end
+
+	printh("Spawned " .. shore_boats .. " shore boats")
 end
 
 -- Spawn a replacement vehicle far from the player
@@ -1637,7 +1703,7 @@ function draw_steal_prompt()
 		local sx, sy = world_to_screen(nearby.x, nearby.y)
 		-- Draw prompt above vehicle
 		local text = "E: STEAL"
-		local tw = #text * 4
+		local tw = print(text, 0, -100)  -- measure text width properly
 		print_shadow(text, sx - tw/2, sy - 20, PLAYER_CONFIG.prompt_color)
 	end
 end

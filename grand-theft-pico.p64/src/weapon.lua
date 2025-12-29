@@ -89,6 +89,16 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 				hit_dealers[fox] = true
 			end
 
+			-- Check cactus boss
+			if cactus and cactus.state ~= "dead" then
+				local cdx = check_x - cactus.x
+				local cdy = check_y - cactus.y
+				local cdist = sqrt(cdx * cdx + cdy * cdy)
+				if cdist < CACTUS_CONFIG.collision_radius then
+					damage_cactus(damage)
+				end
+			end
+
 			-- Check dealers
 			if arms_dealers then
 				for _, dealer in ipairs(arms_dealers) do
@@ -354,6 +364,18 @@ function check_projectile_collision(proj)
 			damage_fox(fox, proj.damage)
 			add_collision_effect(proj.x, proj.y, 0.3)
 			return true
+		end
+
+		-- Check collision with cactus boss
+		if cactus and cactus.state ~= "dead" then
+			local cdx = proj.x - cactus.x
+			local cdy = proj.y - cactus.y
+			local cdist = sqrt(cdx * cdx + cdy * cdy)
+			if cdist < CACTUS_CONFIG.collision_radius then
+				damage_cactus(proj.damage)
+				add_collision_effect(proj.x, proj.y, 0.3)
+				return true
+			end
 		end
 
 		-- Check collision with regular NPCs (no damage, popularity loss)
@@ -672,6 +694,17 @@ function check_melee_hit(weapon)
 	if fox then
 		damage_fox(fox, weapon.damage)
 		return true
+	end
+
+	-- Check cactus boss
+	if cactus and cactus.state ~= "dead" then
+		local cdx = hit_x - cactus.x
+		local cdy = hit_y - cactus.y
+		local cdist = sqrt(cdx * cdx + cdy * cdy)
+		if cdist < weapon.range then
+			damage_cactus(weapon.damage)
+			return true
+		end
 	end
 
 	-- Check dealers (any state except dead)

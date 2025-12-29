@@ -60,6 +60,7 @@ include("src/vehicle.lua")
 include("src/weapon.lua")
 include("src/dealer.lua")
 include("src/fox.lua")
+include("src/cactus.lua")
 include("src/quest.lua")
 
 -- Load input utilities module (for single-press detection)
@@ -314,12 +315,12 @@ function draw_death_overlay()
 	-- Show "DEEP FRIED" text immediately and throughout most of death sequence
 	if elapsed < 4 then
 		local text = "DEEP FRIED"
-		local tw = #text * 8  -- Larger font assumption
+		local tw = print(text, 0, -100)
 		print_shadow(text, (SCREEN_W - tw) / 2, SCREEN_H / 2 - 8, 12)  -- red (color 12)
 
 		-- Show what was lost
 		local loss_text = "Lost money and popularity"
-		local ltw = #loss_text * 4
+		local ltw = print(loss_text, 0, -100)
 		print_shadow(loss_text, (SCREEN_W - ltw) / 2, SCREEN_H / 2 + 8, 6)
 	end
 end
@@ -903,6 +904,41 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw cactus on minimap (quest enemy - always visible, clamped to edge if far)
+	if cactus and cactus.state ~= "dead" and mission.current_quest == "a_prick" then
+		local cx = mx + (cactus.x / tile_size + half_map_w - px + half_mw)
+		local cy = my + (cactus.y / tile_size + half_map_h - py + half_mh)
+
+		-- Clamp cactus position to minimap edge if outside bounds
+		local margin = 2
+		local clamped = false
+		if cx < mx + margin then
+			cx = mx + margin
+			clamped = true
+		elseif cx > mx + mw - margin then
+			cx = mx + mw - margin
+			clamped = true
+		end
+		if cy < my + margin then
+			cy = my + margin
+			clamped = true
+		elseif cy > my + mh - margin then
+			cy = my + mh - margin
+			clamped = true
+		end
+
+		-- Draw cactus marker (larger for boss, blink if clamped)
+		local cactus_color = CACTUS_CONFIG.minimap_color
+		if clamped then
+			local blink = flr(time() * 3) % 2 == 0
+			if blink then
+				circfill(cx, cy, 1, cactus_color)
+			end
+		else
+			circfill(cx, cy, CACTUS_CONFIG.minimap_size, cactus_color)
+		end
+	end
+
 	-- Draw player (center of minimap)
 	if cfg.show_player then
 		local player_mx = mx + half_mw
@@ -1054,13 +1090,23 @@ function _init()
 		printh("Debug: gave player all weapons")
 	end
 
-	-- Debug: skip to quest immediately
-	if DEBUG_CONFIG.skip_to_quest then
+	-- Debug: start at specific quest (or intro by default)
+	local start_at = DEBUG_CONFIG.start_quest
+	-- Support legacy skip_to_quest option
+	if DEBUG_CONFIG.skip_to_quest and not start_at then
+		start_at = "protect_city"
+	end
+
+	if start_at and start_at ~= "intro" then
+		-- Mark fox quest flags so foxes don't spawn unexpectedly
 		mission.fox_quest_offered = true
 		mission.fox_quest_accepted = true
-		start_quest("protect_city")
-		spawn_foxes()
-		printh("Debug: started fox quest immediately")
+		foxes_spawned = true
+		foxes = {}
+
+		-- Just start the quest directly
+		start_quest(start_at)
+		printh("Debug: started at quest '" .. start_at .. "'")
 	else
 		-- Start with the intro quest (meet 5 people, then talk to dealer)
 		start_quest("intro")
@@ -1109,6 +1155,10 @@ function _update()
 
 	-- Update foxes (if quest active)
 	update_foxes()
+
+	-- Update cactus boss (if quest active)
+	update_cactus()
+	update_cactus_bullets()
 
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
@@ -1270,7 +1320,7 @@ function draw_popularity_bar()
 		local amount = popularity_change.amount
 		local text = (amount >= 0) and ("+" .. amount .. " POPULARITY") or (tostr(amount) .. " POPULARITY")
 		local col = (amount >= 0) and cfg.popularity_gain_color or cfg.popularity_loss_color
-		local text_w = #text * 4
+		local text_w = print(text, 0, -100)
 		print_shadow(text, SCREEN_CX - text_w / 2, SCREEN_CY - 20, col)
 	end
 end
@@ -1297,13 +1347,15 @@ function draw_quest_hud()
 	-- Position in top-right area, below weapon HUD
 	local x = SCREEN_W - 180
 	local y = 32
+	local max_width = 175  -- max width for quest text area
+	local max_chars = 38   -- approximate chars that fit in max_width
 
 	-- Draw quest name
 	local quest_name = get_quest_name(mission.current_quest)
 	print_shadow(quest_name, x, y, 22)  -- yellow for quest title
 	y = y + 10
 
-	-- Draw objectives
+	-- Draw objectives with word wrapping
 	local objectives = get_quest_objectives()
 	for _, obj in ipairs(objectives) do
 		-- Check if complete (starts with [X])
@@ -1320,8 +1372,17 @@ function draw_quest_hud()
 				end
 			end
 		end
-		print_shadow(display_obj, x, y, color)
-		y = y + 10
+
+		-- Wrap long objectives
+		local lines = wrap_text(display_obj, max_chars)
+		for i, line in ipairs(lines) do
+			-- Indent continuation lines
+			if i > 1 then
+				line = "    " .. line
+			end
+			print_shadow(line, x, y, color)
+			y = y + 10
+		end
 	end
 end
 
@@ -1339,8 +1400,8 @@ function draw_quest_complete_banner()
 
 	if show_text then
 		local text = "QUEST COMPLETED"
-		-- Center the text on screen
-		local text_width = #text * 8  -- approximate width (8 pixels per char for large text)
+		-- Get actual text width using print's return value (prints offscreen at y=-100)
+		local text_width = print(text, 0, -100) - 0
 		local cx = (SCREEN_W - text_width) / 2
 		local cy = SCREEN_H / 2 - 20
 
@@ -1351,7 +1412,7 @@ function draw_quest_complete_banner()
 
 		-- Show completed quest name below
 		local name = quest_complete_visual.completed_quest_name
-		local name_width = #name * 4
+		local name_width = print(name, 0, -100) - 0
 		local nx = (SCREEN_W - name_width) / 2
 		print_shadow(name, nx, cy + 14, 33)  -- white
 	end
@@ -1436,6 +1497,10 @@ function start_dialog(npc, fan_data)
 	if fan_data.is_lover then
 		-- Lovers always have heal option
 		add(dialog.options, { text = "Heal me!", action = "heal" })
+		-- If on "Find Love" quest, add option to ask about troubles (triggers cactus quest)
+		if mission.current_quest == "find_love" and not mission.lover_asked_troubles then
+			add(dialog.options, { text = "What troubles you?", action = "ask_troubles_findlove" })
+		end
 		-- If on "Find Missions" quest, add option to talk about troubles
 		if mission.current_quest == "find_missions" and not mission.talked_to_lover then
 			add(dialog.options, { text = "What troubles you?", action = "ask_troubles" })
@@ -1567,6 +1632,15 @@ function select_dialog_option()
 		return
 	end
 
+	if opt.action == "ask_troubles_findlove" then
+		-- Complete the second objective of "Find Love" quest
+		mission.lover_asked_troubles = true
+		dialog.phase = "result"
+		dialog.result_text = "A cactus monster is terrorizing downtown! Please help us!"
+		dialog.result_timer = time() + 2.5
+		return
+	end
+
 	-- Flirting action
 	if opt.action == "flirt" then
 		local fan_data = dialog.fan_data
@@ -1660,13 +1734,13 @@ function update_dialog()
 		if dialog.selected > #dialog.options then dialog.selected = 1 end
 	end
 
-	-- Select with X or E key (use input_utils for E to share state with check_fan_interaction)
-	if btnp(5) or input_utils.key_pressed("e") then
+	-- Select with O/Z key or E key (use input_utils for E to share state with check_fan_interaction)
+	if btnp(4) or input_utils.key_pressed("e") then
 		select_dialog_option()
 	end
 
-	-- Cancel with O key (Z button)
-	if btnp(4) then
+	-- Cancel with X button
+	if btnp(5) then
 		if dialog.npc then dialog.npc.in_dialog = false end
 		dialog.active = false
 		dialog.close_cooldown = time() + 0.1  -- prevent weapon fire for 0.1s
@@ -1793,7 +1867,7 @@ function draw_dialog()
 		local result_y = y + (h - total_text_height) / 2
 
 		for _, line in ipairs(result_lines) do
-			local tw = #line * 4
+			local tw = print(line, 0, -100)  -- measure text width properly
 			print(line, x + (w - tw) / 2, result_y, cfg.dialog_text_color)
 			result_y = result_y + line_h
 		end
@@ -1801,7 +1875,7 @@ function draw_dialog()
 		-- Show love gain text below result (if gained love)
 		if dialog.love_gained and dialog.love_gained > 0 then
 			local love_text = "+" .. dialog.love_gained .. " love"
-			local ltw = #love_text * 4
+			local ltw = print(love_text, 0, -100)  -- measure text width properly
 			print(love_text, x + (w - ltw) / 2, result_y + 4, cfg.love_gain_color)
 		end
 	elseif dialog.phase == "quest" then
@@ -1854,9 +1928,9 @@ function draw_dialog()
 		end
 	end
 
-	-- Show [Z] Quit indicator in bottom right corner
-	local quit_text = "[Z] Quit"
-	local quit_w = #quit_text * 4
+	-- Show [X] Quit indicator in bottom right corner
+	local quit_text = "[X] Quit"
+	local quit_w = print(quit_text, 0, -100)  -- measure text width properly
 	print_shadow(quit_text, x + w - quit_w - 6, y + h - 10, 6)
 end
 
@@ -1885,7 +1959,7 @@ function draw_fan_prompt()
 		local sx, sy = world_to_screen(npc.x, npc.y)
 		-- Different text for fans vs lovers (lovers can heal you)
 		local text = fan_data.is_lover and "E: HEAL" or "E: FLIRT"
-		local tw = #text * 4
+		local tw = print(text, 0, -100)  -- measure text width properly
 		-- Draw above the heart sprite (moved up from -20 to -28)
 		local prompt_y = sy - 28
 		print_shadow(text, sx - tw/2, prompt_y, PLAYER_CONFIG.prompt_color)
@@ -1963,6 +2037,14 @@ function _draw()
 
 	-- Draw quest completed banner (big center text)
 	draw_quest_complete_banner()
+
+	-- Draw fox defeated message
+	draw_fox_defeated_message()
+
+	-- Draw cactus UI
+	draw_cactus_bullets()
+	draw_cactus_health_bar()
+	draw_cactus_defeated_message()
 
 	-- Draw dealer prompt and boss health bar
 	draw_dealer_prompt()

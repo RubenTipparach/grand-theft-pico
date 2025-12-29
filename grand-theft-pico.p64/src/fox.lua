@@ -11,6 +11,14 @@ foxes = {}
 -- Whether foxes have been spawned (after quest accepted)
 foxes_spawned = false
 
+-- Fox defeated message display
+fox_defeated_message = {
+	active = false,
+	end_time = 0,
+	fox_name = "",
+	duration = 2.0,  -- seconds to show message
+}
+
 -- ============================================
 -- FOX CREATION AND SPAWNING
 -- ============================================
@@ -235,6 +243,8 @@ function update_foxes()
 				mission.foxes_killed = mission.foxes_killed + 1
 				-- Small explosion effect
 				add_collision_effect(fox.x, fox.y, 0.5)
+				-- Show defeated message
+				show_fox_defeated(fox.name)
 				-- Check if all foxes are dead (quest complete)
 				if get_living_fox_count() == 0 and mission.current_quest == "protect_city" then
 					check_quest_completion()
@@ -374,10 +384,47 @@ function damage_fox(fox, amount)
 	if fox.state == "dead" then return end
 
 	fox.health = max(0, fox.health - amount)
-	fox.hit_flash = time() + 0.2
+	fox.hit_flash = time() + 0.35  -- Increased from 0.2 to show full damaged animation cycle
 	fox.damaged_frame = 0
 	fox.damaged_anim_timer = time()
 
 	-- Small hit effect
 	add_collision_effect(fox.x, fox.y, 0.2)
+end
+
+-- Show fox defeated message
+function show_fox_defeated(fox_name)
+	fox_defeated_message.active = true
+	fox_defeated_message.end_time = time() + fox_defeated_message.duration
+	fox_defeated_message.fox_name = fox_name
+end
+
+-- Draw fox defeated message in center of screen
+function draw_fox_defeated_message()
+	if not fox_defeated_message.active then return end
+
+	local now = time()
+	if now >= fox_defeated_message.end_time then
+		fox_defeated_message.active = false
+		return
+	end
+
+	-- Get text and measure width properly
+	local text = "FOX DEFEATED"
+	local text_w = print(text, 0, -100)
+	local text_x = (SCREEN_W - text_w) / 2
+	local text_y = SCREEN_H / 2 - 30
+
+	-- Pulsing effect
+	local pulse = sin(now * 4) * 0.5 + 0.5
+	local color = pulse > 0.5 and 21 or 22  -- Alternate gold and yellow
+
+	-- Draw with shadow for visibility
+	print_shadow(text, text_x, text_y, color)
+
+	-- Show fox name below
+	local name = fox_defeated_message.fox_name
+	local name_w = print(name, 0, -100)
+	local name_x = (SCREEN_W - name_w) / 2
+	print_shadow(name, name_x, text_y + 12, 33)  -- white
 end

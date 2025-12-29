@@ -402,7 +402,7 @@ function draw_boss_health_bar()
 
 	-- Draw name in red (color 12 = red)
 	local name = "Arms Dealer " .. hostile_dealer.name
-	local name_w = #name * 4
+	local name_w = print(name, 0, -100)
 	print_shadow(name, (SCREEN_W - name_w) / 2, bar_y - 10, 12)
 
 	-- Health percentage
@@ -436,7 +436,7 @@ function draw_defeat_message()
 
 	-- Draw big centered text
 	local text = defeat_message.text
-	local text_w = #text * 4
+	local text_w = print(text, 0, -100)
 	local text_x = (SCREEN_W - text_w) / 2
 	local text_y = SCREEN_H / 2 - 20
 
@@ -480,7 +480,7 @@ function draw_dealer_prompt()
 	if dealer then
 		local sx, sy = world_to_screen(dealer.x, dealer.y)
 		local text = "E: SHOP"
-		local tw = #text * 4
+		local tw = print(text, 0, -100)  -- measure text width properly
 		print_shadow(text, sx - tw/2, sy - 24, PLAYER_CONFIG.prompt_color)
 	end
 end
@@ -493,6 +493,7 @@ function open_shop(dealer)
 	shop.ammo_quantity = 1
 	shop.scroll_offset = 0
 	shop.message = nil
+	shop.open_time = time()  -- prevent same E press from closing
 
 	-- Mark intro quest objective as complete
 	if mission.current_quest == "intro" and not mission.talked_to_dealer then
@@ -577,8 +578,8 @@ function update_shop()
 		end
 	end
 
-	-- Close shop
-	if btnp(5) or keyp("e") then  -- X button or E key
+	-- Close shop (with cooldown to prevent same E press from closing)
+	if btnp(5) or (keyp("e") and time() > (shop.open_time or 0) + 0.1) then  -- X button or E key
 		close_shop()
 	end
 
@@ -642,12 +643,13 @@ function draw_shop()
 
 	-- Draw title
 	local title = "ARMS DEALER " .. shop.dealer.name
-	local title_w = #title * 4
+	local title_w = print(title, 0, -100)  -- measure text width properly
 	print_shadow(title, box_x + (box_w - title_w) / 2, box_y + 4, 33)
 
 	-- Draw money
 	local money_text = "$" .. game.player.money
-	print_shadow(money_text, box_x + box_w - #money_text * 4 - 8, box_y + 4, 11)
+	local money_w = print(money_text, 0, -100)  -- measure text width properly
+	print_shadow(money_text, box_x + box_w - money_w - 8, box_y + 4, 11)
 
 	-- Draw items
 	local item_y = box_y + 20

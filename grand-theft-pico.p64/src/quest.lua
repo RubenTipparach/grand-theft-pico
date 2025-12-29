@@ -7,7 +7,7 @@
 
 QUEST_CONFIG = {
 	-- Quest chain order
-	quest_chain = { "intro", "protect_city", "make_friends", "find_love", "find_missions" },
+	quest_chain = { "intro", "protect_city", "make_friends", "find_love", "a_prick", "find_missions" },
 
 	-- Quest display names
 	quest_names = {
@@ -15,6 +15,7 @@ QUEST_CONFIG = {
 		protect_city = "Protect The City",
 		make_friends = "Make Friends",
 		find_love = "Find Love",
+		a_prick = "A Prick",
 		find_missions = "Find Missions",
 	},
 
@@ -64,8 +65,12 @@ mission = {
 
 	-- Quest 3: Find Love
 	had_lover_before_quest = false,  -- had a lover before this quest started
+	lover_asked_troubles = false,    -- asked lover about their troubles (objective 2)
 
-	-- Quest 4: Find Missions
+	-- Quest 4: A Prick (Cactus Monster)
+	cactus_killed = false,       -- killed the cactus monster
+
+	-- Quest 5: Find Missions
 	talked_to_lover = false,     -- talked to a lover about troubles
 
 	-- General tracking
@@ -129,8 +134,14 @@ function check_quest_completion()
 		end
 
 	elseif mission.current_quest == "find_love" then
-		-- Need at least 1 lover (that wasn't there before quest)
-		if #lovers > 0 and not mission.had_lover_before_quest then
+		-- Need at least 1 lover AND must have talked to them about troubles
+		if #lovers > 0 and mission.lover_asked_troubles then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "a_prick" then
+		-- Defeat the cactus monster
+		if mission.cactus_killed then
 			complete_current_quest()
 		end
 
@@ -203,8 +214,15 @@ function start_quest(quest_id)
 		printh("Started quest: Make Friends (need " .. mission.new_fans_needed .. " new fans)")
 
 	elseif quest_id == "find_love" then
-		mission.had_lover_before_quest = #lovers > 0
+		mission.had_lover_before_quest = false  -- Reset so quest can complete
+		mission.lover_asked_troubles = false
 		printh("Started quest: Find Love")
+
+	elseif quest_id == "a_prick" then
+		mission.cactus_killed = false
+		-- Spawn cactus monster
+		spawn_cactus()
+		printh("Started quest: A Prick - Cactus monster spawned!")
 
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
@@ -230,6 +248,8 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "make_friends" then
 		next_quest = "find_love"
 	elseif mission.current_quest == "find_love" then
+		next_quest = "a_prick"
+	elseif mission.current_quest == "a_prick" then
 		next_quest = "find_missions"
 	elseif mission.current_quest == "find_missions" then
 		-- Quest chain complete - can add more later
@@ -273,8 +293,18 @@ function get_quest_objectives()
 		add(objectives, status .. " Make " .. mission.new_fans_needed .. " new fans (" .. new_fans .. "/" .. mission.new_fans_needed .. ")")
 
 	elseif mission.current_quest == "find_love" then
-		local status = (#lovers > 0) and "[X]" or "[ ]"
-		add(objectives, status .. " Convince someone to date you")
+		-- Objective 1: Get a lover
+		local lover_status = (#lovers > 0) and "[X]" or "[ ]"
+		add(objectives, lover_status .. " Convince someone to date you")
+		-- Objective 2: Talk to lover about troubles (only shows after having lover)
+		if #lovers > 0 then
+			local troubles_status = mission.lover_asked_troubles and "[X]" or "[ ]"
+			add(objectives, troubles_status .. " Ask your lover about their troubles")
+		end
+
+	elseif mission.current_quest == "a_prick" then
+		local status = mission.cactus_killed and "[X]" or "[ ]"
+		add(objectives, status .. " Get rid of the cactus monster terrorizing downtown")
 
 	elseif mission.current_quest == "find_missions" then
 		local status = mission.talked_to_lover and "[X]" or "[ ]"

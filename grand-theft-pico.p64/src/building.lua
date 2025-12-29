@@ -232,6 +232,9 @@ profile("cull")
 		add_foxes_to_visible(visible)
 	end
 
+	-- Add cactus boss to the list (if spawned)
+	add_cactus_to_visible(visible)
+
 	-- Add visible street lamps to the list (frustum cull)
 	local lamp_cfg = NIGHT_CONFIG
 	local lamp_w = lamp_cfg.lamp_width
@@ -309,6 +312,12 @@ profile("cull")
 			-- Fox shadow (small since fox sprites are scaled down)
 			local sr = 4
 			local sh = 2
+			local sy_off = 2
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "cactus" then
+			-- Cactus shadow (larger for boss)
+			local sr = 6
+			local sh = 3
 			local sy_off = 2
 			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
 		end
@@ -399,6 +408,9 @@ profile("cull")
 		elseif obj.type == "fox" then
 			-- Draw fox
 			draw_fox(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "cactus" then
+			-- Draw cactus boss
+			draw_cactus(obj.data, obj.sx, obj.sy)
 		elseif obj.type == "player_melee_weapon" then
 			-- Draw player melee weapon (depth sorted)
 			draw_melee_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)

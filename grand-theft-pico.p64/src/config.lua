@@ -625,10 +625,10 @@ ARMS_DEALER_CONFIG = {
 -- FOX ENEMY CONFIG
 -- ============================================
 FOX_CONFIG = {
-	names = { "Rusty", "Sly", "Ember", "Shadow", "Blaze", "Fang", "Copper", "Ash" },
-	health = 200,
-	damage = 10,              -- damage per bullet to player
-	fire_rate = 1.0,          -- seconds between shots
+	names = { "McCloud", "Sly", "Ember", "Swiper", "Kits", "Vulpi", "Copper", "Red" },
+	health = 100,
+	damage = 5,              -- damage per bullet to player
+	fire_rate = 2.0,          -- seconds between shots
 	chase_speed = 60,         -- pixels per second when chasing (faster than dealer)
 	wander_speed = 20,        -- pixels per second when wandering
 	target_distance = 100,    -- stop and shoot when within this distance of player
@@ -649,11 +649,62 @@ FOX_CONFIG = {
 	sprite_base = 256 + 64,   -- offset for fox sprites in 1.gfx (256 + 64 = 320)
 	idle_start = 0,
 	walk_start = 16,
-	damaged_start = 32,
+	damaged_start = 32, -- this plus 64 should be 96
 
 	-- Rendering
 	sprite_scale = 0.5,
 	sprite_size = 32,
+}
+
+-- ============================================
+-- CACTUS MONSTER CONFIG
+-- ============================================
+CACTUS_CONFIG = {
+	name = "Cactus Monster",
+	health = 500,             -- Boss-level health
+	chase_speed = 40,         -- Slower than foxes
+	target_distance = 80,     -- Distance to start attacking
+	aggro_distance = 300,     -- Large aggro range
+	minimap_color = 14,       -- Bright red on minimap (#f53141)
+	minimap_size = 2,         -- Larger marker for boss
+	collision_radius = 24,    -- Collision radius (half of 48x48 sprite)
+
+	-- Melee attack (sword-like, same as player)
+	melee_damage = 15,
+	melee_range = 24,
+	melee_cooldown = 1.0,     -- Seconds between swings
+	sword_sprite = 47,        -- Same sword sprite as player (8x16)
+
+	-- Ranged attack (10-directional bullet burst)
+	ranged_damage = 10,
+	ranged_cooldown = 5.0,    -- Seconds between bursts
+	bullet_count = 10,        -- Bullets per burst (360/10 = 36 degree spread)
+	bullet_speed = 150,
+	bullet_sprite = 114,      -- Reuse laser bullet sprite
+
+	-- Animation settings
+	idle_animation_speed = 0.08,
+	walk_animation_speed = 0.05,
+	idle_frames = 11,         -- frames 0-10 (sprites 128-138 in sheet 2)
+	walk_frames = 12,         -- frames 0-11 (sprites 144-155 in sheet 2)
+	damaged_frames = 5,       -- frames 0-4 (sprites 160-164 in sheet 2)
+
+	-- Sprite IDs (sprite sheet 2 = 2.gfx, base offset = 512)
+	-- User provided: idle 128-138, run 144-155, damaged 160-164
+	sprite_base = 256 + 128,  -- 2.gfx base (512) + cactus offset (128) = 640
+	idle_start = 0,           -- offset 0 from base (sprites 640-650)
+	walk_start = 16,          -- offset 16 from base (sprites 656-667)
+	damaged_start = 32,       -- offset 32 from base (sprites 672-676)
+
+	-- Rendering
+	sprite_scale = 0.5,
+	sprite_size = 48,         -- Cactus sprites are 48x48
+
+	-- Spawn location (downtown area)
+	spawn_x_min = 300,
+	spawn_x_max = 700,
+	spawn_y_min = 300,
+	spawn_y_max = 700,
 }
 
 -- ============================================
@@ -764,7 +815,11 @@ DEBUG_CONFIG = {
 	debug_weapons = true,    -- set to true to start with all weapons and 999 ammo
 	show_all_npcs = false,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
 	show_all_vehicles = false, -- set to true to show all vehicles on minimap and vehicle debug info
-	skip_to_quest = false,    -- set to true to start with fox quest already active
+	skip_to_quest = false,    -- DEPRECATED: use start_quest instead
+	-- Start at a specific quest on load (nil = normal intro, or one of:)
+	-- "intro", "protect_city", "make_friends", "find_love", "a_prick", "find_missions"
+	-- start_quest = nil,
+	start_quest = "a_prick",
 }
 
 -- ============================================
