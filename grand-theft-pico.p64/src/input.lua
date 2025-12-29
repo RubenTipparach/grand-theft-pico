@@ -37,6 +37,11 @@ function handle_input()
 			game.player.x, game.player.y,
 			dx, dy, speed
 		)
+
+		-- Clamp to world bounds
+		new_x = max(MAP_CONFIG.world_min_x, min(MAP_CONFIG.world_max_x, new_x))
+		new_y = max(MAP_CONFIG.world_min_y, min(MAP_CONFIG.world_max_y, new_y))
+
 		game.player.x = new_x
 		game.player.y = new_y
 

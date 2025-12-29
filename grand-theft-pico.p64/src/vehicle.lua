@@ -854,6 +854,10 @@ function update_vehicle_ai(vehicle, dt)
 		local new_x = vehicle.x + vec.dx * speed
 		local new_y = vehicle.y + vec.dy * speed
 
+		-- Clamp to world bounds
+		new_x = max(MAP_CONFIG.world_min_x, min(MAP_CONFIG.world_max_x, new_x))
+		new_y = max(MAP_CONFIG.world_min_y, min(MAP_CONFIG.world_max_y, new_y))
+
 		-- Check if still on water
 		if is_water(new_x, new_y) then
 			vehicle.x = new_x
@@ -1136,6 +1140,10 @@ function update_player_vehicle(vehicle, dt)
 			collides_building = vehicle_collides_building(new_x, new_y, half_w, half_h)
 		end
 
+		-- Clamp to world bounds
+		new_x = max(MAP_CONFIG.world_min_x, min(MAP_CONFIG.world_max_x, new_x))
+		new_y = max(MAP_CONFIG.world_min_y, min(MAP_CONFIG.world_max_y, new_y))
+
 		if valid_terrain and not collides_building then
 			vehicle.x = new_x
 			vehicle.y = new_y
@@ -1415,6 +1423,14 @@ function steal_vehicle(vehicle)
 	end
 
 	printh("Player stole a " .. vehicle.vtype.name)
+
+	-- Track boat stealing for beyond_the_sea quest
+	if mission and mission.current_quest == "beyond_the_sea" and mission.has_package then
+		if vehicle.vtype.water_only then
+			mission.stole_boat = true
+			printh("Beyond The Sea: Player stole a boat!")
+		end
+	end
 end
 
 -- Find a valid exit position near a boat (on land, not water)

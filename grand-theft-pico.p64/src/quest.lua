@@ -58,7 +58,8 @@ QUEST_CONFIG = {
 	},
 
 	beyond_the_sea = {
-		-- Sprite map coordinates (will be converted to world coords)
+		-- Aseprite/sprite map coordinates (0,0 = top-left, 128,128 = world center)
+		-- These get converted to world coords via sprite_map_to_world()
 		package_sprite_x = 216,
 		package_sprite_y = 116,
 		package_sprite = 134,           -- Package sprite
@@ -110,6 +111,7 @@ mission = {
 	cactus_killed = false,       -- killed the cactus monster
 
 	-- Quest 6: Beyond The Sea
+	stole_boat = false,          -- stole a boat for the mission
 	has_package = false,         -- picked up the package
 	delivered_package = false,   -- delivered to hermit
 	package_location = nil,      -- {x, y} world coords
@@ -306,6 +308,11 @@ function start_quest(quest_id)
 	mission.current_quest = quest_id
 	mission.quest_complete = false
 
+	-- Auto-assign companion for any talk_to_companion quest
+	if string.find(quest_id, "talk_to_companion") then
+		ensure_companion_exists()
+	end
+
 	if quest_id == "intro" then
 		-- Intro quest - meet 5 people, then talk to dealer
 		mission.npcs_encountered = 0
@@ -353,17 +360,25 @@ function start_quest(quest_id)
 		printh("Started quest: Talk to Companion (before Beyond The Sea)")
 
 	elseif quest_id == "beyond_the_sea" then
+		mission.stole_boat = false
 		mission.has_package = false
 		mission.delivered_package = false
-		-- Convert sprite map coords to world coords
+		-- Convert Aseprite/sprite map coords to world coords
 		local cfg = QUEST_CONFIG.beyond_the_sea
+		printh("DEBUG: Aseprite coords - Package(" .. cfg.package_sprite_x .. "," .. cfg.package_sprite_y .. ") Hermit(" .. cfg.hermit_sprite_x .. "," .. cfg.hermit_sprite_y .. ")")
 		local pkg_x, pkg_y = sprite_map_to_world(cfg.package_sprite_x, cfg.package_sprite_y)
 		local hermit_x, hermit_y = sprite_map_to_world(cfg.hermit_sprite_x, cfg.hermit_sprite_y)
+		printh("DEBUG: World coords - Package(" .. pkg_x .. "," .. pkg_y .. ") Hermit(" .. hermit_x .. "," .. hermit_y .. ")")
+		printh("DEBUG: Player spawns at (0,0), positive X = EAST, positive Y = SOUTH")
 		mission.package_location = { x = pkg_x, y = pkg_y }
 		mission.hermit_location = { x = hermit_x, y = hermit_y }
 		-- Spawn hermit NPC at location
 		spawn_hermit(hermit_x, hermit_y)
 		printh("Started quest: Beyond The Sea - Package at " .. pkg_x .. "," .. pkg_y .. " Hermit at " .. hermit_x .. "," .. hermit_y)
+
+	elseif quest_id == "talk_to_companion_4" then
+		mission.talked_to_companion_4 = false
+		printh("Started quest: Talk to Companion (before Find Missions)")
 
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
@@ -488,8 +503,13 @@ function get_quest_objectives()
 		-- Objective 1: Pick up package
 		local pkg_status = mission.has_package and "[X]" or "[ ]"
 		add(objectives, pkg_status .. " Pick up the package")
-		-- Objective 2: Deliver to hermit (only shows after picking up)
+		-- Objective 2: Steal a boat (only shows after picking up package)
 		if mission.has_package then
+			local boat_status = mission.stole_boat and "[X]" or "[ ]"
+			add(objectives, boat_status .. " Steal a boat")
+		end
+		-- Objective 3: Deliver to hermit (only shows after stealing boat)
+		if mission.stole_boat then
 			local deliver_status = mission.delivered_package and "[X]" or "[ ]"
 			add(objectives, deliver_status .. " Deliver to the island hermit")
 		end
@@ -614,6 +634,121 @@ function draw_repair_progress_bar()
 end
 
 -- ============================================
+-- COMPANION ASSIGNMENT FUNCTIONS
+-- ============================================
+
+-- Find and assign a random nearby NPC as a companion (lover)
+-- Used when starting talk_to_companion quests via debug start_quest
+function assign_random_companion()
+	if not game or not game.player then return nil end
+	if not npcs or #npcs == 0 then return nil end
+
+	local px, py = game.player.x, game.player.y
+	local max_distance = 200  -- Look for NPCs within this range
+
+	-- Collect nearby NPCs that aren't already fans/lovers
+	local candidates = {}
+	for _, npc in ipairs(npcs) do
+		-- Skip hermits and special NPCs
+		if npc.is_hermit then goto continue end
+
+		-- Skip NPCs that are already fans
+		local is_fan = false
+		for _, fan_data in ipairs(fans) do
+			if fan_data.npc == npc then
+				is_fan = true
+				break
+			end
+		end
+		if is_fan then goto continue end
+
+		-- Calculate distance
+		local dx = npc.x - px
+		local dy = npc.y - py
+		local dist = sqrt(dx * dx + dy * dy)
+
+		if dist <= max_distance then
+			add(candidates, { npc = npc, dist = dist })
+		end
+
+		::continue::
+	end
+
+	-- If no candidates nearby, expand search to all NPCs
+	if #candidates == 0 then
+		for _, npc in ipairs(npcs) do
+			if not npc.is_hermit then
+				local is_fan = false
+				for _, fan_data in ipairs(fans) do
+					if fan_data.npc == npc then
+						is_fan = true
+						break
+					end
+				end
+				if not is_fan then
+					local dx = npc.x - px
+					local dy = npc.y - py
+					local dist = sqrt(dx * dx + dy * dy)
+					add(candidates, { npc = npc, dist = dist })
+				end
+			end
+		end
+	end
+
+	if #candidates == 0 then
+		printh("No NPCs available to assign as companion!")
+		return nil
+	end
+
+	-- Sort by distance (closest first)
+	for i = 1, #candidates - 1 do
+		for j = i + 1, #candidates do
+			if candidates[j].dist < candidates[i].dist then
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			end
+		end
+	end
+
+	-- Pick one of the closest NPCs (prefer closest, but add some randomness)
+	local pick_range = min(5, #candidates)  -- Pick from closest 5
+	local picked = candidates[flr(rnd(pick_range)) + 1]
+	local npc = picked.npc
+
+	-- Assign a random archetype
+	local archetypes = PLAYER_CONFIG.archetypes
+	local archetype = archetypes[flr(rnd(#archetypes)) + 1]
+
+	-- Create fan data with max love (instant lover)
+	local fan_data = {
+		npc = npc,
+		is_lover = true,
+		love = PLAYER_CONFIG.love_meter_max,
+		archetype = archetype,
+	}
+	add(fans, fan_data)
+	add(lovers, npc)
+
+	-- Mark the NPC as already checked for fan status
+	npc.fan_checked = true
+
+	printh("Assigned companion: NPC at " .. flr(npc.x) .. "," .. flr(npc.y) .. " (dist=" .. flr(picked.dist) .. ")")
+
+	return npc
+end
+
+-- Ensure at least one companion exists for talk_to_companion quests
+function ensure_companion_exists()
+	if #lovers == 0 then
+		local companion = assign_random_companion()
+		if companion then
+			printh("Created random companion for talk_to_companion quest")
+		end
+	else
+		printh("Companion already exists (" .. #lovers .. " lovers)")
+	end
+end
+
+-- ============================================
 -- BEYOND THE SEA QUEST FUNCTIONS
 -- ============================================
 
@@ -621,20 +756,11 @@ end
 function spawn_hermit(x, y)
 	if not npcs then return end
 
-	-- Create hermit NPC (special type that doesn't react)
-	local hermit = {
-		x = x,
-		y = y,
-		vx = 0,
-		vy = 0,
-		type = NPC_TYPES[1],  -- Use first NPC type
-		state = "idle",
-		dir = "south",
-		walk_frame = 0,
-		anim_timer = 0,
-		is_hermit = true,  -- Special flag for hermit behavior
-		name = "Hermit",
-	}
+	-- Create hermit NPC using create_npc for proper field initialization
+	local hermit = create_npc(x, y, 1)
+	hermit.is_hermit = true  -- Special flag for hermit behavior
+	hermit.name = "Hermit"
+
 	add(npcs, hermit)
 	mission.hermit_npc = hermit
 	printh("Hermit spawned at " .. x .. "," .. y)
@@ -646,7 +772,7 @@ function update_beyond_the_sea()
 	if not game or not game.player then return end
 
 	local p = game.player
-	local interact_pressed = btnp(5)  -- E key / button 5
+	local interact_pressed = keyp("e")  -- E key to interact
 
 	-- Check for package pickup
 	if not mission.has_package and mission.package_location then
@@ -683,15 +809,15 @@ function draw_package()
 	local sx, sy = world_to_screen(pkg.x, pkg.y)
 
 	-- Only draw if on screen
-	if sx > -16 and sx < SCREEN_W + 16 and sy > -16 and sy < SCREEN_H + 16 then
-		-- Draw shadow
+	if sx > -32 and sx < SCREEN_W + 32 and sy > -32 and sy < SCREEN_H + 32 then
+		-- Draw shadow at bottom of 32x32 sprite
 		fillp(0b0101101001011010)
-		circfill(sx, sy + 4, 6, 0)
+		circfill(sx, sy + 12, 10, 0)
 		fillp()
 
-		-- Draw package sprite
+		-- Draw package sprite (32x32, centered)
 		local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite
-		spr(sprite_id, sx - 8, sy - 8)
+		spr(sprite_id, sx - 16, sy - 16, 2, 2)
 	end
 end
 
@@ -728,28 +854,40 @@ function draw_beyond_the_sea_prompts()
 end
 
 -- Draw package/hermit on minimap
-function draw_beyond_the_sea_minimap(cfg, cx, cy, scale)
+-- Parameters match the NPC/building drawing convention:
+-- cfg = MINIMAP_CONFIG, mx/my = minimap top-left, half_mw/half_mh = minimap half-size
+-- px/py = player position in map coords, tile_size, half_map_w/half_map_h
+function draw_beyond_the_sea_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
 	if mission.current_quest ~= "beyond_the_sea" then return end
 
 	-- Draw package location (if not picked up)
 	if not mission.has_package and mission.package_location then
 		local pkg = mission.package_location
-		local mx = cx + pkg.x * scale
-		local my = cy + pkg.y * scale
+		-- Use same formula as NPCs/buildings: mx + (world_x / tile_size + half_map_w - px + half_mw)
+		local marker_x = mx + (pkg.x / tile_size + half_map_w - px + half_mw)
+		local marker_y = my + (pkg.y / tile_size + half_map_h - py + half_mh)
 		-- Clamp to minimap bounds
-		mx = max(cfg.x, min(cfg.x + cfg.width - 1, mx))
-		my = max(cfg.y, min(cfg.y + cfg.height - 1, my))
-		circfill(mx, my, 2, 21)  -- Gold dot
+		marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
+		marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
+		-- Blink the marker
+		local blink = flr(time() * 3) % 2 == 0
+		if blink then
+			circfill(marker_x, marker_y, 2, 21)  -- Gold dot
+		end
 	end
 
 	-- Draw hermit location (if package picked up)
 	if mission.has_package and not mission.delivered_package and mission.hermit_location then
 		local h = mission.hermit_location
-		local mx = cx + h.x * scale
-		local my = cy + h.y * scale
+		local marker_x = mx + (h.x / tile_size + half_map_w - px + half_mh)
+		local marker_y = my + (h.y / tile_size + half_map_h - py + half_mh)
 		-- Clamp to minimap bounds
-		mx = max(cfg.x, min(cfg.x + cfg.width - 1, mx))
-		my = max(cfg.y, min(cfg.y + cfg.height - 1, my))
-		circfill(mx, my, 2, 27)  -- Light green dot
+		marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
+		marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
+		-- Blink the marker
+		local blink = flr(time() * 3) % 2 == 0
+		if blink then
+			circfill(marker_x, marker_y, 2, 27)  -- Light green dot
+		end
 	end
 end

@@ -818,7 +818,7 @@ DEBUG_CONFIG = {
 	debug_weapons = true,    -- set to true to start with all weapons and 999 ammo
 	show_all_npcs = false,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
 	show_all_vehicles = false, -- set to true to show all vehicles on minimap and vehicle debug info
-	skip_to_quest = false,    -- DEPRECATED: use start_quest instead
+	-- skip_to_quest = false,    -- DEPRECATED: use start_quest instead
 	-- Start at a specific quest on load (nil = normal intro, or one of:)
 		-- "intro",
 		-- "protect_city",
@@ -852,7 +852,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_1",
+	start_quest = "talk_to_companion_3",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text
@@ -941,6 +941,14 @@ MAP_CONFIG = {
 	-- World scale: each map pixel = this many world units
 	-- 256px * 16 = 4096 world units
 	tile_size = 16,
+
+	-- World bounds (invisible walls at map edges)
+	-- Map is 256x256, center (128,128) = world (0,0)
+	-- So bounds are: -128*16 = -2048 to 127*16 = 2032
+	world_min_x = -2048,
+	world_max_x = 2032,
+	world_min_y = -2048,
+	world_max_y = 2032,
 
 	-- Color legend (map pixel colors)
 	colors = {

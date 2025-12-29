@@ -940,10 +940,7 @@ function draw_minimap()
 	end
 
 	-- Draw beyond the sea quest markers (package, hermit)
-	local scale = 1 / tile_size
-	local center_x = mx + half_mw - px * scale * tile_size
-	local center_y = my + half_mh - py * scale * tile_size
-	draw_beyond_the_sea_minimap(cfg, center_x, center_y, scale)
+	draw_beyond_the_sea_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
 
 	-- Draw damaged building marker (fix_home quest)
 	if mission.current_quest == "fix_home" and mission.damaged_building then
@@ -1111,9 +1108,9 @@ function _init()
 	-- Debug: start at specific quest (or intro by default)
 	local start_at = DEBUG_CONFIG.start_quest
 	-- Support legacy skip_to_quest option
-	if DEBUG_CONFIG.skip_to_quest and not start_at then
-		start_at = "protect_city"
-	end
+	-- if DEBUG_CONFIG.skip_to_quest and not start_at then
+	-- 	start_at = "protect_city"
+	-- end
 
 	if start_at and start_at ~= "intro" then
 		-- Mark fox quest flags so foxes don't spawn unexpectedly
@@ -1182,16 +1179,6 @@ function _update()
 	if player_vehicle then
 		game.player.x = player_vehicle.x
 		game.player.y = player_vehicle.y
-	end
-
-	-- Toggle render mode with X button
-	if btnp(5) then
-		if render_mode == "tline3d" then
-			render_mode = "tri"
-		else
-			render_mode = "tline3d"
-		end
-		printh("Render mode: " .. render_mode)
 	end
 
 	-- Debug: cycle shadow color table with M key
@@ -1759,6 +1746,13 @@ function update_dialog()
 	if not dialog.active then return end
 
 	if dialog.phase == "result" then
+		-- Allow X to skip result phase
+		if btnp(5) then
+			if dialog.npc then dialog.npc.in_dialog = false end
+			dialog.active = false
+			dialog.close_cooldown = time() + 0.1
+			return
+		end
 		-- Wait for result timer
 		if time() >= dialog.result_timer then
 			-- Clear dialog flag on NPC so they can move again
@@ -2021,8 +2015,8 @@ function draw_fan_prompt()
 	local npc, fan_data = find_nearby_fan()
 	if npc and fan_data then
 		local sx, sy = world_to_screen(npc.x, npc.y)
-		-- Different text for fans vs lovers (lovers can heal you)
-		local text = fan_data.is_lover and "E: HEAL" or "E: FLIRT"
+		-- Different text for fans vs lovers (lovers can talk/heal)
+		local text = fan_data.is_lover and "E: TALK" or "E: FLIRT"
 		local tw = print(text, 0, -100)  -- measure text width properly
 		-- Draw above the heart sprite (moved up from -20 to -28)
 		local prompt_y = sy - 28
