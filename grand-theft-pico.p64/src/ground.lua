@@ -60,6 +60,34 @@ local water_frame = 0
 local water_timer = 0
 
 -- ============================================
+-- WATER BUFFER SYSTEM (double-buffered animation)
+-- ============================================
+-- Two pre-rendered water buffers for frame 0 and frame 1
+-- Only needs redraw when camera moves significantly
+local water_buffer_0 = nil  -- userdata for water frame 0
+local water_buffer_1 = nil  -- userdata for water frame 1
+local water_cache_cam_x = nil  -- camera position when buffers were rendered
+local water_cache_cam_y = nil
+local water_buffer_dirty = true  -- force redraw on first frame
+local WATER_BUFFER_PADDING = 128  -- same as ground buffer
+
+-- Initialize water buffers (call once at startup)
+function init_water_buffers()
+	local buf_w = SCREEN_W + WATER_BUFFER_PADDING * 2
+	local buf_h = SCREEN_H + WATER_BUFFER_PADDING * 2
+	water_buffer_0 = userdata("u8", buf_w, buf_h)
+	water_buffer_1 = userdata("u8", buf_w, buf_h)
+	water_buffer_dirty = true
+	water_cache_cam_x = nil
+	water_cache_cam_y = nil
+end
+
+-- Mark water buffers as needing redraw
+function invalidate_water_buffers()
+	water_buffer_dirty = true
+end
+
+-- ============================================
 -- GROUND BUFFER SYSTEM (blit-based caching)
 -- ============================================
 -- Buffer extends beyond screen to allow camera movement without redraw
@@ -520,11 +548,82 @@ function get_water_tile_sprite(mx, my, tiles, map_w, map_h)
 	return set1.c
 end
 
--- Draw water tiles based on parsed map data with 9-slice borders
--- Optimized: only draws water in visible area, uses direct userdata access
--- Coordinate system: world (0,0) = map center (128,128)
+-- Draw water using double-buffered animation
+-- Pre-renders both animation frames to offscreen buffers, then blits the current frame
 function draw_water_from_map(world_x_offset, world_y_offset)
 	-- Skip if world data not initialized
+	if not WORLD_DATA or not WORLD_DATA.tiles then return end
+
+	-- Initialize buffers on first call
+	if not water_buffer_0 then
+		init_water_buffers()
+	end
+
+	-- Check if we need to redraw the buffers
+	local need_redraw = water_buffer_dirty
+	if not need_redraw and water_cache_cam_x then
+		-- Check if camera moved beyond threshold
+		local dx = abs(cam_x - water_cache_cam_x)
+		local dy = abs(cam_y - water_cache_cam_y)
+		local threshold = WATER_BUFFER_PADDING / 2
+		if dx > threshold or dy > threshold then
+			need_redraw = true
+		end
+	end
+
+	-- Check if any water is visible before doing expensive operations
+	local tiles = WORLD_DATA.tiles
+	local tile_size = MAP_CONFIG.tile_size
+	local map_w = MAP_CONFIG.map_width
+	local map_h = MAP_CONFIG.map_height
+	local half_w = map_w / 2
+	local half_h = map_h / 2
+
+	-- Calculate visible world bounds (with buffer padding)
+	local padding = need_redraw and WATER_BUFFER_PADDING or 0
+	local left_wx = cam_x - SCREEN_CX - tile_size - padding
+	local top_wy = cam_y - SCREEN_CY - tile_size - padding
+	local right_wx = cam_x + SCREEN_CX + tile_size + padding
+	local bottom_wy = cam_y + SCREEN_CY + tile_size + padding
+
+	-- Convert to map coordinates
+	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
+	local my1 = max(0, flr(top_wy / tile_size) + half_h)
+	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
+	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
+
+	-- Quick check: is there ANY water visible?
+	local has_water = false
+	for my = my1, my2 do
+		for mx = mx1, mx2 do
+			if tiles:get(mx, my) == MAP_TILE_WATER then
+				has_water = true
+				break
+			end
+		end
+		if has_water then break end
+	end
+
+	-- No water visible, skip everything
+	if not has_water then return end
+
+	-- Redraw buffers if needed
+	if need_redraw then
+		render_water_buffers()
+		water_cache_cam_x = cam_x
+		water_cache_cam_y = cam_y
+		water_buffer_dirty = false
+	end
+
+	-- Blit the current animation frame
+	local current_buffer = water_frame == 0 and water_buffer_0 or water_buffer_1
+	local draw_x = -(cam_x - water_cache_cam_x) - WATER_BUFFER_PADDING
+	local draw_y = -(cam_y - water_cache_cam_y) - WATER_BUFFER_PADDING
+	spr(current_buffer, draw_x, draw_y)
+end
+
+-- Render both water animation frames to their buffers
+function render_water_buffers()
 	if not WORLD_DATA or not WORLD_DATA.tiles then return end
 
 	local tiles = WORLD_DATA.tiles
@@ -534,38 +633,105 @@ function draw_water_from_map(world_x_offset, world_y_offset)
 	local half_w = map_w / 2
 	local half_h = map_h / 2
 
-	-- Calculate visible world bounds
-	local left_wx = cam_x - SCREEN_CX - tile_size
-	local top_wy = cam_y - SCREEN_CY - tile_size
-	local right_wx = cam_x + SCREEN_CX + tile_size
-	local bottom_wy = cam_y + SCREEN_CY + tile_size
+	-- Calculate buffer bounds (screen + padding)
+	local left_wx = cam_x - SCREEN_CX - WATER_BUFFER_PADDING - tile_size
+	local top_wy = cam_y - SCREEN_CY - WATER_BUFFER_PADDING - tile_size
+	local right_wx = cam_x + SCREEN_CX + WATER_BUFFER_PADDING + tile_size
+	local bottom_wy = cam_y + SCREEN_CY + WATER_BUFFER_PADDING + tile_size
 
-	-- Convert to map coordinates (world 0,0 = map 128,128)
+	-- Convert to map coordinates
 	local mx1 = max(0, flr(left_wx / tile_size) + half_w)
 	local my1 = max(0, flr(top_wy / tile_size) + half_h)
 	local mx2 = min(map_w - 1, flr(right_wx / tile_size) + half_w)
 	local my2 = min(map_h - 1, flr(bottom_wy / tile_size) + half_h)
 
-	-- Screen offset for converting world coords to screen coords
-	local screen_ox = SCREEN_CX - cam_x
-	local screen_oy = SCREEN_CY - cam_y
+	-- Buffer offset (top-left of buffer in world coords)
+	local buf_world_x = cam_x - SCREEN_CX - WATER_BUFFER_PADDING
+	local buf_world_y = cam_y - SCREEN_CY - WATER_BUFFER_PADDING
 
-	-- Draw water tiles with proper 9-slice borders
+	-- Render frame 0
+	render_water_frame_to_buffer(water_buffer_0, 0, tiles, mx1, my1, mx2, my2,
+		half_w, half_h, tile_size, map_w, map_h, buf_world_x, buf_world_y)
+
+	-- Render frame 1
+	render_water_frame_to_buffer(water_buffer_1, 1, tiles, mx1, my1, mx2, my2,
+		half_w, half_h, tile_size, map_w, map_h, buf_world_x, buf_world_y)
+end
+
+-- Render a single water animation frame to a buffer
+function render_water_frame_to_buffer(buffer, frame, tiles, mx1, my1, mx2, my2,
+	half_w, half_h, tile_size, map_w, map_h, buf_world_x, buf_world_y)
+
+	-- Save current draw target and switch to buffer
+	set_draw_target(buffer)
+
+	-- Clear with transparent (color 0 for transparency when blitting)
+	cls(0)
+
+	-- Draw water tiles to buffer coordinates
 	for my = my1, my2 do
-		-- Convert map Y to world Y
 		local wy = (my - half_h) * tile_size
-		local sy = wy + screen_oy
+		local buf_y = wy - buf_world_y  -- buffer Y coordinate
 		for mx = mx1, mx2 do
 			if tiles:get(mx, my) == MAP_TILE_WATER then
-				-- Convert map X to world X
 				local wx = (mx - half_w) * tile_size
-				local sx = wx + screen_ox
-				-- Get appropriate 9-slice sprite based on neighbors
-				local water_spr = get_water_tile_sprite(mx, my, tiles, map_w, map_h)
-				spr(water_spr, sx, sy)
+				local buf_x = wx - buf_world_x  -- buffer X coordinate
+				-- Get appropriate 9-slice sprite based on neighbors (for specific frame)
+				local water_spr = get_water_tile_sprite_for_frame(mx, my, tiles, map_w, map_h, frame)
+				spr(water_spr, buf_x, buf_y)
 			end
 		end
 	end
+
+	-- Restore draw target to screen
+	set_draw_target()
+end
+
+-- Helper to check if a tile is water (for buffer rendering)
+-- Must be defined before get_water_tile_sprite_for_frame which uses it
+local function is_water_at_for_buffer(tiles, x, y, map_w, map_h)
+	if x < 0 or x >= map_w or y < 0 or y >= map_h then
+		return true  -- outside map = water
+	end
+	return tiles:get(x, y) == MAP_TILE_WATER
+end
+
+-- Get water sprite for a specific animation frame (0 or 1)
+function get_water_tile_sprite_for_frame(mx, my, tiles, map_w, map_h, frame)
+	local set1 = WATER_CONFIG.set1[frame + 1]
+	local set2 = WATER_CONFIG.set2[frame + 1]
+
+	-- Check all 8 neighbors
+	local n = is_water_at_for_buffer(tiles, mx, my - 1, map_w, map_h)
+	local s = is_water_at_for_buffer(tiles, mx, my + 1, map_w, map_h)
+	local w = is_water_at_for_buffer(tiles, mx - 1, my, map_w, map_h)
+	local e = is_water_at_for_buffer(tiles, mx + 1, my, map_w, map_h)
+
+	local nw = is_water_at_for_buffer(tiles, mx - 1, my - 1, map_w, map_h)
+	local ne = is_water_at_for_buffer(tiles, mx + 1, my - 1, map_w, map_h)
+	local sw = is_water_at_for_buffer(tiles, mx - 1, my + 1, map_w, map_h)
+	local se = is_water_at_for_buffer(tiles, mx + 1, my + 1, map_w, map_h)
+
+	-- Set 1: Outer corners/edges (grass border around water)
+	if not n and not w then return set1.tl end
+	if not n and not e then return set1.tr end
+	if not s and not w then return set1.bl end
+	if not s and not e then return set1.br end
+	if not n then return set1.t end
+	if not s then return set1.b end
+	if not w then return set1.l end
+	if not e then return set1.r end
+
+	-- Set 2: Inner corners (all 4 cardinal neighbors are water, but diagonal has grass)
+	if n and s and w and e then
+		if not nw then return set2.br end
+		if not ne then return set2.bl end
+		if not sw then return set2.tr end
+		if not se then return set2.tl end
+	end
+
+	-- Center (all sides and diagonals are water)
+	return set1.c
 end
 
 -- Draw sidewalks on both sides of a road (offsets passed from caller)

@@ -42,19 +42,43 @@ QUEST_CONFIG = {
 	-- Quest-specific settings
 	intro = {
 		people_to_meet = 5,
+		money_reward = 50,
 	},
 
 	protect_city = {
 		popularity_reward = 10,
+		money_reward = 100,
 	},
 
 	make_friends = {
 		fans_needed = 5,
+		money_reward = 75,
+	},
+
+	find_love = {
+		money_reward = 100,
+	},
+
+	talk_to_companion_1 = {
+		money_reward = 0,
 	},
 
 	fix_home = {
 		damaged_building_sprite = 129,  -- Cracked concrete sprite
 		repair_hits_needed = 10,        -- Hammer hits to fully repair
+		money_reward = 150,
+	},
+
+	talk_to_companion_2 = {
+		money_reward = 0,
+	},
+
+	a_prick = {
+		money_reward = 200,
+	},
+
+	talk_to_companion_3 = {
+		money_reward = 0,
 	},
 
 	beyond_the_sea = {
@@ -65,6 +89,15 @@ QUEST_CONFIG = {
 		package_sprite = 134,           -- Package sprite
 		hermit_sprite_x = 37,
 		hermit_sprite_y = 217,
+		money_reward = 250,
+	},
+
+	talk_to_companion_4 = {
+		money_reward = 0,
+	},
+
+	find_missions = {
+		money_reward = 100,
 	},
 
 	-- Visual settings
@@ -274,6 +307,18 @@ function complete_current_quest()
 	quest_complete_visual.active = true
 	quest_complete_visual.start_time = time()
 	quest_complete_visual.completed_quest_name = quest_name
+
+	-- Get quest config for rewards
+	local quest_cfg = QUEST_CONFIG[mission.current_quest]
+
+	-- Money reward (all quests)
+	if quest_cfg and quest_cfg.money_reward then
+		game.player.money = game.player.money + quest_cfg.money_reward
+		quest_complete_visual.money_reward = quest_cfg.money_reward
+		printh("Rewarded $" .. quest_cfg.money_reward .. " for completing " .. quest_name)
+	else
+		quest_complete_visual.money_reward = nil
+	end
 
 	-- Quest-specific rewards
 	if mission.current_quest == "protect_city" then
@@ -799,8 +844,8 @@ function update_beyond_the_sea()
 	end
 end
 
--- Draw package on ground (if not picked up)
-function draw_package()
+-- Add package to visible list for depth sorting (if not picked up)
+function add_package_to_visible(visible)
 	if mission.current_quest ~= "beyond_the_sea" then return end
 	if mission.has_package then return end
 	if not mission.package_location then return end
@@ -808,17 +853,25 @@ function draw_package()
 	local pkg = mission.package_location
 	local sx, sy = world_to_screen(pkg.x, pkg.y)
 
-	-- Only draw if on screen
+	-- Only add if on screen
 	if sx > -32 and sx < SCREEN_W + 32 and sy > -32 and sy < SCREEN_H + 32 then
-		-- Draw shadow at bottom of 32x32 sprite
-		fillp(0b0101101001011010)
-		circfill(sx, sy + 12, 10, 0)
-		fillp()
-
-		-- Draw package sprite (32x32, centered)
-		local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite
-		spr(sprite_id, sx - 16, sy - 16, 2, 2)
+		-- Depth sort by bottom of 32x32 sprite (feet position = y + 16)
+		local package_feet_y = pkg.y + 16
+		add(visible, {
+			type = "package",
+			y = package_feet_y,
+			cx = pkg.x,
+			cy = pkg.y,
+			sx = sx,
+			sy = sy,
+		})
 	end
+end
+
+-- Draw package sprite (called from building.lua during depth-sorted render)
+function draw_package_sprite(sx, sy)
+	local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite
+	spr(sprite_id, sx - 16, sy - 16, 2, 2)
 end
 
 -- Draw pickup/talk prompts for beyond the sea quest

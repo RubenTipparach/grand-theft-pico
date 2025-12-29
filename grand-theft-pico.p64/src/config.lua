@@ -836,7 +836,13 @@ DEBUG_CONFIG = {
 		-- sketch:
 		
 		-- big epic rally lol, q1 street racing - one of your companions has an 
-			-- ex in the race, and they need you to beat them. (come up with elaborate reason)
+			-- they have an ex in the race, and they need you to beat them. (come up with elaborate reason)
+			-- to race, drive to the starting location and drive 3 laps around the city hitting all checkpoints.
+			-- draw a box in the game and the a dot on the minimap whewre the next check point is
+			-- generate about 8 cars in the race! and they all try to get to thge next checkpoint, they should have a decent awareness of collision and avoid it) maybe need a cusstom racer AI
+			 -- checkpoiints are as follows (using aseprite coords):
+			    -- start[133, 96], [154, 96], [154,112], [174,112], [174, 127], [175,142], [115,141],  [115, 96]
+				--
 		-- q2 part to of the rally, is that one of your companions work for a corrupt insurance company
 			-- they need you to wreck as many cars in the city as possible in 30 seconds. 
 			-- if you wreck 12+ cars you win this mission, else go back to a companion to start the quest again

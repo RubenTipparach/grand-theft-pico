@@ -1423,6 +1423,14 @@ function draw_quest_complete_banner()
 		local name_width = print(name, 0, -100) - 0
 		local nx = (SCREEN_W - name_width) / 2
 		print_shadow(name, nx, cy + 14, 33)  -- white
+
+		-- Show money reward below quest name (only if > 0)
+		if quest_complete_visual.money_reward and quest_complete_visual.money_reward > 0 then
+			local money_text = "+$" .. quest_complete_visual.money_reward
+			local money_width = print(money_text, 0, -100) - 0
+			local mx = (SCREEN_W - money_width) / 2
+			print_shadow(money_text, mx, cy + 28, 11)  -- green
+		end
 	end
 end
 
@@ -2081,8 +2089,7 @@ function _draw()
 	-- Draw fan prompt (if near a fan)
 	draw_fan_prompt()
 
-	-- Draw beyond the sea quest elements (package, prompts)
-	draw_package()
+	-- Draw beyond the sea quest prompts (package is now depth-sorted in building.lua)
 	draw_beyond_the_sea_prompts()
 
 	-- Draw player health, popularity, and money

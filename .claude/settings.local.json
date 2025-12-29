@@ -4,7 +4,8 @@
       "Bash(find:*)",
       "Bash(cat:*)",
       "Bash(chmod:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(grep:*)"
     ]
   }
 }
