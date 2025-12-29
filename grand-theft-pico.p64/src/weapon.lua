@@ -689,6 +689,13 @@ function check_melee_hit(weapon)
 	local hit_x = p.x + offset_x
 	local hit_y = p.y + offset_y
 
+	-- Check building repair (fix_home quest - hammer hits damaged building)
+	local weapon_key = get_equipped_weapon_key()
+	if check_building_repair and check_building_repair(hit_x, hit_y, weapon_key) then
+		-- Hit the building for repair, don't check other targets
+		return true
+	end
+
 	-- Check foxes
 	local fox = check_fox_hit(hit_x, hit_y, weapon.range)
 	if fox then

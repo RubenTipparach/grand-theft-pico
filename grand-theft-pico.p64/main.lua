@@ -939,6 +939,24 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw beyond the sea quest markers (package, hermit)
+	local scale = 1 / tile_size
+	local center_x = mx + half_mw - px * scale * tile_size
+	local center_y = my + half_mh - py * scale * tile_size
+	draw_beyond_the_sea_minimap(cfg, center_x, center_y, scale)
+
+	-- Draw damaged building marker (fix_home quest)
+	if mission.current_quest == "fix_home" and mission.damaged_building then
+		local b = mission.damaged_building
+		local bx = mx + (b.x / tile_size + half_map_w - px + half_mw)
+		local by = my + (b.y / tile_size + half_map_h - py + half_mh)
+		-- Blink the marker
+		local blink = flr(time() * 3) % 2 == 0
+		if blink then
+			circfill(bx, by, 2, 21)  -- Gold dot for damaged building
+		end
+	end
+
 	-- Draw player (center of minimap)
 	if cfg.show_player then
 		local player_mx = mx + half_mw
@@ -1205,6 +1223,9 @@ function _update()
 
 	-- Update quest objectives
 	update_quests()
+
+	-- Update beyond the sea quest (package pickup/delivery)
+	update_beyond_the_sea()
 end
 
 -- Update quest system
@@ -1505,6 +1526,16 @@ function start_dialog(npc, fan_data)
 		if mission.current_quest == "find_missions" and not mission.talked_to_lover then
 			add(dialog.options, { text = "What troubles you?", action = "ask_troubles" })
 		end
+		-- Talk to companion quests - add chat option
+		if mission.current_quest == "talk_to_companion_1" and not mission.talked_to_companion_1 then
+			add(dialog.options, { text = "What's new?", action = "talk_companion_1" })
+		elseif mission.current_quest == "talk_to_companion_2" and not mission.talked_to_companion_2 then
+			add(dialog.options, { text = "What's new?", action = "talk_companion_2" })
+		elseif mission.current_quest == "talk_to_companion_3" and not mission.talked_to_companion_3 then
+			add(dialog.options, { text = "What's new?", action = "talk_companion_3" })
+		elseif mission.current_quest == "talk_to_companion_4" and not mission.talked_to_companion_4 then
+			add(dialog.options, { text = "What's new?", action = "talk_companion_4" })
+		end
 		add(dialog.options, { text = "Nevermind", action = "cancel" })
 	else
 		-- Non-lovers get flirting options based on archetype
@@ -1628,7 +1659,7 @@ function select_dialog_option()
 		mission.talked_to_lover = true
 		dialog.phase = "result"
 		dialog.result_text = "I've heard rumors of more monsters appearing... Come back after you've dealt with them and I'll tell you more!"
-		dialog.result_timer = time() + 2.5
+		dialog.result_timer = time() + 4
 		return
 	end
 
@@ -1637,7 +1668,40 @@ function select_dialog_option()
 		mission.lover_asked_troubles = true
 		dialog.phase = "result"
 		dialog.result_text = "A cactus monster is terrorizing downtown! Please help us!"
-		dialog.result_timer = time() + 2.5
+		dialog.result_timer = time() + 4
+		return
+	end
+
+	-- Talk to companion quest actions
+	if opt.action == "talk_companion_1" then
+		mission.talked_to_companion_1 = true
+		dialog.phase = "result"
+		dialog.result_text = "My home was damaged in the last attack! Can you help fix it? You'll need a hammer."
+		dialog.result_timer = time() + 4
+		return
+	end
+
+	if opt.action == "talk_companion_2" then
+		mission.talked_to_companion_2 = true
+		dialog.phase = "result"
+		dialog.result_text = "Thank you for fixing my home! But I heard there's a giant cactus monster downtown..."
+		dialog.result_timer = time() + 4
+		return
+	end
+
+	if opt.action == "talk_companion_3" then
+		mission.talked_to_companion_3 = true
+		dialog.phase = "result"
+		dialog.result_text = "A hermit on a nearby island needs a package delivered. Can you pick it up and bring it to him?"
+		dialog.result_timer = time() + 4
+		return
+	end
+
+	if opt.action == "talk_companion_4" then
+		mission.talked_to_companion_4 = true
+		dialog.phase = "result"
+		dialog.result_text = "Thanks for helping the hermit! Keep exploring - there's more to discover!"
+		dialog.result_timer = time() + 4
 		return
 	end
 
@@ -2023,6 +2087,10 @@ function _draw()
 	-- Draw fan prompt (if near a fan)
 	draw_fan_prompt()
 
+	-- Draw beyond the sea quest elements (package, prompts)
+	draw_package()
+	draw_beyond_the_sea_prompts()
+
 	-- Draw player health, popularity, and money
 	draw_health_bar()
 	draw_popularity_bar()
@@ -2034,6 +2102,9 @@ function _draw()
 
 	-- Draw quest HUD (current objectives)
 	draw_quest_hud()
+
+	-- Draw repair progress bar (fix_home quest)
+	draw_repair_progress_bar()
 
 	-- Draw quest completed banner (big center text)
 	draw_quest_complete_banner()

@@ -7,7 +7,21 @@
 
 QUEST_CONFIG = {
 	-- Quest chain order
-	quest_chain = { "intro", "protect_city", "make_friends", "find_love", "a_prick", "find_missions" },
+	-- talk_to_companion quests are checkpoints between main quests
+	quest_chain = {
+		"intro",
+		"protect_city",
+		"make_friends",
+		"find_love",
+		"talk_to_companion_1",  -- leads to fix_home
+		"fix_home",
+		"talk_to_companion_2",  -- leads to a_prick
+		"a_prick",
+		"talk_to_companion_3",  -- leads to beyond_the_sea
+		"beyond_the_sea",
+		"talk_to_companion_4",  -- leads to more quests
+		"find_missions"
+	},
 
 	-- Quest display names
 	quest_names = {
@@ -15,7 +29,13 @@ QUEST_CONFIG = {
 		protect_city = "Protect The City",
 		make_friends = "Make Friends",
 		find_love = "Find Love",
+		talk_to_companion_1 = "Talk to Companion",
+		fix_home = "Fix Home",
+		talk_to_companion_2 = "Talk to Companion",
 		a_prick = "A Prick",
+		talk_to_companion_3 = "Talk to Companion",
+		beyond_the_sea = "Beyond The Sea",
+		talk_to_companion_4 = "Talk to Companion",
 		find_missions = "Find Missions",
 	},
 
@@ -30,6 +50,20 @@ QUEST_CONFIG = {
 
 	make_friends = {
 		fans_needed = 5,
+	},
+
+	fix_home = {
+		damaged_building_sprite = 129,  -- Cracked concrete sprite
+		repair_hits_needed = 10,        -- Hammer hits to fully repair
+	},
+
+	beyond_the_sea = {
+		-- Sprite map coordinates (will be converted to world coords)
+		package_sprite_x = 216,
+		package_sprite_y = 116,
+		package_sprite = 134,           -- Package sprite
+		hermit_sprite_x = 37,
+		hermit_sprite_y = 217,
 	},
 
 	-- Visual settings
@@ -67,10 +101,28 @@ mission = {
 	had_lover_before_quest = false,  -- had a lover before this quest started
 	lover_asked_troubles = false,    -- asked lover about their troubles (objective 2)
 
-	-- Quest 4: A Prick (Cactus Monster)
+	-- Quest 4: Fix Home
+	has_hammer = false,          -- player has obtained a hammer
+	building_repair_progress = 0,-- current repair hits (0 to repair_hits_needed)
+	damaged_building = nil,      -- the building that needs repair {x, y, w, h}
+
+	-- Quest 5: A Prick (Cactus Monster)
 	cactus_killed = false,       -- killed the cactus monster
 
-	-- Quest 5: Find Missions
+	-- Quest 6: Beyond The Sea
+	has_package = false,         -- picked up the package
+	delivered_package = false,   -- delivered to hermit
+	package_location = nil,      -- {x, y} world coords
+	hermit_location = nil,       -- {x, y} world coords
+	hermit_npc = nil,            -- reference to hermit NPC
+
+	-- Talk to Companion checkpoints (between main quests)
+	talked_to_companion_1 = false,  -- before fix_home
+	talked_to_companion_2 = false,  -- before a_prick
+	talked_to_companion_3 = false,  -- before beyond_the_sea
+	talked_to_companion_4 = false,  -- before find_missions
+
+	-- Quest 8: Find Missions
 	talked_to_lover = false,     -- talked to a lover about troubles
 
 	-- General tracking
@@ -85,6 +137,21 @@ quest_complete_visual = {
 	linger_duration = QUEST_CONFIG.completion_linger_duration,
 	completed_quest_name = "",   -- name of the completed quest
 }
+
+-- ============================================
+-- HELPER FUNCTIONS
+-- ============================================
+
+-- Convert sprite map coordinates to world coordinates
+-- Sprite map is 256x256 pixels, each pixel = 16 world units
+-- Map center (128,128) = world origin (0,0)
+function sprite_map_to_world(sx, sy)
+	local tile_size = MAP_CONFIG.tile_size  -- 16
+	local map_center = 128  -- center of 256x256 map
+	local world_x = (sx - map_center) * tile_size
+	local world_y = (sy - map_center) * tile_size
+	return world_x, world_y
+end
 
 -- ============================================
 -- QUEST FUNCTIONS
@@ -139,9 +206,51 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
+	elseif mission.current_quest == "talk_to_companion_1" then
+		if mission.talked_to_companion_1 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "fix_home" then
+		-- Objective 1: Have a hammer
+		if game and game.player and game.player.weapons then
+			for _, w in ipairs(game.player.weapons) do
+				if w == "hammer" then
+					mission.has_hammer = true
+					break
+				end
+			end
+		end
+		-- Objective 2: Repair the building fully
+		local cfg = QUEST_CONFIG.fix_home
+		if mission.has_hammer and mission.building_repair_progress >= cfg.repair_hits_needed then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_2" then
+		if mission.talked_to_companion_2 then
+			complete_current_quest()
+		end
+
 	elseif mission.current_quest == "a_prick" then
 		-- Defeat the cactus monster
 		if mission.cactus_killed then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_3" then
+		if mission.talked_to_companion_3 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "beyond_the_sea" then
+		-- Delivered package to hermit
+		if mission.delivered_package then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_4" then
+		if mission.talked_to_companion_4 then
 			complete_current_quest()
 		end
 
@@ -218,11 +327,43 @@ function start_quest(quest_id)
 		mission.lover_asked_troubles = false
 		printh("Started quest: Find Love")
 
+	elseif quest_id == "talk_to_companion_1" then
+		mission.talked_to_companion_1 = false
+		printh("Started quest: Talk to Companion (before Fix Home)")
+
+	elseif quest_id == "fix_home" then
+		mission.has_hammer = false
+		mission.building_repair_progress = 0
+		-- Select a random lover's "home" building near them
+		setup_damaged_building()
+		printh("Started quest: Fix Home")
+
+	elseif quest_id == "talk_to_companion_2" then
+		mission.talked_to_companion_2 = false
+		printh("Started quest: Talk to Companion (before A Prick)")
+
 	elseif quest_id == "a_prick" then
 		mission.cactus_killed = false
 		-- Spawn cactus monster
 		spawn_cactus()
 		printh("Started quest: A Prick - Cactus monster spawned!")
+
+	elseif quest_id == "talk_to_companion_3" then
+		mission.talked_to_companion_3 = false
+		printh("Started quest: Talk to Companion (before Beyond The Sea)")
+
+	elseif quest_id == "beyond_the_sea" then
+		mission.has_package = false
+		mission.delivered_package = false
+		-- Convert sprite map coords to world coords
+		local cfg = QUEST_CONFIG.beyond_the_sea
+		local pkg_x, pkg_y = sprite_map_to_world(cfg.package_sprite_x, cfg.package_sprite_y)
+		local hermit_x, hermit_y = sprite_map_to_world(cfg.hermit_sprite_x, cfg.hermit_sprite_y)
+		mission.package_location = { x = pkg_x, y = pkg_y }
+		mission.hermit_location = { x = hermit_x, y = hermit_y }
+		-- Spawn hermit NPC at location
+		spawn_hermit(hermit_x, hermit_y)
+		printh("Started quest: Beyond The Sea - Package at " .. pkg_x .. "," .. pkg_y .. " Hermit at " .. hermit_x .. "," .. hermit_y)
 
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
@@ -248,8 +389,20 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "make_friends" then
 		next_quest = "find_love"
 	elseif mission.current_quest == "find_love" then
+		next_quest = "talk_to_companion_1"
+	elseif mission.current_quest == "talk_to_companion_1" then
+		next_quest = "fix_home"
+	elseif mission.current_quest == "fix_home" then
+		next_quest = "talk_to_companion_2"
+	elseif mission.current_quest == "talk_to_companion_2" then
 		next_quest = "a_prick"
 	elseif mission.current_quest == "a_prick" then
+		next_quest = "talk_to_companion_3"
+	elseif mission.current_quest == "talk_to_companion_3" then
+		next_quest = "beyond_the_sea"
+	elseif mission.current_quest == "beyond_the_sea" then
+		next_quest = "talk_to_companion_4"
+	elseif mission.current_quest == "talk_to_companion_4" then
 		next_quest = "find_missions"
 	elseif mission.current_quest == "find_missions" then
 		-- Quest chain complete - can add more later
@@ -302,9 +455,44 @@ function get_quest_objectives()
 			add(objectives, troubles_status .. " Ask your lover about their troubles")
 		end
 
+	elseif mission.current_quest == "fix_home" then
+		-- Objective 1: Get a hammer
+		local hammer_status = mission.has_hammer and "[X]" or "[ ]"
+		add(objectives, hammer_status .. " Obtain a hammer")
+		-- Objective 2: Repair the building (progress shown in bar)
+		local fix_cfg = QUEST_CONFIG.fix_home
+		local repair_status = (mission.building_repair_progress >= fix_cfg.repair_hits_needed) and "[X]" or "[ ]"
+		add(objectives, repair_status .. " Repair the damaged building")
+
 	elseif mission.current_quest == "a_prick" then
 		local status = mission.cactus_killed and "[X]" or "[ ]"
-		add(objectives, status .. " Get rid of the cactus monster terrorizing downtown")
+		add(objectives, status .. " Defeat the cactus monster")
+
+	elseif mission.current_quest == "talk_to_companion_1" then
+		local status = mission.talked_to_companion_1 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "talk_to_companion_2" then
+		local status = mission.talked_to_companion_2 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "talk_to_companion_3" then
+		local status = mission.talked_to_companion_3 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "talk_to_companion_4" then
+		local status = mission.talked_to_companion_4 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "beyond_the_sea" then
+		-- Objective 1: Pick up package
+		local pkg_status = mission.has_package and "[X]" or "[ ]"
+		add(objectives, pkg_status .. " Pick up the package")
+		-- Objective 2: Deliver to hermit (only shows after picking up)
+		if mission.has_package then
+			local deliver_status = mission.delivered_package and "[X]" or "[ ]"
+			add(objectives, deliver_status .. " Deliver to the island hermit")
+		end
 
 	elseif mission.current_quest == "find_missions" then
 		local status = mission.talked_to_lover and "[X]" or "[ ]"
@@ -312,4 +500,256 @@ function get_quest_objectives()
 	end
 
 	return objectives
+end
+
+-- ============================================
+-- FIX HOME QUEST FUNCTIONS
+-- ============================================
+
+-- Set up a damaged building for the fix_home quest
+function setup_damaged_building()
+	-- Find a building near a lover (or pick a random one if no lovers)
+	local target_x, target_y = 0, 0
+	if lovers and #lovers > 0 then
+		local lover = lovers[1]
+		target_x, target_y = lover.x, lover.y
+	elseif game and game.player then
+		target_x, target_y = game.player.x, game.player.y
+	end
+
+	-- Find closest building to target
+	local closest_building = nil
+	local closest_dist = 999999
+	if buildings then
+		for _, b in ipairs(buildings) do
+			local bx = b.x + b.w / 2
+			local by = b.y + b.h / 2
+			local dx = bx - target_x
+			local dy = by - target_y
+			local dist = sqrt(dx * dx + dy * dy)
+			if dist < closest_dist then
+				closest_dist = dist
+				closest_building = b
+			end
+		end
+	end
+
+	if closest_building then
+		mission.damaged_building = {
+			x = closest_building.x,
+			y = closest_building.y,
+			w = closest_building.w,
+			h = closest_building.h,
+			original_sprite = closest_building.wall_sprite,
+		}
+		-- Change building to damaged sprite
+		closest_building.wall_sprite = QUEST_CONFIG.fix_home.damaged_building_sprite
+		printh("Damaged building set up at " .. closest_building.x .. "," .. closest_building.y)
+	end
+end
+
+-- Check if player is hitting the damaged building with hammer
+-- Called from weapon.lua when melee attack connects
+function check_building_repair(hit_x, hit_y, weapon_key)
+	if mission.current_quest ~= "fix_home" then return false end
+	if weapon_key ~= "hammer" then return false end
+	if not mission.damaged_building then return false end
+
+	local b = mission.damaged_building
+	-- Check if hit is near the building
+	if hit_x >= b.x - 16 and hit_x <= b.x + b.w + 16 and
+	   hit_y >= b.y - 16 and hit_y <= b.y + b.h + 16 then
+		mission.building_repair_progress = mission.building_repair_progress + 1
+		printh("Building repair progress: " .. mission.building_repair_progress)
+
+		-- Check if fully repaired
+		local cfg = QUEST_CONFIG.fix_home
+		if mission.building_repair_progress >= cfg.repair_hits_needed then
+			-- Restore original sprite
+			if buildings then
+				for _, building in ipairs(buildings) do
+					if building.x == b.x and building.y == b.y then
+						building.wall_sprite = b.original_sprite
+						break
+					end
+				end
+			end
+			printh("Building fully repaired!")
+		end
+		return true
+	end
+	return false
+end
+
+-- Draw repair progress bar (called from main.lua when fix_home quest active)
+function draw_repair_progress_bar()
+	if mission.current_quest ~= "fix_home" then return end
+	if not mission.has_hammer then return end
+	if not mission.damaged_building then return end
+
+	local cfg = QUEST_CONFIG.fix_home
+	local progress = mission.building_repair_progress / cfg.repair_hits_needed
+	progress = min(1, max(0, progress))
+
+	-- Draw at top center of screen
+	local bar_w = 150
+	local bar_h = 10
+	local bar_x = (SCREEN_W - bar_w) / 2
+	local bar_y = 20
+
+	-- Draw label
+	local label = "Repair Progress"
+	local label_w = print(label, 0, -100)
+	print_shadow(label, (SCREEN_W - label_w) / 2, bar_y - 12, 21)  -- Gold
+
+	-- Draw border
+	rect(bar_x - 1, bar_y - 1, bar_x + bar_w, bar_y + bar_h, 21)
+	-- Draw background
+	rectfill(bar_x, bar_y, bar_x + bar_w - 1, bar_y + bar_h - 1, 1)
+	-- Draw fill
+	local fill_w = flr(bar_w * progress)
+	if fill_w > 0 then
+		rectfill(bar_x, bar_y, bar_x + fill_w - 1, bar_y + bar_h - 1, 19)  -- Green
+	end
+end
+
+-- ============================================
+-- BEYOND THE SEA QUEST FUNCTIONS
+-- ============================================
+
+-- Spawn hermit NPC at island location
+function spawn_hermit(x, y)
+	if not npcs then return end
+
+	-- Create hermit NPC (special type that doesn't react)
+	local hermit = {
+		x = x,
+		y = y,
+		vx = 0,
+		vy = 0,
+		type = NPC_TYPES[1],  -- Use first NPC type
+		state = "idle",
+		dir = "south",
+		walk_frame = 0,
+		anim_timer = 0,
+		is_hermit = true,  -- Special flag for hermit behavior
+		name = "Hermit",
+	}
+	add(npcs, hermit)
+	mission.hermit_npc = hermit
+	printh("Hermit spawned at " .. x .. "," .. y)
+end
+
+-- Update beyond the sea quest (check for package pickup and delivery)
+function update_beyond_the_sea()
+	if mission.current_quest ~= "beyond_the_sea" then return end
+	if not game or not game.player then return end
+
+	local p = game.player
+	local interact_pressed = btnp(5)  -- E key / button 5
+
+	-- Check for package pickup
+	if not mission.has_package and mission.package_location then
+		local pkg = mission.package_location
+		local dx = p.x - pkg.x
+		local dy = p.y - pkg.y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < 24 and interact_pressed then
+			mission.has_package = true
+			printh("Package picked up!")
+		end
+	end
+
+	-- Check for delivery to hermit
+	if mission.has_package and not mission.delivered_package and mission.hermit_npc then
+		local hermit = mission.hermit_npc
+		local dx = p.x - hermit.x
+		local dy = p.y - hermit.y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < 24 and interact_pressed then
+			mission.delivered_package = true
+			printh("Package delivered to hermit!")
+		end
+	end
+end
+
+-- Draw package on ground (if not picked up)
+function draw_package()
+	if mission.current_quest ~= "beyond_the_sea" then return end
+	if mission.has_package then return end
+	if not mission.package_location then return end
+
+	local pkg = mission.package_location
+	local sx, sy = world_to_screen(pkg.x, pkg.y)
+
+	-- Only draw if on screen
+	if sx > -16 and sx < SCREEN_W + 16 and sy > -16 and sy < SCREEN_H + 16 then
+		-- Draw shadow
+		fillp(0b0101101001011010)
+		circfill(sx, sy + 4, 6, 0)
+		fillp()
+
+		-- Draw package sprite
+		local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite
+		spr(sprite_id, sx - 8, sy - 8)
+	end
+end
+
+-- Draw pickup/talk prompts for beyond the sea quest
+function draw_beyond_the_sea_prompts()
+	if mission.current_quest ~= "beyond_the_sea" then return end
+	if not game or not game.player then return end
+
+	local p = game.player
+
+	-- Package pickup prompt
+	if not mission.has_package and mission.package_location then
+		local pkg = mission.package_location
+		local dx = p.x - pkg.x
+		local dy = p.y - pkg.y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < 24 then
+			local sx, sy = world_to_screen(pkg.x, pkg.y)
+			print_shadow("E: Pick up", sx - 20, sy - 20, 21)
+		end
+	end
+
+	-- Hermit talk prompt
+	if mission.has_package and not mission.delivered_package and mission.hermit_npc then
+		local hermit = mission.hermit_npc
+		local dx = p.x - hermit.x
+		local dy = p.y - hermit.y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < 24 then
+			local sx, sy = world_to_screen(hermit.x, hermit.y)
+			print_shadow("E: Talk", sx - 15, sy - 20, 21)
+		end
+	end
+end
+
+-- Draw package/hermit on minimap
+function draw_beyond_the_sea_minimap(cfg, cx, cy, scale)
+	if mission.current_quest ~= "beyond_the_sea" then return end
+
+	-- Draw package location (if not picked up)
+	if not mission.has_package and mission.package_location then
+		local pkg = mission.package_location
+		local mx = cx + pkg.x * scale
+		local my = cy + pkg.y * scale
+		-- Clamp to minimap bounds
+		mx = max(cfg.x, min(cfg.x + cfg.width - 1, mx))
+		my = max(cfg.y, min(cfg.y + cfg.height - 1, my))
+		circfill(mx, my, 2, 21)  -- Gold dot
+	end
+
+	-- Draw hermit location (if package picked up)
+	if mission.has_package and not mission.delivered_package and mission.hermit_location then
+		local h = mission.hermit_location
+		local mx = cx + h.x * scale
+		local my = cy + h.y * scale
+		-- Clamp to minimap bounds
+		mx = max(cfg.x, min(cfg.x + cfg.width - 1, mx))
+		my = max(cfg.y, min(cfg.y + cfg.height - 1, my))
+		circfill(mx, my, 2, 27)  -- Light green dot
+	end
 end

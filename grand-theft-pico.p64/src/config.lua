@@ -41,6 +41,9 @@
 --  32    #ffc49e   light_peach
 --  33    #f2f2da   white
 
+
+
+
 -- ============================================
 -- SPRITE REGISTRY
 -- ============================================
@@ -817,10 +820,49 @@ DEBUG_CONFIG = {
 	show_all_vehicles = false, -- set to true to show all vehicles on minimap and vehicle debug info
 	skip_to_quest = false,    -- DEPRECATED: use start_quest instead
 	-- Start at a specific quest on load (nil = normal intro, or one of:)
-	-- "intro", "protect_city", "make_friends", "find_love", "a_prick", "find_missions"
+		-- "intro",
+		-- "protect_city",
+		-- "make_friends",
+		-- "find_love",
+		-- "talk_to_companion_1",  -- leads to fix_home
+		-- "fix_home",
+		-- "talk_to_companion_2",  -- leads to a_prick
+		-- "a_prick",
+		-- "talk_to_companion_3",  -- leads to beyond_the_sea
+		-- "beyond_the_sea",
+		-- "talk_to_companion_4",  -- leads to more quests
+		-- "find_missions"
+
+		-- sketch:
+		
+		-- big epic rally lol, q1 street racing - one of your companions has an 
+			-- ex in the race, and they need you to beat them. (come up with elaborate reason)
+		-- q2 part to of the rally, is that one of your companions work for a corrupt insurance company
+			-- they need you to wreck as many cars in the city as possible in 30 seconds. 
+			-- if you wreck 12+ cars you win this mission, else go back to a companion to start the quest again
+		
+		-- the insurance comaany has sent an AUDITOR to the city to take care of the player
+				-- defeat the boss which will spawn foxes to try and kill you.
+
+		-- speed dating, you're gaining lots of fans, now a companion wants you to join a gameshow to help grow the polycule
+		-- a compnanion who was a pizza delivery driver didnt get tipped enough by a customer,
+				-- they want you to deliver a bomb to their house. you have a timer,
+				-- dont get hit more than 3 times or your car explodes and you loose the mission
+		
+		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
+			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "a_prick",
+	start_quest = "talk_to_companion_1",
 }
+
+-- when major combat quests complete add popularity and show it on the quest complete text
+-- Racing mission
+-- Demolition derby (increases popularity actually lol)
+-- boat stealing to deliver mail to an island hermit (get coordinates for this)
+-- flower picking mission
+-- maintenance - hitting some buildings with a hammer until they're fixed
+-- speed dating, make 3 romantic partners in a row.
+
 
 -- ============================================
 -- TRAFFIC LIGHT CONFIG

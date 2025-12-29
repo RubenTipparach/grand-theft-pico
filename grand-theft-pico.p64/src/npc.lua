@@ -359,7 +359,7 @@ function update_npc(npc, player_x, player_y)
 	-- Fans and lovers don't get scared - they're happy to see you!
 	if npc.state ~= "surprised" and npc.state ~= "fleeing" and
 	   npc.state ~= "crossing" and npc.state ~= "returning" and
-	   npc.state ~= "fan_greeting" and
+	   npc.state ~= "fan_greeting" and not npc.is_hermit and
 	   player_x and player_y and not is_fan and not is_lover then
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
@@ -381,7 +381,8 @@ function update_npc(npc, player_x, player_y)
 
 	-- Fan detection: when player approaches a non-fan NPC, chance scales with popularity
 	-- This only triggers once per NPC (checked via fan_checked flag)
-	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked then
+	-- Hermits don't become fans - they're special quest NPCs
+	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked and not npc.is_hermit then
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist = sqrt(dx * dx + dy * dy)
