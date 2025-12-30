@@ -146,7 +146,7 @@ QUEST_CONFIG = {
 
 	speed_dating = {
 		-- CONFIGURABLE: Adjust these for difficulty
-		time_limit = 180,         -- seconds to complete (180 = 3 minutes)
+		time_limit = 120,         -- seconds to complete (180 = 3 minutes)
 		lovers_needed = 3,        -- number of new lovers required to win
 		-- Rewards
 		money_reward = 400,
@@ -280,6 +280,14 @@ mission = {
 	bomb_delivery_failed = false,     -- failed (car exploded or time ran out)?
 	bomb_delivery_checkpoints = {},   -- list of {x, y} world coords for checkpoints
 	bomb_delivery_current_cp = 1,     -- current checkpoint index (1-based)
+	bomb_picked_up = false,           -- has player picked up the bomb?
+	bomb_car = nil,                   -- the specific car with the bomb (only this car counts)
+	-- Explosion countdown (after reaching final checkpoint)
+	bomb_countdown_active = false,    -- is the countdown running?
+	bomb_countdown_start = nil,       -- when countdown started
+	bomb_countdown_duration = 10,     -- seconds until explosion
+	bomb_exploded = false,            -- has the bomb exploded?
+	bomb_target_building = nil,       -- building to demolish
 
 	-- Quest 12: Find Missions
 	talked_to_lover = false,     -- talked to a lover about troubles
@@ -700,6 +708,8 @@ function start_quest(quest_id)
 		mission.bomb_delivery_completed = false
 		mission.bomb_delivery_failed = false
 		mission.bomb_delivery_current_cp = 1
+		mission.bomb_picked_up = false
+		mission.bomb_car = nil
 		-- Convert checkpoint sprite coords to world coords
 		local cfg = QUEST_CONFIG.bomb_delivery
 		mission.bomb_delivery_checkpoints = {}
@@ -707,6 +717,7 @@ function start_quest(quest_id)
 			local wx, wy = sprite_map_to_world(cp.x, cp.y)
 			add(mission.bomb_delivery_checkpoints, { x = wx, y = wy })
 		end
+		-- Car will spawn when player picks up the bomb (not at quest start)
 		printh("Started quest: Special Delivery - " .. #mission.bomb_delivery_checkpoints .. " checkpoints, " .. cfg.time_limit .. " seconds!")
 
 	elseif quest_id == "find_missions" then
@@ -942,8 +953,13 @@ function get_quest_objectives()
 		local total_cps = #mission.bomb_delivery_checkpoints
 		local current_cp = mission.bomb_delivery_current_cp
 		if not mission.bomb_delivery_active then
-			-- Before starting: tell player to steal a car
-			add(objectives, "[ ] Steal a car with the bomb!")
+			-- Before starting: pick up bomb, then get in car
+			if not mission.bomb_picked_up then
+				add(objectives, "[ ] Pick up the bomb")
+			else
+				add(objectives, "[X] Pick up the bomb")
+				add(objectives, "[ ] Get in the car")
+			end
 		elseif mission.bomb_delivery_failed then
 			-- Failed - car exploded or time ran out
 			add(objectives, "[X] Mission failed! Talk to your companion to try again")
@@ -1688,16 +1704,131 @@ end
 -- BOMB DELIVERY QUEST FUNCTIONS
 -- ============================================
 
--- Start the bomb delivery timer (called when player steals a car during quest)
+-- Check if player is in the bomb car
+function is_in_bomb_car()
+	return player_vehicle and mission.bomb_car and player_vehicle == mission.bomb_car
+end
+
+-- Check if player is near the bomb pickup location (first checkpoint)
+function is_near_bomb_pickup()
+	if not mission.bomb_delivery_checkpoints or #mission.bomb_delivery_checkpoints == 0 then
+		return false
+	end
+
+	local pickup = mission.bomb_delivery_checkpoints[1]
+	local px, py = game.player.x, game.player.y
+	local dx = px - pickup.x
+	local dy = py - pickup.y
+	local dist = sqrt(dx * dx + dy * dy)
+
+	-- Use same radius as checkpoint detection
+	return dist < QUEST_CONFIG.bomb_delivery.checkpoint_radius
+end
+
+-- Spawn the bomb car (called when player picks up the bomb)
+function spawn_bomb_car()
+	if mission.bomb_car then return end  -- already spawned
+
+	local pickup = mission.bomb_delivery_checkpoints[1]
+	if not pickup then return end
+
+	-- Spawn car slightly offset from pickup location
+	local car_x = pickup.x + 30
+	local car_y = pickup.y
+	mission.bomb_car = create_vehicle(car_x, car_y, "sedan", "south")
+	mission.bomb_car.is_bomb_car = true  -- mark it as the bomb car
+	mission.bomb_car.is_parked = true    -- make it parked (no AI)
+	add(vehicles, mission.bomb_car)
+	printh("Spawned bomb car near pickup location: " .. car_x .. ", " .. car_y)
+end
+
+-- Check if player should pick up the bomb (call from main update)
+-- Works like the Beyond The Sea package pickup - requires E key
+function update_bomb_pickup()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_picked_up then return end  -- already picked up
+	if mission.bomb_delivery_active then return end  -- already started
+	if not game or not game.player then return end
+
+	-- Require E key press when near pickup (like hermit quest)
+	local interact_pressed = keyp("e")
+	if is_near_bomb_pickup() and not player_vehicle and interact_pressed then
+		mission.bomb_picked_up = true
+		spawn_bomb_car()
+		printh("Bomb picked up! Get in the car!")
+	end
+end
+
+-- Add bomb package to visible list for depth sorting (if not picked up)
+-- Works like add_package_to_visible for beyond_the_sea quest
+function add_bomb_package_to_visible(visible)
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_picked_up then return end  -- already picked up
+	if not mission.bomb_delivery_checkpoints or #mission.bomb_delivery_checkpoints == 0 then return end
+
+	local pickup = mission.bomb_delivery_checkpoints[1]
+	local sx, sy = world_to_screen(pickup.x, pickup.y)
+
+	-- Only add if on screen
+	if sx > -32 and sx < SCREEN_W + 32 and sy > -32 and sy < SCREEN_H + 32 then
+		-- Depth sort by bottom of 32x32 sprite (feet position = y + 16)
+		local package_feet_y = pickup.y + 16
+		add(visible, {
+			type = "bomb_package",
+			y = package_feet_y,
+			cx = pickup.x,
+			cy = pickup.y,
+			sx = sx,
+			sy = sy,
+		})
+	end
+end
+
+-- Draw bomb package sprite (called from building.lua during depth-sorted render)
+function draw_bomb_package_sprite(sx, sy)
+	-- Use same package sprite as beyond_the_sea
+	local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite
+	spr(sprite_id, sx - 16, sy - 16, 2, 2)
+end
+
+-- Draw pickup prompt for bomb delivery quest
+function draw_bomb_pickup_prompt()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_picked_up then return end
+	if not game or not game.player then return end
+	if not mission.bomb_delivery_checkpoints or #mission.bomb_delivery_checkpoints == 0 then return end
+
+	local p = game.player
+	local pickup = mission.bomb_delivery_checkpoints[1]
+	local dx = p.x - pickup.x
+	local dy = p.y - pickup.y
+	local dist = sqrt(dx * dx + dy * dy)
+
+	-- Show prompt when near (same radius as checkpoint)
+	if dist < QUEST_CONFIG.bomb_delivery.checkpoint_radius then
+		local sx, sy = world_to_screen(pickup.x, pickup.y)
+		print_shadow("E: Pick up bomb", sx - 30, sy - 20, 21)
+	end
+end
+
+-- Start the bomb delivery timer (called when player enters the bomb car)
 function start_bomb_delivery_timer()
 	if mission.current_quest ~= "bomb_delivery" then return end
 	if mission.bomb_delivery_active then return end  -- already started
 	if mission.bomb_delivery_completed then return end  -- already completed
 
+	-- Must be in the bomb car specifically
+	if not is_in_bomb_car() then
+		printh("Can't start bomb delivery - not in the bomb car!")
+		return
+	end
+
 	mission.bomb_delivery_active = true
 	mission.bomb_delivery_start_time = time()
 	mission.bomb_delivery_hits = 0
 	mission.bomb_delivery_failed = false
+	-- Skip first checkpoint since we're starting from there
+	mission.bomb_delivery_current_cp = 2
 	printh("Bomb Delivery timer started! Deliver in " .. QUEST_CONFIG.bomb_delivery.time_limit .. " seconds, don't get hit more than " .. QUEST_CONFIG.bomb_delivery.max_hits .. " times!")
 end
 
@@ -1724,8 +1855,8 @@ function update_bomb_delivery()
 	if not mission.bomb_delivery_active then return end
 	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
 
-	-- Must be in a vehicle to deliver
-	if not player_vehicle then return end
+	-- Must be in the bomb car specifically (not just any vehicle)
+	if not is_in_bomb_car() then return end
 
 	-- Check distance to current checkpoint
 	local checkpoints = mission.bomb_delivery_checkpoints
@@ -1742,10 +1873,8 @@ function update_bomb_delivery()
 	if dist < radius then
 		-- Reached checkpoint!
 		if cp_idx >= #checkpoints then
-			-- Final checkpoint - mission complete!
-			mission.bomb_delivery_completed = true
-			mission.bomb_delivery_active = false
-			printh("Bomb delivered successfully! All " .. #checkpoints .. " checkpoints cleared!")
+			-- Final checkpoint - start countdown sequence!
+			start_bomb_countdown()
 		else
 			-- Advance to next checkpoint
 			mission.bomb_delivery_current_cp = cp_idx + 1
@@ -1758,6 +1887,164 @@ function update_bomb_delivery()
 	local time_limit = QUEST_CONFIG.bomb_delivery.time_limit
 	if elapsed >= time_limit then
 		fail_bomb_delivery("TOO SLOW!")
+	end
+end
+
+-- Start the bomb countdown sequence (player reached final checkpoint)
+function start_bomb_countdown()
+	if mission.bomb_countdown_active then return end
+
+	mission.bomb_countdown_active = true
+	mission.bomb_countdown_start = time()
+	mission.bomb_delivery_active = false  -- stop the delivery timer
+
+	-- Find nearest building to target location for demolition
+	local checkpoints = mission.bomb_delivery_checkpoints
+	local final_cp = checkpoints[#checkpoints]
+	mission.bomb_target_building = find_nearest_building(final_cp.x, final_cp.y)
+
+	-- Eject player from the bomb car
+	if player_vehicle and player_vehicle == mission.bomb_car then
+		-- Force exit the vehicle
+		local car = mission.bomb_car
+		game.player.x = car.x + 40  -- Move player away from car
+		game.player.y = car.y
+		player_vehicle.is_player_vehicle = false
+		player_vehicle = nil
+		printh("Player ejected from bomb car! RUN!")
+	end
+
+	printh("Bomb countdown started! 10 seconds until explosion!")
+end
+
+-- Find nearest building to a position
+function find_nearest_building(x, y)
+	if not buildings then return nil end
+
+	local closest = nil
+	local closest_dist = 999999
+
+	for _, b in ipairs(buildings) do
+		local bx = b.x + b.w / 2
+		local by = b.y + b.h / 2
+		local dx = bx - x
+		local dy = by - y
+		local dist = sqrt(dx * dx + dy * dy)
+		if dist < closest_dist then
+			closest_dist = dist
+			closest = b
+		end
+	end
+
+	return closest
+end
+
+-- Update bomb countdown (call from main update)
+function update_bomb_countdown()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_countdown_active then return end
+	if mission.bomb_exploded then return end
+
+	local elapsed = time() - mission.bomb_countdown_start
+
+	-- Check if countdown finished
+	if elapsed >= mission.bomb_countdown_duration then
+		trigger_bomb_explosion()
+	end
+end
+
+-- Get remaining countdown time
+function get_bomb_countdown_remaining()
+	if not mission.bomb_countdown_active then return nil end
+	if mission.bomb_exploded then return nil end
+
+	local elapsed = time() - mission.bomb_countdown_start
+	return max(0, mission.bomb_countdown_duration - elapsed)
+end
+
+-- Trigger the bomb explosion
+function trigger_bomb_explosion()
+	if mission.bomb_exploded then return end
+	mission.bomb_exploded = true
+
+	printh("KABOOM! Bomb exploded!")
+
+	local checkpoints = mission.bomb_delivery_checkpoints
+	local final_cp = checkpoints[#checkpoints]
+	local explosion_x = final_cp.x
+	local explosion_y = final_cp.y
+
+	-- Explode the bomb car
+	if mission.bomb_car then
+		mission.bomb_car.health = 0
+		mission.bomb_car.state = "exploding"
+		mission.bomb_car.explosion_frame = 1
+		mission.bomb_car.explosion_timer = time()
+	end
+
+	-- Spawn multiple explosions around the target
+	spawn_bomb_explosions(explosion_x, explosion_y)
+
+	-- Demolish nearby building
+	if mission.bomb_target_building then
+		demolish_building(mission.bomb_target_building)
+	end
+
+	-- Mission complete after explosion
+	mission.bomb_countdown_active = false
+	mission.bomb_delivery_completed = true
+	printh("Bomb delivery complete! Building demolished!")
+end
+
+-- Spawn multiple explosion effects around the bomb site
+function spawn_bomb_explosions(center_x, center_y)
+	-- Create several explosion effects in a pattern
+	local explosion_offsets = {
+		{ x = 0, y = 0 },       -- center
+		{ x = -30, y = -20 },   -- top-left
+		{ x = 30, y = -20 },    -- top-right
+		{ x = -30, y = 20 },    -- bottom-left
+		{ x = 30, y = 20 },     -- bottom-right
+		{ x = 0, y = -35 },     -- top
+		{ x = 0, y = 35 },      -- bottom
+		{ x = -40, y = 0 },     -- left
+		{ x = 40, y = 0 },      -- right
+	}
+
+	-- Stagger explosions with slight delays (using collision_effects system)
+	for i, offset in ipairs(explosion_offsets) do
+		local ex = center_x + offset.x
+		local ey = center_y + offset.y
+		-- Stagger by 0.1 seconds each
+		local delay = (i - 1) * 0.1
+		add_delayed_explosion(ex, ey, delay)
+	end
+end
+
+-- Add a delayed explosion effect
+function add_delayed_explosion(x, y, delay)
+	-- Use collision_effects system but with delayed start
+	local effect = {
+		x = x,
+		y = y,
+		start_time = time() + delay,
+		end_time = time() + delay + 1.0,  -- longer duration for big explosions
+		is_bomb_explosion = true,
+	}
+	add(collision_effects, effect)
+end
+
+-- Demolish a building (remove it from the buildings list)
+function demolish_building(building)
+	if not building then return end
+
+	-- Find and remove the building
+	for i, b in ipairs(buildings) do
+		if b == building then
+			printh("Demolished building at " .. b.x .. ", " .. b.y)
+			deli(buildings, i)
+			break
+		end
 	end
 end
 
@@ -1790,6 +2077,13 @@ function update_bomb_delivery_failure()
 		mission.bomb_delivery_completed = false
 		mission.bomb_delivery_failed = false
 		mission.bomb_delivery_current_cp = 1  -- Reset checkpoint progress
+		mission.bomb_picked_up = false
+		mission.bomb_car = nil
+		-- Reset countdown state
+		mission.bomb_countdown_active = false
+		mission.bomb_countdown_start = nil
+		mission.bomb_exploded = false
+		mission.bomb_target_building = nil
 
 		printh("Reverted to talk_to_companion_8 - try again!")
 	end
@@ -1817,10 +2111,12 @@ function draw_bomb_delivery_hud()
 
 	-- Get remaining time
 	local remaining = get_bomb_delivery_time_remaining()
-	local secs = flr(remaining)
+	local total_secs = flr(remaining)
+	local mins = flr(total_secs / 60)
+	local secs = total_secs % 60
 
-	-- Draw prominent timer at top-center of screen
-	local time_text = secs .. "s"
+	-- Format as MM:SS (e.g., 1:30)
+	local time_text = mins .. ":" .. (secs < 10 and "0" or "") .. secs
 	local cp_text = "CP: " .. (current_cp - 1) .. "/" .. total_cps
 	local hits_left = cfg.max_hits - mission.bomb_delivery_hits
 	local hits_text = "HITS: " .. hits_left .. "/" .. cfg.max_hits
@@ -1838,16 +2134,54 @@ function draw_bomb_delivery_hud()
 	rectfill(cx - box_w/2, y - 2, cx + box_w/2, y + 34, 1)
 	rect(cx - box_w/2, y - 2, cx + box_w/2, y + 34, 6)
 
-	-- Draw timer (big, urgent)
-	local timer_color = remaining < 15 and 8 or 11  -- red if < 15s, green otherwise
-	print_shadow(time_text, cx - time_w/2, y, timer_color)
+	-- Draw timer (white, color 33)
+	print_shadow(time_text, cx - time_w/2, y, 33)
 
-	-- Draw checkpoint progress
-	print_shadow(cp_text, cx - cp_w/2, y + 12, 7)
+	-- Draw checkpoint progress (gold/orange, color 21)
+	print_shadow(cp_text, cx - cp_w/2, y + 12, 21)
 
-	-- Draw hits remaining (red warning if low)
-	local hits_color = hits_left <= 1 and 8 or 7
-	print_shadow(hits_text, cx - hits_w/2, y + 24, hits_color)
+	-- Draw hits remaining (red, color 12)
+	print_shadow(hits_text, cx - hits_w/2, y + 24, 12)
+end
+
+-- Draw bomb countdown HUD (big countdown timer in center of screen)
+function draw_bomb_countdown_hud()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_countdown_active then return end
+	if mission.bomb_exploded then return end
+
+	local remaining = get_bomb_countdown_remaining()
+	if not remaining then return end
+
+	local secs = flr(remaining) + 1  -- Show 10, 9, 8... (ceiling)
+	if secs > 10 then secs = 10 end
+	if secs < 1 then secs = 1 end
+
+	local cx = SCREEN_W / 2
+	local cy = SCREEN_H / 2
+
+	-- Draw large countdown number
+	local countdown_text = tostr(secs)
+	local text_w = print(countdown_text, 0, -100)
+
+	-- Draw pulsing background
+	local pulse = sin(time() * 8) * 0.3 + 0.7
+	local box_size = 60 + flr(pulse * 10)
+	rectfill(cx - box_size/2, cy - box_size/2, cx + box_size/2, cy + box_size/2, 8)  -- red background
+	rect(cx - box_size/2, cy - box_size/2, cx + box_size/2, cy + box_size/2, 12)  -- bright red border
+
+	-- Draw countdown number (large, centered) - use scale if available, otherwise just print big
+	print_shadow(countdown_text, cx - text_w/2, cy - 4, 33)  -- white
+
+	-- Draw "RUN!" text below
+	local run_text = "RUN!"
+	local run_w = print(run_text, 0, -100)
+	print_shadow(run_text, cx - run_w/2, cy + 20, 10)  -- yellow
+
+	-- Draw "GET AWAY FROM THE CAR!" above
+	local warn_text = "GET AWAY FROM THE CAR!"
+	local warn_w = print(warn_text, 0, -100)
+	print_shadow(warn_text, cx - warn_w/2, cy - 40, 12)  -- red
 end
 
 -- Draw bomb delivery failure message
@@ -1875,11 +2209,16 @@ end
 -- Add bomb delivery current checkpoint to visible list for depth sorting
 function add_bomb_target_to_visible(visible)
 	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
+
+	-- Before timer starts, don't show checkpoints (only show arrow on car)
 	if not mission.bomb_delivery_active then return end
 
 	local checkpoints = mission.bomb_delivery_checkpoints
+	if not checkpoints or #checkpoints == 0 then return end
+
 	local cp_idx = mission.bomb_delivery_current_cp
-	if not checkpoints or #checkpoints == 0 or cp_idx > #checkpoints then return end
+	if cp_idx > #checkpoints then return end
 
 	local target = checkpoints[cp_idx]
 	local sx, sy = world_to_screen(target.x, target.y)
@@ -1895,9 +2234,59 @@ function add_bomb_target_to_visible(visible)
 			cy = target.y,
 			sx = sx,
 			sy = sy,
-			is_final = (cp_idx == #checkpoints),  -- mark if final checkpoint
+			is_final = (cp_idx == #checkpoints),
 		})
 	end
+end
+
+-- Draw red arrow above a target (bomb pickup or bomb car)
+function draw_bomb_car_arrow()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_delivery_active then return end  -- only show before timer starts
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
+
+	local sx, sy
+	local color = 12  -- red
+
+	if not mission.bomb_picked_up then
+		-- Show arrow over bomb pickup location (first checkpoint)
+		if not mission.bomb_delivery_checkpoints or #mission.bomb_delivery_checkpoints == 0 then return end
+		local pickup = mission.bomb_delivery_checkpoints[1]
+		sx, sy = world_to_screen(pickup.x, pickup.y)
+	else
+		-- Show arrow over bomb car
+		if not mission.bomb_car then return end
+		sx, sy = world_to_screen(mission.bomb_car.x, mission.bomb_car.y)
+	end
+
+	-- Only draw if on screen
+	if sx < -50 or sx > SCREEN_W + 50 or sy < -50 or sy > SCREEN_H + 50 then return end
+
+	-- Bobbing animation
+	local bob = sin(time() * 3) * 4
+
+	-- Draw red arrow pointing down
+	local arrow_x = sx
+	local arrow_top = sy - 48 + bob  -- top of stem
+	local arrow_tip = sy - 24 + bob  -- tip of arrow (pointing down)
+
+	-- Draw stem (vertical line)
+	line(arrow_x, arrow_top, arrow_x, arrow_tip - 6, color)
+	line(arrow_x - 1, arrow_top, arrow_x - 1, arrow_tip - 6, color)
+	line(arrow_x + 1, arrow_top, arrow_x + 1, arrow_tip - 6, color)
+
+	-- Draw arrow head pointing down (triangle using lines)
+	-- Left edge of arrow head
+	line(arrow_x - 6, arrow_tip - 8, arrow_x, arrow_tip, color)
+	line(arrow_x - 5, arrow_tip - 8, arrow_x, arrow_tip - 1, color)
+	-- Right edge of arrow head
+	line(arrow_x + 6, arrow_tip - 8, arrow_x, arrow_tip, color)
+	line(arrow_x + 5, arrow_tip - 8, arrow_x, arrow_tip - 1, color)
+	-- Fill middle of arrow head
+	line(arrow_x - 4, arrow_tip - 7, arrow_x + 4, arrow_tip - 7, color)
+	line(arrow_x - 3, arrow_tip - 5, arrow_x + 3, arrow_tip - 5, color)
+	line(arrow_x - 2, arrow_tip - 3, arrow_x + 2, arrow_tip - 3, color)
+	line(arrow_x - 1, arrow_tip - 1, arrow_x + 1, arrow_tip - 1, color)
 end
 
 -- Draw bomb target sprite (uses package sprite - same as beyond_the_sea)
@@ -1906,25 +2295,56 @@ function draw_bomb_target_sprite(sx, sy)
 	spr(sprite_id, sx - 16, sy - 16, 2, 2)
 end
 
--- Draw bomb delivery current checkpoint on minimap
+-- Draw bomb delivery markers on minimap (bomb pickup, bomb car, or checkpoints)
 function draw_bomb_delivery_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
 	if mission.current_quest ~= "bomb_delivery" then return end
-	if not mission.bomb_delivery_active then return end
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
 
-	local checkpoints = mission.bomb_delivery_checkpoints
-	local cp_idx = mission.bomb_delivery_current_cp
-	if not checkpoints or #checkpoints == 0 or cp_idx > #checkpoints then return end
-
-	local target = checkpoints[cp_idx]
-	local marker_x = mx + (target.x / tile_size + half_map_w - px + half_mw)
-	local marker_y = my + (target.y / tile_size + half_map_h - py + half_mh)
-	-- Clamp to minimap bounds
-	marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
-	marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
-	-- Blink the marker (red for danger, yellow for intermediate)
 	local blink = flr(time() * 4) % 2 == 0  -- Faster blink for urgency
-	if blink then
-		local color = (cp_idx == #checkpoints) and 8 or 10  -- Red for final, yellow for intermediate
-		circfill(marker_x, marker_y, 2, color)
+
+	if not mission.bomb_delivery_active then
+		-- Before timer starts
+		local target_x, target_y
+
+		if not mission.bomb_picked_up then
+			-- Show bomb pickup location (first checkpoint)
+			local checkpoints = mission.bomb_delivery_checkpoints
+			if not checkpoints or #checkpoints == 0 then return end
+			target_x = checkpoints[1].x
+			target_y = checkpoints[1].y
+		elseif mission.bomb_car then
+			-- Show bomb car location
+			target_x = mission.bomb_car.x
+			target_y = mission.bomb_car.y
+		else
+			return
+		end
+
+		local marker_x = mx + (target_x / tile_size + half_map_w - px + half_mw)
+		local marker_y = my + (target_y / tile_size + half_map_h - py + half_mh)
+		-- Clamp to minimap bounds
+		marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
+		marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
+		if blink then
+			circfill(marker_x, marker_y, 2, 12)  -- Red marker
+		end
+	else
+		-- After timer starts, show current checkpoint
+		local checkpoints = mission.bomb_delivery_checkpoints
+		if not checkpoints or #checkpoints == 0 then return end
+
+		local cp_idx = mission.bomb_delivery_current_cp
+		if cp_idx > #checkpoints then return end
+
+		local target = checkpoints[cp_idx]
+		local marker_x = mx + (target.x / tile_size + half_map_w - px + half_mw)
+		local marker_y = my + (target.y / tile_size + half_map_h - py + half_mh)
+		-- Clamp to minimap bounds
+		marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
+		marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
+		if blink then
+			local color = (cp_idx == #checkpoints) and 8 or 10  -- Red for final, yellow for intermediate
+			circfill(marker_x, marker_y, 2, color)
+		end
 	end
 end

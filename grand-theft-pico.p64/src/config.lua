@@ -365,15 +365,15 @@ PLAYER_CONFIG = {
 	-- Dialog options by archetype (8-10 per archetype)
 	-- Each has: text, response (NPC reply), love_gain
 	dialog_options = {
-		dirty = {
-			{ text = "Are those space pants? Your butt is out of this world.", response = "Oh my! How forward...", love = 35 },
-			{ text = "Is it hot in here or is that just you?", response = "Getting warmer!", love = 30 },
-			{ text = "I lost my number, can I have yours?", response = "Smooth talker!", love = 25 },
-			{ text = "If you were a vegetable, you'd be a cute-cumber.", response = "Hehe, cheeky!", love = 20 },
-			{ text = "Do you believe in love at first sight?", response = "Maybe now I do...", love = 30 },
-			{ text = "Are you a campfire? You're hot and I want s'more.", response = "That's so bad it's good!", love = 25 },
-			{ text = "Is your dad a boxer? Cause you're a knockout!", response = "Flattery works!", love = 20 },
-			{ text = "You must be tired from running through my dreams.", response = "Oh stop it you!", love = 30 },
+		dirty = { -- this is more like romantic lol, but its distinct
+			{ text = "I can't stop thinking about you... day and night.", response = "That's so romantic...", love = 35 },
+			{ text = "The way you look at me makes my heart race.", response = "You're making me blush!", love = 30 },
+			{ text = "I want to be the reason you smile every morning.", response = "How sweet!", love = 25 },
+			{ text = "Your eyes are like stars, I could get lost in them forever.", response = "So poetic!", love = 30 },
+			{ text = "I've never felt this way about anyone before.", response = "Me neither...", love = 35 },
+			{ text = "Every moment with you feels like magic.", response = "I feel it too!", love = 30 },
+			{ text = "I want to hold your hand and never let go.", response = "Then don't...", love = 25 },
+			{ text = "You make my world brighter just by being in it.", response = "You're so sweet!", love = 30 },
 		},
 		friendly = {
 			{ text = "Hey! You seem really cool, wanna hang out?", response = "Aw, you're sweet!", love = 35 },
@@ -386,24 +386,24 @@ PLAYER_CONFIG = {
 			{ text = "Want to grab coffee sometime?", response = "I'd love that!", love = 35 },
 		},
 		clever = {
-			{ text = "Are you made of copper and tellurium? Cause you're Cu-Te!", response = "A science pun! Nice!", love = 35 },
-			{ text = "I must be a snowflake cause I've fallen for you.", response = "Clever wordplay!", love = 30 },
-			{ text = "Are you WiFi? Cause I'm feeling a connection.", response = "Strong signal!", love = 25 },
-			{ text = "Is your name Chapstick? Cause you're da balm!", response = "Ha! Good one!", love = 20 },
-			{ text = "You must be a magician. Everyone else disappeared.", response = "How charming!", love = 30 },
-			{ text = "Are you a bank loan? Cause you got my interest.", response = "Financially sound!", love = 25 },
-			{ text = "If beauty were time, you'd be an eternity.", response = "Poetic!", love = 30 },
-			{ text = "You must be a parking ticket, cause you got fine written all over.", response = "Classic but clever!", love = 20 },
+			{ text = "Are you made of copper and tellurium? Cause you're Cu-Te!", response = "A chemistry nerd! Love it!", love = 35 },
+			{ text = "You must be the square root of -1, cause you can't be real!", response = "Imaginary numbers! Nice!", love = 30 },
+			{ text = "Are you a 90 degree angle? Cause you're looking right!", response = "Geometry humor!", love = 25 },
+			{ text = "I wish I was your derivative so I could lie tangent to your curves.", response = "Calculus flirting? Bold!", love = 30 },
+			{ text = "You're like a black hole - you just pulled me in.", response = "Astrophysics! Swoon!", love = 35 },
+			{ text = "Are you a carbon sample? Cause I want to date you.", response = "Radiocarbon dating! Ha!", love = 25 },
+			{ text = "If you were a Pokemon, I'd choose you.", response = "A trainer after my heart!", love = 30 },
+			{ text = "Are you a keyboard? Cause you're definitely my type.", response = "Tech puns for the win!", love = 20 },
 		},
 		funny = {
-			{ text = "Did it hurt when you fell from the vending machine?", response = "Wait what? Haha!", love = 35 },
-			{ text = "I'm not a photographer but I can picture us together.", response = "So corny! I love it!", love = 30 },
-			{ text = "Are you a banana? Cause I find you a-peeling!", response = "Fruit puns! Yes!", love = 25 },
-			{ text = "I'd tell you a chemistry joke but I know I won't get a reaction.", response = "Hahaha amazing!", love = 30 },
-			{ text = "Are you a keyboard? Cause you're just my type!", response = "That's hilarious!", love = 25 },
-			{ text = "I was blinded by your beauty. Need your name for insurance.", response = "LOL smooth!", love = 20 },
-			{ text = "Is your dad a thief? Who stole the stars and put them in your eyes?", response = "So cheesy! Perfect!", love = 30 },
-			{ text = "If you were a triangle, you'd be acute one!", response = "Geometry humor wins!", love = 35 },
+			{ text = "What do you call a fake noodle? An impasta!", response = "Haha oh no!", love = 35 },
+			{ text = "Why don't eggs tell jokes? They'd crack each other up!", response = "That's egg-cellent!", love = 30 },
+			{ text = "What do you call a fish without eyes? A fsh!", response = "I sea what you did!", love = 25 },
+			{ text = "Why did the scarecrow win an award? Outstanding in his field!", response = "Classic dad joke!", love = 30 },
+			{ text = "What's orange and sounds like a parrot? A carrot!", response = "That's terrible! I love it!", love = 25 },
+			{ text = "Why don't scientists trust atoms? They make up everything!", response = "Science dad joke combo!", love = 30 },
+			{ text = "What do you call a bear with no teeth? A gummy bear!", response = "Aww that's cute and punny!", love = 35 },
+			{ text = "I'm reading a book about anti-gravity. Can't put it down!", response = "That one really lifts me up!", love = 30 },
 		},
 	},
 
@@ -879,7 +879,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_7",
+	start_quest = "talk_to_companion_8",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text

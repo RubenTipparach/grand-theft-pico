@@ -140,8 +140,9 @@ game = {
 -- List of NPCs that are fans/lovers (by NPC reference)
 -- Fans: NPCs who recognized the player, won't flee, show heart
 -- Lovers: Fans who filled love meter, always show heart, can heal
-fans = {}  -- { npc = npc_ref, is_lover = false, love = 0 }
+fans = {}  -- { npc = npc_ref, is_lover = false, love = 0, id = unique_id }
 lovers = {}  -- separate list for quick lookup on minimap
+next_fan_id = 1  -- global counter for unique fan IDs
 
 -- Dialog system state
 dialog = {
@@ -1453,7 +1454,9 @@ function _update()
 	update_speed_dating_failure()
 
 	-- Update bomb delivery quest
+	update_bomb_pickup()  -- Check if player picks up bomb
 	update_bomb_delivery()
+	update_bomb_countdown()  -- Handle explosion countdown after reaching final checkpoint
 	update_bomb_delivery_failure()
 end
 
@@ -1491,17 +1494,22 @@ function update_nearby_cache()
 	local best_dist = interact_range
 	for _, fan_data in ipairs(fans) do
 		local npc = fan_data.npc
-		local dx = npc.x - px
-		local dy = npc.y - py
-		local dist = sqrt(dx * dx + dy * dy)
-		if dist < interact_range then
-			add(nearby_fans, { npc = npc, fan_data = fan_data, dist = dist })
-			-- Refresh heart show timer when player is nearby
-			fan_data.heart_show_until = now + heart_duration
-			if dist < best_dist then
-				best_dist = dist
-				nearby_fan = npc
-				nearby_fan_data = fan_data
+		-- Skip NPCs that are fleeing (e.g., after 3-strike failure)
+		if npc.state == "fleeing" then
+			-- Don't show heart or allow interaction with fleeing fans
+		else
+			local dx = npc.x - px
+			local dy = npc.y - py
+			local dist = sqrt(dx * dx + dy * dy)
+			if dist < interact_range then
+				add(nearby_fans, { npc = npc, fan_data = fan_data, dist = dist })
+				-- Refresh heart show timer when player is nearby
+				fan_data.heart_show_until = now + heart_duration
+				if dist < best_dist then
+					best_dist = dist
+					nearby_fan = npc
+					nearby_fan_data = fan_data
+				end
 			end
 		end
 	end
@@ -1773,7 +1781,8 @@ function start_dialog(npc, fan_data)
 	dialog.options = {}
 
 	-- Check if this is the intro NPC
-	printh("start_dialog: is_intro_npc=" .. tostring(npc.is_intro_npc) .. " quest=" .. tostring(mission.current_quest) .. " talked=" .. tostring(mission.talked_to_dealer))
+	local fan_id = fan_data.id or "?"
+	printh("start_dialog: fan_id=" .. fan_id .. " is_intro_npc=" .. tostring(npc.is_intro_npc) .. " quest=" .. tostring(mission.current_quest) .. " failures=" .. tostring(fan_data.failures or 0))
 	if npc.is_intro_npc and mission.current_quest == "intro" and not mission.talked_to_dealer then
 		printh("Setting up intro dialog!")
 		dialog.phase = "quest"
@@ -2219,6 +2228,8 @@ function select_dialog_option()
 				fan_data.love = PLAYER_CONFIG.love_meter_max
 				-- Add to lovers list for minimap
 				add(lovers, fan_data.npc)
+				-- Track for speed dating quest
+				track_speed_dating_lover()
 				dialog.phase = "result"
 				dialog.result_text = "They're smitten! New lover!"
 			else
@@ -2230,16 +2241,41 @@ function select_dialog_option()
 			-- Wrong choice! Increment failure count
 			fan_data.failures = (fan_data.failures or 0) + 1
 			dialog.love_gained = 0
-			printh("Flirt failed! failures=" .. fan_data.failures .. " max=" .. PLAYER_CONFIG.max_failures)
+			local fan_id = fan_data.id or "?"
+			printh("Flirt failed! fan_id=" .. fan_id .. " failures=" .. fan_data.failures .. " max=" .. PLAYER_CONFIG.max_failures)
 
 			-- Check if they've had enough (3 strikes)
 			if fan_data.failures >= PLAYER_CONFIG.max_failures then
-				printh("Fan gave up! Setting dialog.fan_gave_up = true")
+				printh("Fan ID=" .. fan_id .. " gave up! 3 strikes - removing and fleeing immediately")
 				dialog.phase = "result"
 				dialog.result_text = "I'm done with you!"
 				dialog.result_timer = time() + 1.5
-				-- Mark for removal after dialog closes
 				dialog.fan_gave_up = true
+				-- IMMEDIATELY remove from fans list to prevent re-interaction
+				local removed = false
+				for i, fd in ipairs(fans) do
+					if fd.npc == dialog.npc then
+						printh("Removing fan ID=" .. (fd.id or "?") .. " from fans list, fans count before=" .. #fans)
+						deli(fans, i)
+						removed = true
+						printh("Removed! fans count after=" .. #fans)
+						break
+					end
+				end
+				if not removed then
+					printh("WARNING: Fan not found in fans list!")
+				end
+				-- Start fleeing IMMEDIATELY
+				dialog.npc.state = "fleeing"
+				dialog.npc.state_end_time = time() + NPC_CONFIG.flee_duration
+				dialog.npc.flee_dir = get_flee_direction(dialog.npc, game.player.x, game.player.y)
+				dialog.npc.facing_dir = dialog.npc.flee_dir or dialog.npc.facing_dir
+				-- Keep fan_checked = true so they can't immediately become a fan again
+				-- They'll reset when they finish fleeing and move away
+				dialog.npc.in_dialog = false  -- Let them move while fleeing
+				dialog.npc.rejected_player = true  -- Mark as rejected so they can't become fan again soon
+				-- Lose popularity for failing at flirting
+				change_popularity(-PLAYER_CONFIG.popularity_loss_flirt_fail)
 				return
 			else
 				-- Show a random failure response
@@ -2289,24 +2325,11 @@ function update_dialog()
 			-- Clear dialog flag on NPC so they can move again
 			if dialog.npc then dialog.npc.in_dialog = false end
 
-			-- Check if fan gave up (3 strikes)
+			-- Check if fan gave up (3 strikes) - already handled, just add cooldown
 			if dialog.fan_gave_up then
 				dialog.fan_gave_up = false
-				-- Remove from fans list
-				for i, fan_data in ipairs(fans) do
-					if fan_data.npc == dialog.npc then
-						deli(fans, i)
-						break
-					end
-				end
-				-- Make NPC flee and reset their fan_checked so they can become a fan again later
-				dialog.npc.state = "fleeing"
-				dialog.npc.state_end_time = time() + NPC_CONFIG.flee_duration
-				dialog.npc.flee_dir = get_flee_direction(dialog.npc, game.player.x, game.player.y)
-				dialog.npc.facing_dir = dialog.npc.flee_dir or dialog.npc.facing_dir
-				dialog.npc.fan_checked = false  -- can become a fan again based on popularity
-				-- Lose popularity for failing at flirting
-				change_popularity(-PLAYER_CONFIG.popularity_loss_flirt_fail)
+				-- Add cooldown to prevent immediately talking to another fan
+				dialog.close_cooldown = time() + 0.5
 			end
 
 			dialog.active = false
@@ -2535,10 +2558,15 @@ function check_fan_interaction()
 	if dialog.active then return end
 	if player_vehicle then return end  -- can't talk while in vehicle
 	if shop and shop.active then return end  -- can't talk while shopping
+	-- Cooldown after dialog closes to prevent instant re-interaction
+	if dialog.close_cooldown and time() < dialog.close_cooldown then return end
+
+	-- Check for NPC currently in dialog (don't allow re-interaction)
+	local npc, fan_data = find_nearby_fan()
+	if npc and npc.in_dialog then return end  -- NPC is still in dialog
 
 	-- Use keyp for single-press detection (input_utils.key_pressed may be consumed by dealer check)
 	if keyp("e") then
-		local npc, fan_data = find_nearby_fan()
 		if npc and fan_data then
 			start_dialog(npc, fan_data)
 		end
@@ -2587,6 +2615,9 @@ function _draw()
 	-- Draw collision effects (explosion feedback)
 	draw_collision_effects()
 
+	-- Draw bomb car arrow (before timer starts)
+	draw_bomb_car_arrow()
+
 	-- Draw projectiles and beams (these stay on top, not depth sorted)
 	-- Player weapons are now drawn via the depth-sorted queue in building.lua
 	draw_projectiles()
@@ -2628,6 +2659,9 @@ function _draw()
 	-- Draw beyond the sea quest prompts (package is now depth-sorted in building.lua)
 	draw_beyond_the_sea_prompts()
 
+	-- Draw bomb pickup prompt (bomb delivery quest)
+	draw_bomb_pickup_prompt()
+
 	-- Draw race checkpoint markers (world space)
 	draw_race_checkpoint()
 
@@ -2657,6 +2691,7 @@ function _draw()
 
 	-- Draw bomb delivery HUD (timer)
 	draw_bomb_delivery_hud()
+	draw_bomb_countdown_hud()  -- Big countdown timer after reaching final checkpoint
 	draw_bomb_delivery_failure()
 
 	-- Draw repair progress bar (fix_home quest)

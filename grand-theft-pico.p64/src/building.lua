@@ -242,6 +242,9 @@ profile("cull")
 	-- Add package to the list (beyond the sea quest)
 	add_package_to_visible(visible)
 
+	-- Add bomb package to the list (bomb delivery quest - before pickup)
+	add_bomb_package_to_visible(visible)
+
 	-- Add bomb delivery target to the list
 	add_bomb_target_to_visible(visible)
 
@@ -476,6 +479,9 @@ profile("cull")
 		elseif obj.type == "package" then
 			-- Draw package sprite
 			draw_package_sprite(obj.sx, obj.sy)
+		elseif obj.type == "bomb_package" then
+			-- Draw bomb package sprite (before pickup)
+			draw_bomb_package_sprite(obj.sx, obj.sy)
 		elseif obj.type == "bomb_target" then
 			-- Draw bomb delivery target sprite (uses package sprite)
 			draw_bomb_target_sprite(obj.sx, obj.sy)

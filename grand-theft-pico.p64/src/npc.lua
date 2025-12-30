@@ -382,7 +382,8 @@ function update_npc(npc, player_x, player_y)
 	-- Fan detection: when player approaches a non-fan NPC, chance scales with popularity
 	-- This only triggers once per NPC (checked via fan_checked flag)
 	-- Hermits don't become fans - they're special quest NPCs
-	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked and not npc.is_hermit then
+	-- NPCs who rejected the player (3 strikes) can't become fans again
+	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked and not npc.is_hermit and not npc.rejected_player then
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist = sqrt(dx * dx + dy * dy)
@@ -408,7 +409,10 @@ function update_npc(npc, player_x, player_y)
 				-- Assign a random archetype from config
 				local archetypes = PLAYER_CONFIG.archetypes
 				local archetype = archetypes[flr(rnd(#archetypes)) + 1]
-				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype })
+				local fan_id = next_fan_id
+				next_fan_id = next_fan_id + 1
+				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype, id = fan_id })
+				printh("Created fan ID=" .. fan_id .. " archetype=" .. archetype)
 				-- Gain popularity for meeting a fan
 				change_popularity(PLAYER_CONFIG.popularity_per_fan)
 

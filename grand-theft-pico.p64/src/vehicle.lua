@@ -833,6 +833,7 @@ function update_vehicle_ai(vehicle, dt)
 	if vehicle.state == "destroyed" then return end
 	if vehicle.state == "exploding" then return end
 	if not vehicle.has_driver then return end  -- no driver = no AI movement
+	if vehicle.is_parked then return end  -- parked vehicles don't move (e.g., bomb car)
 
 	local vtype = vehicle.vtype
 	local now = time()
@@ -1780,12 +1781,20 @@ end
 function draw_collision_effects()
 	local now = time()
 	local exp_spr = VEHICLE_CONFIG.explosion_sprites[2]  -- frame 1 (1-indexed, so [2])
+	local big_exp_spr = VEHICLE_CONFIG.explosion_sprites[3]  -- bigger frame for bomb explosions
 
 	-- Draw all active effects
 	for _, effect in ipairs(collision_effects) do
-		if now < effect.end_time then
+		-- Check if effect has started (for delayed bomb explosions)
+		local start_time = effect.start_time or 0
+		if now >= start_time and now < effect.end_time then
 			local sx, sy = world_to_screen(effect.x, effect.y)
-			spr(exp_spr, sx - 8, sy - 8)
+			-- Use bigger sprite for bomb explosions
+			if effect.is_bomb_explosion then
+				spr(big_exp_spr, sx - 8, sy - 8)
+			else
+				spr(exp_spr, sx - 8, sy - 8)
+			end
 		end
 	end
 
