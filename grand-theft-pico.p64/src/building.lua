@@ -235,8 +235,15 @@ profile("cull")
 	-- Add cactus boss to the list (if spawned)
 	add_cactus_to_visible(visible)
 
+	-- Add Kathy boss and her foxes to the list (if spawned)
+	add_kathy_to_visible(visible)
+	add_kathy_foxes_to_visible(visible)
+
 	-- Add package to the list (beyond the sea quest)
 	add_package_to_visible(visible)
+
+	-- Add bomb delivery target to the list
+	add_bomb_target_to_visible(visible)
 
 	-- Add visible street lamps to the list (frustum cull)
 	local lamp_cfg = NIGHT_CONFIG
@@ -323,11 +330,29 @@ profile("cull")
 			local sh = 3
 			local sy_off = 2
 			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "kathy" then
+			-- Kathy shadow (larger for boss, same as cactus)
+			local sr = 6
+			local sh = 3
+			local sy_off = 2
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "kathy_fox" then
+			-- Kathy's fox shadow (same as regular fox)
+			local sr = 4
+			local sh = 2
+			local sy_off = 2
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
 		elseif obj.type == "package" then
 			-- Package shadow (32x32 sprite, oval slightly wider than box)
 			local sr = 17  -- shadow half-width (32/2 + 1 = 17)
 			local sh = 4   -- shadow height
 			local sy_off = 8  -- offset from center to bottom of sprite
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "bomb_target" then
+			-- Bomb target shadow (same as package)
+			local sr = 17
+			local sh = 4
+			local sy_off = 8
 			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
 		end
 		-- No shadow for vehicles (doesn't look great)
@@ -442,9 +467,18 @@ profile("cull")
 		elseif obj.type == "cactus" then
 			-- Draw cactus boss
 			draw_cactus(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "kathy" then
+			-- Draw Kathy boss
+			draw_kathy(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "kathy_fox" then
+			-- Draw Kathy's fox minion
+			draw_kathy_fox(obj.data, obj.sx, obj.sy)
 		elseif obj.type == "package" then
 			-- Draw package sprite
 			draw_package_sprite(obj.sx, obj.sy)
+		elseif obj.type == "bomb_target" then
+			-- Draw bomb delivery target sprite (uses package sprite)
+			draw_bomb_target_sprite(obj.sx, obj.sy)
 		elseif obj.type == "player_melee_weapon" then
 			-- Draw player melee weapon (depth sorted)
 			draw_melee_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)

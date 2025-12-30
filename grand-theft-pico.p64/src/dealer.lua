@@ -512,6 +512,16 @@ end
 function get_shop_items()
 	local items = {}
 
+	-- Armor item first (always available to buy more)
+	local pcfg = PLAYER_CONFIG
+	add(items, {
+		key = "armor",
+		name = "Armor",
+		price = pcfg.armor_cost,
+		type = "armor",
+		owned = false,  -- Can always buy more armor
+	})
+
 	-- Iterate in weapon_order (already sorted by price)
 	for _, key in ipairs(WEAPON_CONFIG.weapon_order) do
 		local weapon = WEAPON_CONFIG.melee[key]
@@ -593,6 +603,28 @@ end
 function try_purchase(item)
 	local p = game.player
 
+	-- Handle armor purchase specially
+	if item.type == "armor" then
+		local pcfg = PLAYER_CONFIG
+		-- Check if already at max armor
+		if p.armor >= pcfg.max_armor then
+			shop.message = "Armor already full!"
+			shop.message_timer = time() + 1.5
+			return
+		end
+		-- Buy armor
+		if p.money >= item.price then
+			p.money = p.money - item.price
+			p.armor = min(pcfg.max_armor, p.armor + pcfg.armor_per_purchase)
+			shop.message = "Armor purchased!"
+			shop.message_timer = time() + 1.5
+		else
+			shop.message = "Not enough money!"
+			shop.message_timer = time() + 1.5
+		end
+		return
+	end
+
 	if item.owned then
 		-- Already owned, try to buy ammo (ranged only)
 		if item.type == "ranged" then
@@ -633,7 +665,7 @@ function draw_shop()
 
 	-- Shop box dimensions
 	local box_w = 200
-	local box_h = 172  -- Increased to fit 7 items
+	local box_h = 184  -- Increased to fit 8 items (armor + 7 weapons)
 	local box_x = (SCREEN_W - box_w) / 2
 	local box_y = (SCREEN_H - box_h) / 2
 
@@ -653,7 +685,7 @@ function draw_shop()
 
 	-- Draw items
 	local item_y = box_y + 20
-	local visible_items = 7  -- Show all 7 weapons without scrolling
+	local visible_items = 8  -- Show all 8 items (armor + 7 weapons)
 	local start_idx = shop.scroll_offset + 1
 	local end_idx = min(#items, start_idx + visible_items - 1)
 
@@ -671,9 +703,21 @@ function draw_shop()
 		local name_color = item.owned and 11 or color
 		print_shadow(item.name, box_x + 14, item_y, name_color)
 
-		-- Price or OWNED
+		-- Price or status
 		local price_x = box_x + 100
-		if item.owned then
+		if item.type == "armor" then
+			-- Show current armor level and price
+			local pcfg = PLAYER_CONFIG
+			local armor_text = game.player.armor .. "/" .. pcfg.max_armor
+			print_shadow(armor_text, price_x, item_y, 28)  -- bright blue
+			local can_afford = game.player.money >= item.price
+			local price_color = can_afford and 11 or 8
+			if game.player.armor >= pcfg.max_armor then
+				print_shadow("FULL", price_x + 50, item_y, 28)
+			else
+				print_shadow("$" .. item.price, price_x + 50, item_y, price_color)
+			end
+		elseif item.owned then
 			print_shadow("OWNED", price_x, item_y, 11)
 
 			-- Ammo purchase for ranged

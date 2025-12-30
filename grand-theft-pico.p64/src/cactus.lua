@@ -190,8 +190,7 @@ function cactus_melee_attack()
 
 	if dist <= cfg.melee_range then
 		-- Hit player
-		game.player.health = max(0, game.player.health - cfg.melee_damage)
-		trigger_player_hit_flash()
+		damage_player(cfg.melee_damage)
 		add_collision_effect(p.x, p.y, 0.3)
 	end
 end
@@ -261,8 +260,7 @@ function update_cactus_bullets()
 
 		if dist < 10 then
 			-- Hit player
-			game.player.health = max(0, game.player.health - b.damage)
-			trigger_player_hit_flash()
+			damage_player(b.damage)
 			add_collision_effect(p.x, p.y, 0.2)
 			deli(cactus_bullets, i)
 		-- Remove if too old (5 seconds) or off screen far

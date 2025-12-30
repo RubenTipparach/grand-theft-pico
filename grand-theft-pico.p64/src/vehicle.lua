@@ -1161,6 +1161,10 @@ function update_player_vehicle(vehicle, dt)
 					vehicle.last_collision_time = now
 					-- Spawn collision effect
 					add(collision_effects, { x = new_x, y = new_y, end_time = now + 0.5 })
+					-- Track bomb delivery hit (if player's vehicle)
+					if vehicle.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
+						track_bomb_delivery_hit()
+					end
 				end
 			end
 		end
@@ -1218,6 +1222,11 @@ function check_vehicle_collisions(visible_vehicles)
 								end
 							end
 
+							-- Track bomb delivery hit (if player's vehicle)
+							if v1.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
+								track_bomb_delivery_hit()
+							end
+
 							-- If hit by player, start fleeing
 							if v2.is_player_vehicle and v1.state ~= "fleeing" then
 								v1.state = "fleeing"
@@ -1234,6 +1243,11 @@ function check_vehicle_collisions(visible_vehicles)
 								local cy = (v1.y + v2.y) / 2
 								add(collision_effects, { x = cx, y = cy, end_time = now + 0.5 })
 								effect_spawned = true
+							end
+
+							-- Track bomb delivery hit (if player's vehicle)
+							if v2.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
+								track_bomb_delivery_hit()
 							end
 
 							-- If hit by player, start fleeing
@@ -1324,7 +1338,7 @@ function update_vehicle_state(vehicle, dt)
 		-- If player was in this vehicle, exit and take damage
 		if vehicle.is_player_vehicle then
 			-- Damage the player from the explosion
-			game.player.health = max(0, game.player.health - cfg.explosion_player_damage)
+			damage_player(cfg.explosion_player_damage)
 			player_vehicle = nil
 			vehicle.is_player_vehicle = false
 		elseif vehicle.has_driver and not vehicle.vtype.water_only then
@@ -1444,6 +1458,11 @@ function steal_vehicle(vehicle)
 	-- Start car wrecker timer when stealing a car during the quest
 	if mission and mission.current_quest == "car_wrecker" then
 		start_wrecker_timer()
+	end
+
+	-- Start bomb delivery timer when stealing a car during the quest
+	if mission and mission.current_quest == "bomb_delivery" then
+		start_bomb_delivery_timer()
 	end
 end
 

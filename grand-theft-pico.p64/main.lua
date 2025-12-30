@@ -61,6 +61,7 @@ include("src/weapon.lua")
 include("src/dealer.lua")
 include("src/fox.lua")
 include("src/cactus.lua")
+include("src/kathy.lua")
 include("src/quest.lua")
 include("src/race.lua")
 
@@ -121,6 +122,7 @@ game = {
 		walk_frame = 0,
 		-- Combat/popularity system
 		health = PLAYER_CONFIG.max_health,
+		armor = 0,  -- starts with no armor, buy at shop
 		popularity = PLAYER_CONFIG.starting_popularity,
 		-- Money system
 		money = PLAYER_CONFIG.starting_money,
@@ -206,6 +208,34 @@ function trigger_player_hit_flash()
 	player_hit_flash = time() + 0.15  -- show hit sprite for 0.15 seconds
 end
 
+-- Apply damage to player (armor absorbs first, then health)
+function damage_player(amount)
+	if amount <= 0 then return end
+
+	local p = game.player
+
+	-- Armor absorbs damage first
+	if p.armor > 0 then
+		if p.armor >= amount then
+			-- Armor absorbs all damage
+			p.armor = p.armor - amount
+			amount = 0
+		else
+			-- Armor absorbs partial damage
+			amount = amount - p.armor
+			p.armor = 0
+		end
+	end
+
+	-- Remaining damage hits health
+	if amount > 0 then
+		p.health = max(0, p.health - amount)
+	end
+
+	-- Trigger hit flash
+	trigger_player_hit_flash()
+end
+
 -- Handle player death
 function handle_player_death()
 	if player_dead then return end
@@ -217,8 +247,7 @@ function handle_player_death()
 	-- Lose half money
 	game.player.money = flr(game.player.money / 2)
 
-	-- Lose 20 popularity
-	change_popularity(-20)
+	-- No popularity loss from dying (player shouldn't be punished twice)
 
 	-- Clear all lovers (romantic partners lost)
 	lovers = {}
@@ -1018,8 +1047,85 @@ function draw_minimap()
 		end
 	end
 
+	-- Draw Kathy boss on minimap (quest enemy - always visible, clamped to edge if far)
+	if kathy and kathy.state ~= "dead" and mission.current_quest == "auditor_kathy" then
+		local kx = mx + (kathy.x / tile_size + half_map_w - px + half_mw)
+		local ky = my + (kathy.y / tile_size + half_map_h - py + half_mh)
+
+		-- Clamp Kathy position to minimap edge if outside bounds
+		local margin = 2
+		local clamped = false
+		if kx < mx + margin then
+			kx = mx + margin
+			clamped = true
+		elseif kx > mx + mw - margin then
+			kx = mx + mw - margin
+			clamped = true
+		end
+		if ky < my + margin then
+			ky = my + margin
+			clamped = true
+		elseif ky > my + mh - margin then
+			ky = my + mh - margin
+			clamped = true
+		end
+
+		-- Draw Kathy marker (larger for boss, blink if clamped)
+		local kathy_color = KATHY_CONFIG.minimap_color
+		if clamped then
+			local blink = flr(time() * 3) % 2 == 0
+			if blink then
+				circfill(kx, ky, 1, kathy_color)
+			end
+		else
+			circfill(kx, ky, KATHY_CONFIG.minimap_size, kathy_color)
+		end
+	end
+
+	-- Draw Kathy's foxes on minimap
+	if kathy_foxes_spawned and mission.current_quest == "auditor_kathy" then
+		for _, fox in ipairs(kathy_foxes) do
+			if fox.state ~= "dead" then
+				local fx = mx + (fox.x / tile_size + half_map_w - px + half_mw)
+				local fy = my + (fox.y / tile_size + half_map_h - py + half_mh)
+
+				-- Clamp fox position to minimap edge if outside bounds
+				local margin = 2
+				local clamped = false
+				if fx < mx + margin then
+					fx = mx + margin
+					clamped = true
+				elseif fx > mx + mw - margin then
+					fx = mx + mw - margin
+					clamped = true
+				end
+				if fy < my + margin then
+					fy = my + margin
+					clamped = true
+				elseif fy > my + mh - margin then
+					fy = my + mh - margin
+					clamped = true
+				end
+
+				-- Draw fox marker (smaller, blink if clamped)
+				local fox_color = FOX_CONFIG.minimap_color
+				if clamped then
+					local blink = flr(time() * 3) % 2 == 0
+					if blink then
+						pset(fx, fy, fox_color)
+					end
+				else
+					circfill(fx, fy, FOX_CONFIG.minimap_size, fox_color)
+				end
+			end
+		end
+	end
+
 	-- Draw beyond the sea quest markers (package, hermit)
 	draw_beyond_the_sea_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
+
+	-- Draw bomb delivery target marker
+	draw_bomb_delivery_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
 
 	-- Draw damaged building marker (fix_home quest)
 	if mission.current_quest == "fix_home" and mission.damaged_building then
@@ -1291,6 +1397,11 @@ function _update()
 	update_cactus()
 	update_cactus_bullets()
 
+	-- Update Kathy boss (if quest active)
+	update_kathy()
+	update_kathy_bullets()
+	update_kathy_foxes()
+
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
 		game.player.x = player_vehicle.x
@@ -1336,6 +1447,14 @@ function _update()
 	-- Update car wrecker quest timer
 	update_car_wrecker()
 	update_car_wrecker_failure()
+
+	-- Update speed dating quest timer
+	update_speed_dating()
+	update_speed_dating_failure()
+
+	-- Update bomb delivery quest
+	update_bomb_delivery()
+	update_bomb_delivery_failure()
 end
 
 -- Update quest system
@@ -1418,6 +1537,37 @@ function draw_health_bar()
 	-- Draw health fill
 	if fill_w > 0 then
 		rectfill(x, y, x + fill_w - 1, y + h - 1, cfg.health_color)
+	end
+end
+
+-- Draw player armor bar (only shown if player has armor)
+function draw_armor_bar()
+	local cfg = PLAYER_CONFIG
+	local p = game.player
+
+	-- Only draw if player has armor
+	if p.armor <= 0 then return end
+
+	local x = cfg.armor_bar_x
+	local y = cfg.armor_bar_y
+	local w = cfg.armor_bar_width
+	local h = cfg.armor_bar_height
+
+	-- Calculate armor percentage
+	local armor_pct = p.armor / cfg.max_armor
+	armor_pct = max(0, min(1, armor_pct))  -- clamp 0-1
+	local fill_w = flr(w * armor_pct)
+
+	-- Draw label
+	print_shadow("ARM", x, y - 8, cfg.armor_color)
+
+	-- Draw border
+	rect(x - 1, y - 1, x + w, y + h, cfg.armor_border_color)
+	-- Draw background
+	rectfill(x, y, x + w - 1, y + h - 1, cfg.armor_bg_color)
+	-- Draw armor fill
+	if fill_w > 0 then
+		rectfill(x, y, x + fill_w - 1, y + h - 1, cfg.armor_color)
 	end
 end
 
@@ -1664,15 +1814,31 @@ function start_dialog(npc, fan_data)
 			add(dialog.options, { text = "What's new?", action = "offer_companion_4" })
 		elseif mission.current_quest == "talk_to_companion_5" and not mission.talked_to_companion_5 then
 			add(dialog.options, { text = "What's new?", action = "offer_companion_5" })
+		elseif mission.current_quest == "talk_to_companion_6" and not mission.talked_to_companion_6 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_6" })
+		elseif mission.current_quest == "talk_to_companion_7" and not mission.talked_to_companion_7 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_7" })
+		elseif mission.current_quest == "talk_to_companion_8" and not mission.talked_to_companion_8 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_8" })
 		end
-		-- Race replay option (available after completing mega_race once, and not currently racing)
-		-- Also available during talk_to_companion_5 or later (unlocks racing as side activity)
-		if (mission.race_completed_once or is_quest_at_or_after("talk_to_companion_5")) and mission.current_quest ~= "mega_race" then
+		-- Race replay option (available after completing mega_race once, only when no main quest active)
+		-- Only show when current quest is find_missions (all main quests complete) or nil
+		local can_race = mission.race_completed_once and
+			(mission.current_quest == "find_missions" or mission.current_quest == nil)
+		if can_race then
 			add(dialog.options, { text = "Let's race again!", action = "start_race" })
 		end
 		-- Retry car wrecker if failed
 		if mission.current_quest == "car_wrecker" and mission.wrecker_failed then
 			add(dialog.options, { text = "Let me try wrecking cars again!", action = "retry_wrecker" })
+		end
+		-- Retry speed dating if failed
+		if mission.current_quest == "speed_dating" and mission.speed_dating_failed then
+			add(dialog.options, { text = "Let me try speed dating again!", action = "retry_speed_dating" })
+		end
+		-- Retry bomb delivery if failed
+		if mission.current_quest == "bomb_delivery" and mission.bomb_delivery_failed then
+			add(dialog.options, { text = "Let me try delivering again!", action = "retry_bomb_delivery" })
 		end
 		add(dialog.options, { text = "Nevermind", action = "cancel" })
 	else
@@ -1868,6 +2034,39 @@ function select_dialog_option()
 		return
 	end
 
+	if opt.action == "offer_companion_6" then
+		dialog.phase = "quest"
+		dialog.quest_text = "An insurance auditor named Kathy is investigating all those wrecked cars! She's downtown with her agents. Take her out before she files her report!"
+		dialog.options = {
+			{ text = "I'll handle it!", action = "accept_companion_6" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_7" then
+		dialog.phase = "quest"
+		dialog.quest_text = "You're getting famous! A TV show wants you for their speed dating segment. Make 3 new lovers in 3 minutes to grow the polycule!"
+		dialog.options = {
+			{ text = "Love is in the air!", action = "accept_companion_7" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
+	if opt.action == "offer_companion_8" then
+		dialog.phase = "quest"
+		dialog.quest_text = "Remember when I was a pizza delivery driver? A customer stiffed me on a tip. I need you to deliver a 'special package' to their house. Don't get hit more than 3 times or KABOOM!"
+		dialog.options = {
+			{ text = "Revenge is a dish best served... explosive!", action = "accept_companion_8" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
 	-- ACCEPT companion missions - these advance the quest
 	if opt.action == "accept_companion_1" then
 		mission.talked_to_companion_1 = true
@@ -1914,6 +2113,35 @@ function select_dialog_option()
 		return
 	end
 
+	if opt.action == "accept_companion_6" then
+		mission.talked_to_companion_6 = true
+		dialog.phase = "result"
+		dialog.result_text = "Auditor Kathy is downtown with her fox agents. Stop her!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		return
+	end
+
+	if opt.action == "accept_companion_7" then
+		mission.talked_to_companion_7 = true
+		dialog.phase = "result"
+		dialog.result_text = "The cameras are rolling! Find 3 new lovers in 3 minutes!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		-- Start the speed dating timer
+		start_speed_dating_timer()
+		return
+	end
+
+	if opt.action == "accept_companion_8" then
+		mission.talked_to_companion_8 = true
+		dialog.phase = "result"
+		dialog.result_text = "The bomb is in the car! Steal one and deliver it fast!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		return
+	end
+
 	-- DECLINE companion missions - does NOT advance the quest
 	if opt.action == "decline_companion" then
 		dialog.phase = "result"
@@ -1929,6 +2157,38 @@ function select_dialog_option()
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
 		retry_car_wrecker()
+		return
+	end
+
+	-- Retry speed dating mission (if failed)
+	if opt.action == "retry_speed_dating" then
+		dialog.phase = "result"
+		dialog.result_text = "The cameras are rolling again! Find 3 new lovers in 3 minutes!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		-- Reset and start speed dating timer
+		mission.speed_dating_active = false
+		mission.speed_dating_start_time = nil
+		mission.speed_dating_lovers_at_start = #lovers
+		mission.speed_dating_new_lovers = 0
+		mission.speed_dating_completed = false
+		mission.speed_dating_failed = false
+		start_speed_dating_timer()
+		return
+	end
+
+	-- Retry bomb delivery mission (if failed)
+	if opt.action == "retry_bomb_delivery" then
+		dialog.phase = "result"
+		dialog.result_text = "The bomb is armed again! Steal a car and deliver it fast!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		-- Reset bomb delivery state
+		mission.bomb_delivery_active = false
+		mission.bomb_delivery_start_time = nil
+		mission.bomb_delivery_hits = 0
+		mission.bomb_delivery_completed = false
+		mission.bomb_delivery_failed = false
 		return
 	end
 
@@ -1970,9 +2230,11 @@ function select_dialog_option()
 			-- Wrong choice! Increment failure count
 			fan_data.failures = (fan_data.failures or 0) + 1
 			dialog.love_gained = 0
+			printh("Flirt failed! failures=" .. fan_data.failures .. " max=" .. PLAYER_CONFIG.max_failures)
 
 			-- Check if they've had enough (3 strikes)
 			if fan_data.failures >= PLAYER_CONFIG.max_failures then
+				printh("Fan gave up! Setting dialog.fan_gave_up = true")
 				dialog.phase = "result"
 				dialog.result_text = "I'm done with you!"
 				dialog.result_timer = time() + 1.5
@@ -2369,8 +2631,9 @@ function _draw()
 	-- Draw race checkpoint markers (world space)
 	draw_race_checkpoint()
 
-	-- Draw player health, popularity, and money
+	-- Draw player health, armor, popularity, and money
 	draw_health_bar()
+	draw_armor_bar()
 	draw_popularity_bar()
 	draw_lover_count()
 	draw_money()
@@ -2388,6 +2651,14 @@ function _draw()
 	draw_wrecker_hud()
 	draw_wrecker_failure()
 
+	-- Draw speed dating HUD (timer)
+	draw_speed_dating_hud()
+	draw_speed_dating_failure()
+
+	-- Draw bomb delivery HUD (timer)
+	draw_bomb_delivery_hud()
+	draw_bomb_delivery_failure()
+
 	-- Draw repair progress bar (fix_home quest)
 	draw_repair_progress_bar()
 
@@ -2401,6 +2672,12 @@ function _draw()
 	draw_cactus_bullets()
 	draw_cactus_health_bar()
 	draw_cactus_defeated_message()
+
+	-- Draw Kathy UI
+	draw_kathy_bullets()
+	draw_kathy_health_bar()
+	draw_kathy_defeated_message()
+	draw_kathy_fox_defeated_message()
 
 	-- Draw dealer prompt and boss health bar
 	draw_dealer_prompt()

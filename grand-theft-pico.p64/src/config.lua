@@ -305,13 +305,25 @@ PLAYER_CONFIG = {
 	health_bg_color = 1,      -- dark blue background
 	health_border_color = 6,  -- light gray border
 
+	-- Armor system
+	max_armor = 1000,        -- can buy up to 10 times (10 x 100)
+	armor_cost = 100,         -- $100 per purchase
+	armor_per_purchase = 100, -- 100 armor per buy
+	armor_bar_width = 60,
+	armor_bar_height = 6,
+	armor_bar_x = 8,
+	armor_bar_y = 28,         -- below health bar (y=12+6+10 spacing)
+	armor_color = 28,         -- bright blue for armor
+	armor_bg_color = 1,       -- dark blue background
+	armor_border_color = 6,   -- light gray border
+
 	-- Popularity system
 	max_popularity = 100,
 	starting_popularity = 20,     -- initial popularity (0-100)
 	popularity_bar_width = 60,
 	popularity_bar_height = 6,
 	popularity_bar_x = 8,
-	popularity_bar_y = 30,    -- moved down to make room for label
+	popularity_bar_y = 44,    -- below armor bar (y=28+6+10 spacing)
 	popularity_color = 14,       -- pink for popularity
 	popularity_bg_color = 1,     -- dark blue background
 	popularity_border_color = 6, -- light gray border
@@ -336,7 +348,7 @@ PLAYER_CONFIG = {
 	starting_money = 20000,        -- player starts with $100
 	money_color = 33,            -- green for money text
 	money_display_x = 8,
-	money_display_y = 48,        -- below popularity bar
+	money_display_y = 60,        -- below popularity bar
 
 	-- Dialog/Flirting
 	interact_key = "e",          -- key to talk/interact
@@ -832,8 +844,14 @@ DEBUG_CONFIG = {
 		-- "beyond_the_sea",
 		-- "talk_to_companion_4",  -- leads to mega_race
 		-- "mega_race",
-		-- "talk_to_companion_5",
-		-- car_wrecker
+		-- "talk_to_companion_5",  -- leads to car_wrecker
+		-- "car_wrecker",
+		-- "talk_to_companion_6",  -- leads to auditor_kathy
+		-- "auditor_kathy",
+		-- "talk_to_companion_7",  -- leads to speed_dating
+		-- "speed_dating",
+		-- "talk_to_companion_8",  -- leads to bomb_delivery
+		-- "bomb_delivery",
 		-- "find_missions"
 
 		-- sketch:
@@ -861,7 +879,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_5",
+	start_quest = "talk_to_companion_7",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text
@@ -1428,6 +1446,66 @@ VEHICLE_CONFIG = {
 	offscreen_update_interval = 2,      -- seconds between updates for offscreen vehicles
 	update_distance = 250,              -- pixels from player; vehicles beyond this are FROZEN
 	flee_duration = 10,                 -- seconds to flee after being hit by player
+}
+
+-- ============================================
+-- KATHY BOSS CONFIG
+-- ============================================
+KATHY_CONFIG = {
+	name = "Auditor Kathy",
+	health = 600,             -- Boss-level health (slightly more than cactus)
+	chase_speed = 35,         -- Slower than foxes, keeps distance
+	target_distance = 120,    -- Preferred range (further than cactus, ranged-only)
+	aggro_distance = 350,     -- Large aggro range
+	minimap_color = 6,        -- Magenta on minimap (#791551)
+	minimap_size = 2,         -- Larger marker for boss
+	collision_radius = 24,    -- Same as cactus (half of 48x48)
+
+	-- NO MELEE (ranged only boss)
+
+	-- Bullet Pattern 1: Spiral (sprites 45, 46)
+	spiral_damage = 12,
+	spiral_cooldown = 6.0,    -- 5-7 seconds (use 6 as middle)
+	spiral_bullet_count = 16, -- bullets in spiral
+	spiral_speed = 100,       -- slower to make spiral visible
+	spiral_sprites = { 45, 46 },
+	spiral_animation_speed = 0.1,
+	spiral_rotation_offset = 0.1, -- rotation increment per bullet for spiral effect
+
+	-- Bullet Pattern 2: Sweeping Line (sprites 108, 109)
+	sweep_damage = 15,
+	sweep_cooldown = 4.0,     -- fires more frequently than spiral
+	sweep_bullet_count = 8,   -- bullets in the line
+	sweep_speed = 180,        -- faster than spiral
+	sweep_sprites = { 108, 109 },
+	sweep_animation_speed = 0.08,
+	sweep_arc = 0.25,         -- sweep 90 degrees (0.25 turns)
+
+	-- Animation settings (same as cactus)
+	idle_animation_speed = 0.08,
+	walk_animation_speed = 0.05,
+	idle_frames = 11,
+	walk_frames = 12,
+	damaged_frames = 5,
+
+	-- Sprite IDs (1.gfx, starts at sprite 200)
+	sprite_base = 256 + 192,  -- 456
+	idle_start = 0,
+	walk_start = 16,
+	damaged_start = 32,
+
+	-- Rendering (same as cactus)
+	sprite_scale = 0.5,
+	sprite_size = 48,
+
+	-- Spawn location (downtown area, same as cactus)
+	spawn_x_min = 300,
+	spawn_x_max = 700,
+	spawn_y_min = 300,
+	spawn_y_max = 700,
+
+	-- Fox minion count
+	fox_minion_count = 3,
 }
 
 -- ============================================

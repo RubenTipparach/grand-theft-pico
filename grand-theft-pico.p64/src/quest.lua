@@ -23,6 +23,12 @@ QUEST_CONFIG = {
 		"mega_race",
 		"talk_to_companion_5",  -- leads to car_wrecker
 		"car_wrecker",
+		"talk_to_companion_6",  -- leads to auditor_kathy
+		"auditor_kathy",
+		"talk_to_companion_7",  -- leads to speed_dating
+		"speed_dating",
+		"talk_to_companion_8",  -- leads to bomb_delivery
+		"bomb_delivery",
 		"find_missions"
 	},
 
@@ -42,6 +48,12 @@ QUEST_CONFIG = {
 		mega_race = "Mega Race",
 		talk_to_companion_5 = "Talk to Companion",
 		car_wrecker = "Insurance Fraud",
+		talk_to_companion_6 = "Talk to Companion",
+		auditor_kathy = "Defeat Auditor Kathy",
+		talk_to_companion_7 = "Talk to Companion",
+		speed_dating = "Speed Dating",
+		talk_to_companion_8 = "Talk to Companion",
+		bomb_delivery = "Special Delivery",
 		find_missions = "Find Missions",
 	},
 
@@ -119,6 +131,47 @@ QUEST_CONFIG = {
 		popularity_reward = 25,   -- bonus popularity for completing
 	},
 
+	talk_to_companion_6 = {
+		money_reward = 0,
+	},
+
+	auditor_kathy = {
+		money_reward = 750,
+		popularity_reward = 30,   -- bonus popularity for defeating boss
+	},
+
+	talk_to_companion_7 = {
+		money_reward = 0,
+	},
+
+	speed_dating = {
+		-- CONFIGURABLE: Adjust these for difficulty
+		time_limit = 180,         -- seconds to complete (180 = 3 minutes)
+		lovers_needed = 3,        -- number of new lovers required to win
+		-- Rewards
+		money_reward = 400,
+		popularity_reward = 40,   -- big popularity boost for TV appearance
+	},
+
+	talk_to_companion_8 = {
+		money_reward = 0,
+	},
+
+	bomb_delivery = {
+		time_limit = 90,          -- 90 seconds to deliver the bomb (longer route)
+		max_hits = 3,             -- car explodes after 3 hits
+		money_reward = 500,
+		-- Checkpoint route (Aseprite coords, converted to world at runtime)
+		-- Route: start -> checkpoint1 -> checkpoint2 -> end
+		checkpoints = {
+			{ x = 101, y = 95 },   -- Start/Pickup point
+			{ x = 118, y = 154 },  -- Checkpoint 1
+			{ x = 156, y = 124 },  -- Checkpoint 2
+			{ x = 232, y = 203 },  -- Final delivery point
+		},
+		checkpoint_radius = 40,   -- radius to trigger checkpoint
+	},
+
 	find_missions = {
 		money_reward = 100,
 	},
@@ -193,6 +246,7 @@ mission = {
 	talked_to_companion_3 = false,  -- before beyond_the_sea
 	talked_to_companion_4 = false,  -- before mega_race
 	talked_to_companion_5 = false,  -- before car_wrecker
+	talked_to_companion_6 = false,  -- before auditor_kathy
 
 	-- Quest 8: Car Wrecker (Insurance Fraud)
 	wrecker_active = false,      -- is the wrecker timer running?
@@ -201,7 +255,33 @@ mission = {
 	wrecker_completed = false,   -- did player complete the mission?
 	wrecker_failed = false,      -- did player fail (time ran out)?
 
-	-- Quest 9: Find Missions
+	-- Quest 9: Auditor Kathy (Boss Fight)
+	kathy_killed = false,        -- killed the Auditor Kathy boss
+	kathy_foxes_killed = 0,      -- foxes killed during this quest
+	total_kathy_foxes = 3,       -- total foxes spawned with Kathy
+
+	-- Talk to Companion 7 & 8 checkpoints
+	talked_to_companion_7 = false,  -- before speed_dating
+	talked_to_companion_8 = false,  -- before bomb_delivery
+
+	-- Quest 10: Speed Dating (TV gameshow)
+	speed_dating_active = false,      -- is the speed dating timer running?
+	speed_dating_start_time = nil,    -- when the timer started
+	speed_dating_lovers_at_start = 0, -- lovers count when quest started
+	speed_dating_new_lovers = 0,      -- new lovers made during mission
+	speed_dating_completed = false,   -- completed successfully?
+	speed_dating_failed = false,      -- failed (time ran out)?
+
+	-- Quest 11: Bomb Delivery
+	bomb_delivery_active = false,     -- is the bomb delivery timer running?
+	bomb_delivery_start_time = nil,   -- when the timer started
+	bomb_delivery_hits = 0,           -- hits taken during delivery
+	bomb_delivery_completed = false,  -- completed successfully?
+	bomb_delivery_failed = false,     -- failed (car exploded or time ran out)?
+	bomb_delivery_checkpoints = {},   -- list of {x, y} world coords for checkpoints
+	bomb_delivery_current_cp = 1,     -- current checkpoint index (1-based)
+
+	-- Quest 12: Find Missions
 	talked_to_lover = false,     -- talked to a lover about troubles
 
 	-- General tracking
@@ -368,7 +448,8 @@ function check_quest_completion()
 
 	elseif mission.current_quest == "mega_race" then
 		-- Race finished (player completed 3 laps)
-		if mission.race_finished then
+		-- Don't complete if this is a replay (pre_race_quest is set)
+		if mission.race_finished and not mission.pre_race_quest then
 			complete_current_quest()
 		end
 
@@ -380,6 +461,39 @@ function check_quest_completion()
 	elseif mission.current_quest == "car_wrecker" then
 		-- Check if wrecker mission completed successfully
 		if mission.wrecker_completed then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_6" then
+		if mission.talked_to_companion_6 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "auditor_kathy" then
+		-- Defeat Kathy AND all her fox minions
+		if mission.kathy_killed and mission.kathy_foxes_killed >= mission.total_kathy_foxes then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_7" then
+		if mission.talked_to_companion_7 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "speed_dating" then
+		-- Speed dating completed successfully
+		if mission.speed_dating_completed then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_8" then
+		if mission.talked_to_companion_8 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "bomb_delivery" then
+		-- Bomb delivered successfully
+		if mission.bomb_delivery_completed then
 			complete_current_quest()
 		end
 
@@ -547,6 +661,54 @@ function start_quest(quest_id)
 		mission.wrecker_failed = false
 		printh("Started quest: Insurance Fraud - Wreck " .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars in " .. QUEST_CONFIG.car_wrecker.time_limit .. " seconds!")
 
+	elseif quest_id == "talk_to_companion_6" then
+		mission.talked_to_companion_6 = false
+		printh("Started quest: Talk to Companion (before Auditor Kathy)")
+
+	elseif quest_id == "auditor_kathy" then
+		mission.kathy_killed = false
+		mission.kathy_foxes_killed = 0
+		mission.total_kathy_foxes = KATHY_CONFIG.fox_minion_count
+		-- Spawn Kathy boss
+		spawn_kathy()
+		-- Spawn fox minions with Kathy
+		spawn_kathy_foxes()
+		printh("Started quest: Defeat Auditor Kathy - Boss spawned with " .. mission.total_kathy_foxes .. " fox minions!")
+
+	elseif quest_id == "talk_to_companion_7" then
+		mission.talked_to_companion_7 = false
+		printh("Started quest: Talk to Companion (before Speed Dating)")
+
+	elseif quest_id == "speed_dating" then
+		-- Auto-start the timer when quest begins
+		mission.speed_dating_active = true
+		mission.speed_dating_start_time = time()
+		mission.speed_dating_lovers_at_start = #lovers
+		mission.speed_dating_new_lovers = 0
+		mission.speed_dating_completed = false
+		mission.speed_dating_failed = false
+		printh("Started quest: Speed Dating - Make " .. QUEST_CONFIG.speed_dating.lovers_needed .. " new lovers in " .. QUEST_CONFIG.speed_dating.time_limit .. " seconds!")
+
+	elseif quest_id == "talk_to_companion_8" then
+		mission.talked_to_companion_8 = false
+		printh("Started quest: Talk to Companion (before Bomb Delivery)")
+
+	elseif quest_id == "bomb_delivery" then
+		mission.bomb_delivery_active = false
+		mission.bomb_delivery_start_time = nil
+		mission.bomb_delivery_hits = 0
+		mission.bomb_delivery_completed = false
+		mission.bomb_delivery_failed = false
+		mission.bomb_delivery_current_cp = 1
+		-- Convert checkpoint sprite coords to world coords
+		local cfg = QUEST_CONFIG.bomb_delivery
+		mission.bomb_delivery_checkpoints = {}
+		for i, cp in ipairs(cfg.checkpoints) do
+			local wx, wy = sprite_map_to_world(cp.x, cp.y)
+			add(mission.bomb_delivery_checkpoints, { x = wx, y = wy })
+		end
+		printh("Started quest: Special Delivery - " .. #mission.bomb_delivery_checkpoints .. " checkpoints, " .. cfg.time_limit .. " seconds!")
+
 	elseif quest_id == "find_missions" then
 		mission.talked_to_lover = false
 		printh("Started quest: Find Missions")
@@ -593,6 +755,20 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "talk_to_companion_5" then
 		next_quest = "car_wrecker"
 	elseif mission.current_quest == "car_wrecker" then
+		next_quest = "talk_to_companion_6"
+	elseif mission.current_quest == "talk_to_companion_6" then
+		next_quest = "auditor_kathy"
+	elseif mission.current_quest == "auditor_kathy" then
+		-- Clean up Kathy boss
+		cleanup_kathy()
+		next_quest = "talk_to_companion_7"
+	elseif mission.current_quest == "talk_to_companion_7" then
+		next_quest = "speed_dating"
+	elseif mission.current_quest == "speed_dating" then
+		next_quest = "talk_to_companion_8"
+	elseif mission.current_quest == "talk_to_companion_8" then
+		next_quest = "bomb_delivery"
+	elseif mission.current_quest == "bomb_delivery" then
 		next_quest = "find_missions"
 	elseif mission.current_quest == "find_missions" then
 		-- Quest chain complete - can add more later
@@ -678,6 +854,10 @@ function get_quest_objectives()
 		local status = mission.talked_to_companion_5 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
+	elseif mission.current_quest == "talk_to_companion_6" then
+		local status = mission.talked_to_companion_6 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
 	elseif mission.current_quest == "beyond_the_sea" then
 		-- Objective 1: Pick up package
 		local pkg_status = mission.has_package and "[X]" or "[ ]"
@@ -722,6 +902,64 @@ function get_quest_objectives()
 			-- Active timer - show progress
 			local status = (mission.wrecker_cars_wrecked >= cfg.cars_needed) and "[X]" or "[ ]"
 			add(objectives, status .. " Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
+		end
+
+	elseif mission.current_quest == "auditor_kathy" then
+		-- Objective 1: Defeat Kathy
+		local kathy_status = mission.kathy_killed and "[X]" or "[ ]"
+		add(objectives, kathy_status .. " Defeat Auditor Kathy")
+		-- Objective 2: Defeat her fox minions
+		local fox_status = (mission.kathy_foxes_killed >= mission.total_kathy_foxes) and "[X]" or "[ ]"
+		add(objectives, fox_status .. " Defeat fox minions (" .. mission.kathy_foxes_killed .. "/" .. mission.total_kathy_foxes .. ")")
+
+	elseif mission.current_quest == "talk_to_companion_7" then
+		local status = mission.talked_to_companion_7 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "speed_dating" then
+		local cfg = QUEST_CONFIG.speed_dating
+		if not mission.speed_dating_active then
+			-- Before starting: tell player the mission
+			add(objectives, "[ ] Talk to NPCs to find new lovers!")
+		elseif mission.speed_dating_failed then
+			-- Failed - need to talk to companion again
+			add(objectives, "[X] Time's up! Talk to your companion to try again")
+		elseif mission.speed_dating_completed then
+			-- Completed successfully
+			add(objectives, "[X] Make " .. cfg.lovers_needed .. " new lovers (" .. mission.speed_dating_new_lovers .. "/" .. cfg.lovers_needed .. ")")
+		else
+			-- Active timer - show progress
+			local status = (mission.speed_dating_new_lovers >= cfg.lovers_needed) and "[X]" or "[ ]"
+			add(objectives, status .. " Make " .. cfg.lovers_needed .. " new lovers (" .. mission.speed_dating_new_lovers .. "/" .. cfg.lovers_needed .. ")")
+		end
+
+	elseif mission.current_quest == "talk_to_companion_8" then
+		local status = mission.talked_to_companion_8 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "bomb_delivery" then
+		local cfg = QUEST_CONFIG.bomb_delivery
+		local total_cps = #mission.bomb_delivery_checkpoints
+		local current_cp = mission.bomb_delivery_current_cp
+		if not mission.bomb_delivery_active then
+			-- Before starting: tell player to steal a car
+			add(objectives, "[ ] Steal a car with the bomb!")
+		elseif mission.bomb_delivery_failed then
+			-- Failed - car exploded or time ran out
+			add(objectives, "[X] Mission failed! Talk to your companion to try again")
+		elseif mission.bomb_delivery_completed then
+			-- Completed successfully
+			add(objectives, "[X] Deliver the bomb (" .. total_cps .. "/" .. total_cps .. ")")
+		else
+			-- Active timer - show checkpoint progress
+			local cp_name = current_cp == total_cps and "FINAL DROP" or "Checkpoint " .. current_cp
+			add(objectives, "[ ] " .. cp_name .. " (" .. (current_cp - 1) .. "/" .. total_cps .. ")")
+			local hits_left = cfg.max_hits - mission.bomb_delivery_hits
+			if hits_left <= 1 then
+				add(objectives, "    WARNING: " .. hits_left .. " hit" .. (hits_left == 1 and "" or "s") .. " until explosion!")
+			else
+				add(objectives, "    Car integrity: " .. hits_left .. "/" .. cfg.max_hits .. " hits left")
+			end
 		end
 
 	elseif mission.current_quest == "find_missions" then
@@ -1260,5 +1498,433 @@ function draw_beyond_the_sea_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile
 		if blink then
 			circfill(marker_x, marker_y, 2, 27)  -- Light green dot
 		end
+	end
+end
+
+-- ============================================
+-- SPEED DATING QUEST FUNCTIONS
+-- ============================================
+
+-- Start the speed dating timer (called when speed_dating quest starts)
+function start_speed_dating_timer()
+	-- Only start during speed_dating quest (not talk_to_companion_7)
+	if mission.current_quest ~= "speed_dating" then return end
+	if mission.speed_dating_active then return end  -- already started
+	if mission.speed_dating_completed then return end  -- already completed
+
+	mission.speed_dating_active = true
+	mission.speed_dating_start_time = time()
+	mission.speed_dating_lovers_at_start = #lovers
+	mission.speed_dating_new_lovers = 0
+	mission.speed_dating_failed = false
+	printh("Speed Dating timer started! Make " .. QUEST_CONFIG.speed_dating.lovers_needed .. " new lovers in " .. QUEST_CONFIG.speed_dating.time_limit .. " seconds!")
+end
+
+-- Track a new lover (called when a new lover is made during the quest)
+function track_speed_dating_lover()
+	-- Only works during speed_dating quest
+	if mission.current_quest ~= "speed_dating" then return end
+	if not mission.speed_dating_active then return end
+	if mission.speed_dating_completed or mission.speed_dating_failed then return end
+
+	-- Count new lovers since quest started
+	mission.speed_dating_new_lovers = #lovers - mission.speed_dating_lovers_at_start
+	printh("Speed Dating progress: " .. mission.speed_dating_new_lovers .. "/" .. QUEST_CONFIG.speed_dating.lovers_needed)
+
+	-- Check if we've reached the goal
+	if mission.speed_dating_new_lovers >= QUEST_CONFIG.speed_dating.lovers_needed then
+		mission.speed_dating_completed = true
+		mission.speed_dating_active = false
+		-- Award bonus popularity for TV appearance
+		change_popularity(QUEST_CONFIG.speed_dating.popularity_reward)
+		printh("Speed Dating complete! +" .. QUEST_CONFIG.speed_dating.popularity_reward .. " popularity!")
+	end
+end
+
+-- Update speed dating timer (call from main update)
+function update_speed_dating()
+	-- Only works during speed_dating quest
+	if mission.current_quest ~= "speed_dating" then return end
+	if not mission.speed_dating_active then return end
+	if mission.speed_dating_completed or mission.speed_dating_failed then return end
+
+	local elapsed = time() - mission.speed_dating_start_time
+	local time_limit = QUEST_CONFIG.speed_dating.time_limit
+
+	-- Continuously check for new lovers
+	mission.speed_dating_new_lovers = #lovers - mission.speed_dating_lovers_at_start
+	if mission.speed_dating_new_lovers >= QUEST_CONFIG.speed_dating.lovers_needed then
+		mission.speed_dating_completed = true
+		mission.speed_dating_active = false
+		-- Freeze the timer at completion time
+		mission.speed_dating_completion_time = max(0, time_limit - elapsed)
+		change_popularity(QUEST_CONFIG.speed_dating.popularity_reward)
+		printh("Speed Dating complete! +" .. QUEST_CONFIG.speed_dating.popularity_reward .. " popularity!")
+		return
+	end
+
+	-- Check if time ran out
+	if elapsed >= time_limit then
+		-- Failed - time ran out
+		fail_speed_dating()
+	end
+end
+
+-- Fail speed dating mission and revert to talk_to_companion_7
+function fail_speed_dating()
+	mission.speed_dating_failed = true
+	mission.speed_dating_active = false
+	printh("Speed Dating failed! Only made " .. mission.speed_dating_new_lovers .. "/" .. QUEST_CONFIG.speed_dating.lovers_needed .. " lovers")
+
+	-- Show failure message briefly, then revert quest
+	mission.speed_dating_fail_timer = time() + 3  -- 3 seconds to show failure message
+end
+
+-- Check if we need to revert quest after failure (call from main update)
+function update_speed_dating_failure()
+	if not mission.speed_dating_fail_timer then return end
+
+	if time() >= mission.speed_dating_fail_timer then
+		-- Revert to talk_to_companion_7
+		mission.speed_dating_fail_timer = nil
+		mission.talked_to_companion_7 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_7"
+		mission.quest_complete = false
+
+		-- Reset speed dating state for retry
+		mission.speed_dating_active = false
+		mission.speed_dating_start_time = nil
+		mission.speed_dating_lovers_at_start = #lovers
+		mission.speed_dating_new_lovers = 0
+		mission.speed_dating_completed = false
+		mission.speed_dating_failed = false
+
+		printh("Reverted to talk_to_companion_7 - try again!")
+	end
+end
+
+-- Get remaining time for speed dating (returns seconds, or nil if not active)
+function get_speed_dating_time_remaining()
+	-- Only works during speed_dating quest
+	if mission.current_quest ~= "speed_dating" then return nil end
+	-- Return time remaining if active, or frozen time if completed
+	if not mission.speed_dating_active and not mission.speed_dating_completed then return nil end
+	if not mission.speed_dating_start_time then return nil end
+
+	-- If completed, return the frozen completion time
+	if mission.speed_dating_completed and mission.speed_dating_completion_time then
+		return mission.speed_dating_completion_time
+	end
+
+	local elapsed = time() - mission.speed_dating_start_time
+	local remaining = QUEST_CONFIG.speed_dating.time_limit - elapsed
+	return max(0, remaining)
+end
+
+-- Draw speed dating HUD (timer and progress) - prominent center-top position
+function draw_speed_dating_hud()
+	-- Only show HUD during speed_dating quest
+	if mission.current_quest ~= "speed_dating" then return end
+	-- Show HUD if active OR if just completed (to show success state briefly)
+	if not mission.speed_dating_active and not mission.speed_dating_completed then return end
+	-- Don't show if failed (failure message takes over)
+	if mission.speed_dating_failed then return end
+
+	local cfg = QUEST_CONFIG.speed_dating
+
+	-- Get remaining time
+	local remaining = get_speed_dating_time_remaining()
+	local mins = flr(remaining / 60)
+	local secs = flr(remaining % 60)
+
+	-- Draw prominent timer at top-center of screen
+	local time_text = mins .. ":" .. (secs < 10 and "0" or "") .. secs
+	local date_text = "DATES: " .. mission.speed_dating_new_lovers .. "/" .. cfg.lovers_needed
+
+	-- Measure text widths for centering
+	local time_w = print(time_text, 0, -100)
+	local date_w = print(date_text, 0, -100)
+
+	local cx = SCREEN_W / 2
+	local y = 8  -- Top of screen
+
+	-- Draw background box
+	local box_w = max(time_w, date_w) + 16
+	rectfill(cx - box_w/2, y - 2, cx + box_w/2, y + 22, 1)
+	rect(cx - box_w/2, y - 2, cx + box_w/2, y + 22, 6)
+
+	-- Draw timer (white, red if < 30s)
+	local timer_color = remaining < 30 and 12 or 33  -- red (12) if < 30s, white (33) otherwise
+	print_shadow(time_text, cx - time_w/2, y, timer_color)
+
+	-- Draw progress (pink/bright_red for dates/love theme)
+	local progress_color = mission.speed_dating_new_lovers >= cfg.lovers_needed and 19 or 14  -- green (19) if complete, bright_red (14) otherwise
+	print_shadow(date_text, cx - date_w/2, y + 12, progress_color)
+end
+
+-- Draw speed dating failure message
+function draw_speed_dating_failure()
+	if not mission.speed_dating_failed then return end
+	if not mission.speed_dating_fail_timer then return end
+
+	-- Show failure message in center of screen
+	local msg = "NO CHEMISTRY!"
+	local msg2 = "Talk to your companion to try again."
+	local x = SCREEN_W / 2
+	local y = SCREEN_H / 2 - 20
+
+	-- Draw semi-transparent background
+	rectfill(x - 120, y - 10, x + 120, y + 30, 1)
+	rect(x - 120, y - 10, x + 120, y + 30, 8)
+
+	-- Draw text centered
+	local tw1 = print(msg, 0, -100)
+	local tw2 = print(msg2, 0, -100)
+	print_shadow(msg, x - tw1/2, y, 8)  -- red
+	print_shadow(msg2, x - tw2/2, y + 14, 7)  -- white
+end
+
+-- ============================================
+-- BOMB DELIVERY QUEST FUNCTIONS
+-- ============================================
+
+-- Start the bomb delivery timer (called when player steals a car during quest)
+function start_bomb_delivery_timer()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if mission.bomb_delivery_active then return end  -- already started
+	if mission.bomb_delivery_completed then return end  -- already completed
+
+	mission.bomb_delivery_active = true
+	mission.bomb_delivery_start_time = time()
+	mission.bomb_delivery_hits = 0
+	mission.bomb_delivery_failed = false
+	printh("Bomb Delivery timer started! Deliver in " .. QUEST_CONFIG.bomb_delivery.time_limit .. " seconds, don't get hit more than " .. QUEST_CONFIG.bomb_delivery.max_hits .. " times!")
+end
+
+-- Track a hit on the bomb car (called when vehicle takes damage during quest)
+function track_bomb_delivery_hit()
+	if mission.current_quest ~= "bomb_delivery" then return false end
+	if not mission.bomb_delivery_active then return false end
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return false end
+
+	mission.bomb_delivery_hits = mission.bomb_delivery_hits + 1
+	printh("Bomb car hit! " .. mission.bomb_delivery_hits .. "/" .. QUEST_CONFIG.bomb_delivery.max_hits)
+
+	-- Check if car explodes
+	if mission.bomb_delivery_hits >= QUEST_CONFIG.bomb_delivery.max_hits then
+		fail_bomb_delivery("KABOOM!")
+		return true  -- Indicates car should explode
+	end
+	return false
+end
+
+-- Check if player reached current checkpoint (call from main update)
+function update_bomb_delivery()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_delivery_active then return end
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
+
+	-- Must be in a vehicle to deliver
+	if not player_vehicle then return end
+
+	-- Check distance to current checkpoint
+	local checkpoints = mission.bomb_delivery_checkpoints
+	local cp_idx = mission.bomb_delivery_current_cp
+	if not checkpoints or #checkpoints == 0 or cp_idx > #checkpoints then return end
+
+	local target = checkpoints[cp_idx]
+	local dx = player_vehicle.x - target.x
+	local dy = player_vehicle.y - target.y
+	local dist = sqrt(dx * dx + dy * dy)
+
+	-- Checkpoint radius
+	local radius = QUEST_CONFIG.bomb_delivery.checkpoint_radius
+	if dist < radius then
+		-- Reached checkpoint!
+		if cp_idx >= #checkpoints then
+			-- Final checkpoint - mission complete!
+			mission.bomb_delivery_completed = true
+			mission.bomb_delivery_active = false
+			printh("Bomb delivered successfully! All " .. #checkpoints .. " checkpoints cleared!")
+		else
+			-- Advance to next checkpoint
+			mission.bomb_delivery_current_cp = cp_idx + 1
+			printh("Checkpoint " .. cp_idx .. " reached! Next: " .. mission.bomb_delivery_current_cp .. "/" .. #checkpoints)
+		end
+	end
+
+	-- Check if time ran out
+	local elapsed = time() - mission.bomb_delivery_start_time
+	local time_limit = QUEST_CONFIG.bomb_delivery.time_limit
+	if elapsed >= time_limit then
+		fail_bomb_delivery("TOO SLOW!")
+	end
+end
+
+-- Fail bomb delivery mission
+function fail_bomb_delivery(reason)
+	mission.bomb_delivery_failed = true
+	mission.bomb_delivery_active = false
+	mission.bomb_delivery_fail_reason = reason or "MISSION FAILED!"
+	printh("Bomb Delivery failed: " .. mission.bomb_delivery_fail_reason)
+
+	-- Show failure message briefly, then revert quest
+	mission.bomb_delivery_fail_timer = time() + 3  -- 3 seconds to show failure message
+end
+
+-- Check if we need to revert quest after failure (call from main update)
+function update_bomb_delivery_failure()
+	if not mission.bomb_delivery_fail_timer then return end
+
+	if time() >= mission.bomb_delivery_fail_timer then
+		-- Revert to talk_to_companion_8
+		mission.bomb_delivery_fail_timer = nil
+		mission.talked_to_companion_8 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_8"
+		mission.quest_complete = false
+
+		-- Reset bomb delivery state for retry
+		mission.bomb_delivery_active = false
+		mission.bomb_delivery_start_time = nil
+		mission.bomb_delivery_hits = 0
+		mission.bomb_delivery_completed = false
+		mission.bomb_delivery_failed = false
+		mission.bomb_delivery_current_cp = 1  -- Reset checkpoint progress
+
+		printh("Reverted to talk_to_companion_8 - try again!")
+	end
+end
+
+-- Get remaining time for bomb delivery (returns seconds, or nil if not active)
+function get_bomb_delivery_time_remaining()
+	if mission.current_quest ~= "bomb_delivery" then return nil end
+	if not mission.bomb_delivery_active then return nil end
+
+	local elapsed = time() - mission.bomb_delivery_start_time
+	local remaining = QUEST_CONFIG.bomb_delivery.time_limit - elapsed
+	return max(0, remaining)
+end
+
+-- Draw bomb delivery HUD (timer and checkpoint progress) - prominent center-top position
+function draw_bomb_delivery_hud()
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_delivery_active then return end
+	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
+
+	local cfg = QUEST_CONFIG.bomb_delivery
+	local total_cps = #mission.bomb_delivery_checkpoints
+	local current_cp = mission.bomb_delivery_current_cp
+
+	-- Get remaining time
+	local remaining = get_bomb_delivery_time_remaining()
+	local secs = flr(remaining)
+
+	-- Draw prominent timer at top-center of screen
+	local time_text = secs .. "s"
+	local cp_text = "CP: " .. (current_cp - 1) .. "/" .. total_cps
+	local hits_left = cfg.max_hits - mission.bomb_delivery_hits
+	local hits_text = "HITS: " .. hits_left .. "/" .. cfg.max_hits
+
+	-- Measure text widths for centering
+	local time_w = print(time_text, 0, -100)
+	local cp_w = print(cp_text, 0, -100)
+	local hits_w = print(hits_text, 0, -100)
+
+	local cx = SCREEN_W / 2
+	local y = 8  -- Top of screen
+
+	-- Draw background box
+	local box_w = max(time_w, max(cp_w, hits_w)) + 16
+	rectfill(cx - box_w/2, y - 2, cx + box_w/2, y + 34, 1)
+	rect(cx - box_w/2, y - 2, cx + box_w/2, y + 34, 6)
+
+	-- Draw timer (big, urgent)
+	local timer_color = remaining < 15 and 8 or 11  -- red if < 15s, green otherwise
+	print_shadow(time_text, cx - time_w/2, y, timer_color)
+
+	-- Draw checkpoint progress
+	print_shadow(cp_text, cx - cp_w/2, y + 12, 7)
+
+	-- Draw hits remaining (red warning if low)
+	local hits_color = hits_left <= 1 and 8 or 7
+	print_shadow(hits_text, cx - hits_w/2, y + 24, hits_color)
+end
+
+-- Draw bomb delivery failure message
+function draw_bomb_delivery_failure()
+	if not mission.bomb_delivery_failed then return end
+	if not mission.bomb_delivery_fail_timer then return end
+
+	-- Show failure message in center of screen
+	local msg = mission.bomb_delivery_fail_reason or "MISSION FAILED!"
+	local msg2 = "Talk to your companion to try again."
+	local x = SCREEN_W / 2
+	local y = SCREEN_H / 2 - 20
+
+	-- Draw semi-transparent background
+	rectfill(x - 120, y - 10, x + 120, y + 30, 1)
+	rect(x - 120, y - 10, x + 120, y + 30, 8)
+
+	-- Draw text centered
+	local tw1 = print(msg, 0, -100)
+	local tw2 = print(msg2, 0, -100)
+	print_shadow(msg, x - tw1/2, y, 8)  -- red
+	print_shadow(msg2, x - tw2/2, y + 14, 7)  -- white
+end
+
+-- Add bomb delivery current checkpoint to visible list for depth sorting
+function add_bomb_target_to_visible(visible)
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_delivery_active then return end
+
+	local checkpoints = mission.bomb_delivery_checkpoints
+	local cp_idx = mission.bomb_delivery_current_cp
+	if not checkpoints or #checkpoints == 0 or cp_idx > #checkpoints then return end
+
+	local target = checkpoints[cp_idx]
+	local sx, sy = world_to_screen(target.x, target.y)
+
+	-- Only add if on screen
+	if sx > -32 and sx < SCREEN_W + 32 and sy > -32 and sy < SCREEN_H + 32 then
+		-- Depth sort by bottom of 32x32 sprite
+		local target_feet_y = target.y + 16
+		add(visible, {
+			type = "bomb_target",
+			y = target_feet_y,
+			cx = target.x,
+			cy = target.y,
+			sx = sx,
+			sy = sy,
+			is_final = (cp_idx == #checkpoints),  -- mark if final checkpoint
+		})
+	end
+end
+
+-- Draw bomb target sprite (uses package sprite - same as beyond_the_sea)
+function draw_bomb_target_sprite(sx, sy)
+	local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite  -- Reuse package sprite
+	spr(sprite_id, sx - 16, sy - 16, 2, 2)
+end
+
+-- Draw bomb delivery current checkpoint on minimap
+function draw_bomb_delivery_minimap(cfg, mx, my, half_mw, half_mh, px, py, tile_size, half_map_w, half_map_h)
+	if mission.current_quest ~= "bomb_delivery" then return end
+	if not mission.bomb_delivery_active then return end
+
+	local checkpoints = mission.bomb_delivery_checkpoints
+	local cp_idx = mission.bomb_delivery_current_cp
+	if not checkpoints or #checkpoints == 0 or cp_idx > #checkpoints then return end
+
+	local target = checkpoints[cp_idx]
+	local marker_x = mx + (target.x / tile_size + half_map_w - px + half_mw)
+	local marker_y = my + (target.y / tile_size + half_map_h - py + half_mh)
+	-- Clamp to minimap bounds
+	marker_x = max(cfg.x, min(cfg.x + cfg.width - 1, marker_x))
+	marker_y = max(cfg.y, min(cfg.y + cfg.height - 1, marker_y))
+	-- Blink the marker (red for danger, yellow for intermediate)
+	local blink = flr(time() * 4) % 2 == 0  -- Faster blink for urgency
+	if blink then
+		local color = (cp_idx == #checkpoints) and 8 or 10  -- Red for final, yellow for intermediate
+		circfill(marker_x, marker_y, 2, color)
 	end
 end

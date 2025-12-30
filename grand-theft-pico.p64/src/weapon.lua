@@ -99,6 +99,23 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 				end
 			end
 
+			-- Check Kathy boss
+			if kathy and kathy.state ~= "dead" then
+				local kdx = check_x - kathy.x
+				local kdy = check_y - kathy.y
+				local kdist = sqrt(kdx * kdx + kdy * kdy)
+				if kdist < KATHY_CONFIG.collision_radius then
+					damage_kathy(damage)
+				end
+			end
+
+			-- Check Kathy's foxes
+			local kathy_fox = check_kathy_fox_hit(check_x, check_y, 12)
+			if kathy_fox and not hit_dealers[kathy_fox] then
+				damage_kathy_fox(kathy_fox, damage)
+				hit_dealers[kathy_fox] = true
+			end
+
 			-- Check dealers
 			if arms_dealers then
 				for _, dealer in ipairs(arms_dealers) do
@@ -157,8 +174,7 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 			local pdy = check_y - game.player.y
 			local dist = sqrt(pdx * pdx + pdy * pdy)
 			if dist < 10 then
-				game.player.health = max(0, game.player.health - damage)
-				trigger_player_hit_flash()  -- show hit sprite
+				damage_player(damage)
 				return  -- Player hit, stop checking
 			end
 		end
@@ -378,6 +394,26 @@ function check_projectile_collision(proj)
 			end
 		end
 
+		-- Check collision with Kathy boss
+		if kathy and kathy.state ~= "dead" then
+			local kdx = proj.x - kathy.x
+			local kdy = proj.y - kathy.y
+			local kdist = sqrt(kdx * kdx + kdy * kdy)
+			if kdist < KATHY_CONFIG.collision_radius then
+				damage_kathy(proj.damage)
+				add_collision_effect(proj.x, proj.y, 0.3)
+				return true
+			end
+		end
+
+		-- Check collision with Kathy's foxes
+		local kathy_fox = check_kathy_fox_hit(proj.x, proj.y, 12)
+		if kathy_fox then
+			damage_kathy_fox(kathy_fox, proj.damage)
+			add_collision_effect(proj.x, proj.y, 0.3)
+			return true
+		end
+
 		-- Check collision with regular NPCs (no damage, popularity loss)
 		for _, npc in ipairs(npcs) do
 			local dx = proj.x - npc.x
@@ -402,8 +438,7 @@ function check_projectile_collision(proj)
 		local dist = sqrt(dx * dx + dy * dy)
 		if dist < 10 then
 			-- Hit player
-			game.player.health = max(0, game.player.health - proj.damage)
-			trigger_player_hit_flash()  -- show hit sprite
+			damage_player(proj.damage)
 			add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
 			return true
 		end
@@ -712,6 +747,24 @@ function check_melee_hit(weapon)
 			damage_cactus(weapon.damage)
 			return true
 		end
+	end
+
+	-- Check Kathy boss
+	if kathy and kathy.state ~= "dead" then
+		local kdx = hit_x - kathy.x
+		local kdy = hit_y - kathy.y
+		local kdist = sqrt(kdx * kdx + kdy * kdy)
+		if kdist < weapon.range then
+			damage_kathy(weapon.damage)
+			return true
+		end
+	end
+
+	-- Check Kathy's foxes
+	local kathy_fox = check_kathy_fox_hit(hit_x, hit_y, weapon.range)
+	if kathy_fox then
+		damage_kathy_fox(kathy_fox, weapon.damage)
+		return true
 	end
 
 	-- Check dealers (any state except dead)
