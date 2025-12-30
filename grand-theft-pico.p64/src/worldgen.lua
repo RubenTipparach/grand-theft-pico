@@ -31,21 +31,21 @@ function draw_loading_screen()
 	local bar_y = 135
 
 	-- Draw loading text
-	print(loading_message, bar_x, bar_y - 20, 33)
+	print(loading_message, bar_x, bar_y - 20, 33)  -- white text
 
 	-- Draw progress bar background
-	rectfill(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 1)
+	rectfill(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 4)  -- dark navy background
 
 	-- Draw progress bar fill
 	local fill_w = (loading_progress / 100) * bar_w
-	rectfill(bar_x, bar_y, bar_x + fill_w, bar_y + bar_h, 11)
+	rectfill(bar_x, bar_y, bar_x + fill_w, bar_y + bar_h, 19)  -- green fill
 
 	-- Draw border
-	rect(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 7)
+	rect(bar_x, bar_y, bar_x + bar_w, bar_y + bar_h, 21)  -- gold border
 
 	-- Draw percentage
 	local pct_text = tostr(flr(loading_progress)) .. "%"
-	print(pct_text, bar_x + bar_w / 2 - 8, bar_y + 4, 33)
+	print(pct_text, bar_x + bar_w / 2 - 8, bar_y + 4, 33)  -- white text
 
 	flip()
 end

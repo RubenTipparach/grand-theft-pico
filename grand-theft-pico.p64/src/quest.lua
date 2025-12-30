@@ -29,7 +29,8 @@ QUEST_CONFIG = {
 		"speed_dating",
 		"talk_to_companion_8",  -- leads to bomb_delivery
 		"bomb_delivery",
-		"find_missions"
+		"talk_to_companion_9",  -- leads to alien_invasion
+		"alien_invasion",
 	},
 
 	-- Quest display names
@@ -54,7 +55,8 @@ QUEST_CONFIG = {
 		speed_dating = "Speed Dating",
 		talk_to_companion_8 = "Talk to Companion",
 		bomb_delivery = "Special Delivery",
-		find_missions = "Find Missions",
+		talk_to_companion_9 = "Talk to Companion",
+		alien_invasion = "Alien Invasion",
 	},
 
 	-- Quest-specific settings
@@ -172,8 +174,12 @@ QUEST_CONFIG = {
 		checkpoint_radius = 40,   -- radius to trigger checkpoint
 	},
 
-	find_missions = {
-		money_reward = 100,
+	talk_to_companion_9 = {
+		money_reward = 0,
+	},
+
+	alien_invasion = {
+		money_reward = 1000,      -- Big reward for final boss
 	},
 
 	-- Visual settings
@@ -187,7 +193,7 @@ QUEST_CONFIG = {
 -- Mission/Quest system state
 mission = {
 	-- Current quest tracking
-	current_quest = nil,         -- "intro", "protect_city", "make_friends", "find_love", "find_missions"
+	current_quest = nil,         -- "intro", "protect_city", ..., "alien_invasion"
 	quest_complete = false,      -- is current quest complete?
 
 	-- Intro quest (two phases: meet people, then talk to dealer)
@@ -505,9 +511,14 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "find_missions" then
-		-- Talked to a lover about troubles
-		if mission.talked_to_lover then
+	elseif mission.current_quest == "talk_to_companion_9" then
+		if mission.talked_to_companion_9 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "alien_invasion" then
+		-- Mothership destroyed
+		if mission.mothership_killed then
 			complete_current_quest()
 		end
 	end
@@ -544,6 +555,9 @@ function complete_current_quest()
 	end
 
 	printh("Quest complete: " .. quest_name)
+
+	-- Auto-save on quest completion
+	save_game()
 end
 
 -- Update quest completion visual (call from _update)
@@ -720,10 +734,24 @@ function start_quest(quest_id)
 		-- Car will spawn when player picks up the bomb (not at quest start)
 		printh("Started quest: Special Delivery - " .. #mission.bomb_delivery_checkpoints .. " checkpoints, " .. cfg.time_limit .. " seconds!")
 
-	elseif quest_id == "find_missions" then
-		mission.talked_to_lover = false
-		printh("Started quest: Find Missions")
+	elseif quest_id == "talk_to_companion_9" then
+		mission.talked_to_companion_9 = false
+		printh("Started quest: Talk to Companion (before Alien Invasion)")
+
+	elseif quest_id == "alien_invasion" then
+		mission.mothership_killed = false
+		mission.alien_invasion_started = false
+		mission.game_complete = false
+		-- Spawn mothership and minions
+		spawn_mothership()
+		spawn_initial_minions()
+		mission.alien_invasion_started = true
+		printh("Started quest: Alien Invasion - Mothership spawned!")
+
 	end
+
+	-- Auto-save on quest start
+	save_game()
 end
 
 -- Advance to next quest in chain
@@ -780,11 +808,17 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "talk_to_companion_8" then
 		next_quest = "bomb_delivery"
 	elseif mission.current_quest == "bomb_delivery" then
-		next_quest = "find_missions"
-	elseif mission.current_quest == "find_missions" then
-		-- Quest chain complete - can add more later
-		printh("All quests complete! More coming soon...")
+		next_quest = "talk_to_companion_9"
+	elseif mission.current_quest == "talk_to_companion_9" then
+		next_quest = "alien_invasion"
+	elseif mission.current_quest == "alien_invasion" then
+		-- Clean up mothership and minions
+		cleanup_mothership()
+		cleanup_alien_minions()
+		-- Game complete! No more quests after alien invasion
+		printh("All quests complete! Game finished!")
 		mission.current_quest = nil
+		mission.game_complete = true
 		return
 	end
 
@@ -978,9 +1012,27 @@ function get_quest_objectives()
 			end
 		end
 
-	elseif mission.current_quest == "find_missions" then
-		local status = mission.talked_to_lover and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to a lover about their troubles")
+	elseif mission.current_quest == "talk_to_companion_9" then
+		local status = mission.talked_to_companion_9 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
+	elseif mission.current_quest == "alien_invasion" then
+		if mission.mothership_killed then
+			add(objectives, "[X] Defeat the Alien Mothership")
+		else
+			add(objectives, "[ ] Defeat the Alien Mothership")
+			-- Show mothership health
+			if mothership and mothership.state ~= "dead" then
+				local health_pct = flr((mothership.health / mothership.max_health) * 100)
+				add(objectives, "    Mothership Health: " .. health_pct .. "%")
+			end
+			-- Show minion count
+			local minion_count = #alien_minions
+			if minion_count > 0 then
+				add(objectives, "    Alien Minions: " .. minion_count)
+			end
+		end
+
 	end
 
 	return objectives

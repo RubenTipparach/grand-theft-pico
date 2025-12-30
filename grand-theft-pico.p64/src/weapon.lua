@@ -116,6 +116,23 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 				hit_dealers[kathy_fox] = true
 			end
 
+			-- Check mothership
+			if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+				local mdx = check_x - mothership.x
+				local mdy = check_y - mothership.y
+				local mdist = sqrt(mdx * mdx + mdy * mdy)
+				if mdist < MOTHERSHIP_CONFIG.collision_radius then
+					damage_mothership(damage)
+				end
+			end
+
+			-- Check alien minions
+			local alien_minion = check_alien_minion_hit(check_x, check_y, 12)
+			if alien_minion and not hit_dealers[alien_minion] then
+				damage_alien_minion(alien_minion, damage)
+				hit_dealers[alien_minion] = true
+			end
+
 			-- Check dealers
 			if arms_dealers then
 				for _, dealer in ipairs(arms_dealers) do
@@ -410,6 +427,26 @@ function check_projectile_collision(proj)
 		local kathy_fox = check_kathy_fox_hit(proj.x, proj.y, 12)
 		if kathy_fox then
 			damage_kathy_fox(kathy_fox, proj.damage)
+			add_collision_effect(proj.x, proj.y, 0.3)
+			return true
+		end
+
+		-- Check collision with mothership
+		if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+			local mdx = proj.x - mothership.x
+			local mdy = proj.y - mothership.y
+			local mdist = sqrt(mdx * mdx + mdy * mdy)
+			if mdist < MOTHERSHIP_CONFIG.collision_radius then
+				damage_mothership(proj.damage)
+				add_collision_effect(proj.x, proj.y, 0.3)
+				return true
+			end
+		end
+
+		-- Check collision with alien minions
+		local alien_minion = check_alien_minion_hit(proj.x, proj.y, 12)
+		if alien_minion then
+			damage_alien_minion(alien_minion, proj.damage)
 			add_collision_effect(proj.x, proj.y, 0.3)
 			return true
 		end
@@ -764,6 +801,24 @@ function check_melee_hit(weapon)
 	local kathy_fox = check_kathy_fox_hit(hit_x, hit_y, weapon.range)
 	if kathy_fox then
 		damage_kathy_fox(kathy_fox, weapon.damage)
+		return true
+	end
+
+	-- Check mothership
+	if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+		local mdx = hit_x - mothership.x
+		local mdy = hit_y - mothership.y
+		local mdist = sqrt(mdx * mdx + mdy * mdy)
+		if mdist < MOTHERSHIP_CONFIG.collision_radius + weapon.range then
+			damage_mothership(weapon.damage)
+			return true
+		end
+	end
+
+	-- Check alien minions
+	local alien_minion = check_alien_minion_hit(hit_x, hit_y, weapon.range)
+	if alien_minion then
+		damage_alien_minion(alien_minion, weapon.damage)
 		return true
 	end
 

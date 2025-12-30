@@ -275,6 +275,10 @@ profile("cull")
 	add_kathy_to_visible(visible)
 	add_kathy_foxes_to_visible(visible)
 
+	-- Add mothership and alien minions to the list (if spawned)
+	add_mothership_to_visible(visible)
+	add_alien_minions_to_visible(visible)
+
 	-- Add package to the list (beyond the sea quest)
 	add_package_to_visible(visible)
 
@@ -507,6 +511,12 @@ profile("cull")
 		elseif obj.type == "kathy_fox" then
 			-- Draw Kathy's fox minion
 			draw_kathy_fox(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "mothership" then
+			-- Draw alien mothership
+			draw_mothership(obj.data, obj.sx, obj.sy)
+		elseif obj.type == "alien_minion" then
+			-- Draw alien minion
+			draw_alien_minion(obj.data, obj.sx, obj.sy)
 		elseif obj.type == "package" then
 			-- Draw package sprite
 			draw_package_sprite(obj.sx, obj.sy)

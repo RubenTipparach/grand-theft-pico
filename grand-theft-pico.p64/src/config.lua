@@ -855,7 +855,8 @@ DEBUG_CONFIG = {
 		-- "speed_dating",
 		-- "talk_to_companion_8",  -- leads to bomb_delivery
 		-- "bomb_delivery",
-		-- "find_missions"
+		-- "talk_to_companion_9",  -- leads to alien_invasion
+		-- "alien_invasion",
 
 		-- sketch:
 		
@@ -882,7 +883,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_8",
+	start_quest = "talk_to_companion_9",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text
@@ -1512,6 +1513,102 @@ KATHY_CONFIG = {
 }
 
 -- ============================================
+-- MOTHERSHIP CONFIG (Final Boss)
+-- ============================================
+MOTHERSHIP_CONFIG = {
+	name = "Alien Mothership",
+	health = 1200,
+
+	-- Movement (slow drift around city center)
+	drift_speed = 25,
+	drift_radius = 100,       -- circular drift radius
+	hover_offset = -80,       -- visual height above ground (negative = higher)
+
+	-- Spiral attack pattern
+	spiral_cooldown = 5.0,          -- seconds between spiral attacks
+	spiral_fire_interval = 0.033,   -- seconds between shots (~2 frames at 60fps)
+	spiral_total_bullets = 30,      -- bullets per spiral
+	spiral_bullet_speed = 80,       -- slower for visibility
+	spiral_damage = 15,
+	spiral_angle_step = 0.4,        -- rotation per bullet (in turns, 0-1)
+
+	-- Sprites (1.gfx, base offset 256)
+	sprite = 256 + 112,             -- mothership sprite (368)
+	laser_sprite = 256 + 113,       -- laser bullet sprite (369)
+
+	-- Rendering (56x32 non-square sprite)
+	sprite_w = 56,                  -- mothership sprite width
+	sprite_h = 32,                  -- mothership sprite height
+	collision_radius = 28,          -- collision based on sprite dimensions
+
+	-- Hit flash
+	hit_flash_duration = 0.15,
+
+	-- Spawn location (city center)
+	spawn_x = 0,
+	spawn_y = 0,
+
+	-- Minion management
+	max_minions = 4,
+	minion_respawn_delay = 10.0,    -- seconds before spawning new minion
+	initial_minion_spawn_delay = 3.0, -- delay before first minions spawn
+
+	-- Building destruction (initial attack)
+	destruction_delay = 2.0,        -- seconds after spawn before destroying buildings
+	destruction_radius = 150,       -- destroy buildings within this radius of center
+
+	-- Victory
+	death_explosion_delay = 3.0,    -- seconds before final explosion
+	victory_display_delay = 5.0,    -- seconds before showing options
+}
+
+-- ============================================
+-- ALIEN MINION CONFIG
+-- ============================================
+ALIEN_MINION_CONFIG = {
+	health = 150,
+	chase_speed = 50,
+	target_distance = 80,           -- attack range
+	aggro_distance = 300,
+
+	-- Attack pattern (N, S, E, W spread)
+	attack_cooldown = 3.0,          -- seconds between attacks
+	attack_pulses = 10,             -- bullets fired per attack
+	pulse_interval = 0.1,           -- seconds between pulses
+	bullet_speed = 120,
+	bullet_damage = 10,
+	bullet_sprite = 114,            -- use existing laser bullet
+
+	-- Sprites (1.gfx, base offset 256)
+	sprite_base = 256,
+	idle_start = 40,                -- sprites 40-45
+	idle_frames = 6,
+	move_start = 48,                -- sprites 48-53
+	move_frames = 6,
+	attack_start = 56,              -- sprites 56-63
+	attack_frames = 8,
+	damaged_start = 104,            -- sprites 104-108
+	damaged_frames = 5,
+
+	-- Animation speeds
+	idle_animation_speed = 0.08,
+	move_animation_speed = 0.05,
+	attack_animation_speed = 0.06,
+	damaged_animation_speed = 0.03,
+
+	-- Rendering
+	sprite_size = 32,               -- 32x32 minion sprites
+	sprite_scale = 1.0,
+	collision_radius = 14,
+
+	-- Hit flash
+	hit_flash_duration = 0.25,
+
+	-- Spawn
+	spawn_radius = 80,              -- spawn distance from mothership
+}
+
+-- ============================================
 -- RACE CONFIG
 -- ============================================
 RACE_CONFIG = {
@@ -1556,6 +1653,77 @@ RACE_CONFIG = {
 
 	-- AI direction commitment (prevent twitching)
 	direction_commit_distance = 48,  -- travel ~3 tiles before changing direction
+}
+
+-- ============================================
+-- MENU CONFIG
+-- ============================================
+MENU_CONFIG = {
+	-- Chicken spaceship (1.gfx, base offset 256)
+	chicken_sprite = 256 + 114,     -- sprite 370
+	chicken_size = 32,              -- 32x32 sprite
+	chicken_scale = 3.0,            -- scale up chicken using quad
+
+	-- Thruster flame sprites (1.gfx, base offset 256)
+	thruster_sprites = {256 + 116, 256 + 117, 256 + 118, 256 + 119},  -- 372-375
+	thruster_size_w = 8,            -- 8 pixels wide
+	thruster_size_h = 16,           -- 16 pixels tall
+	thruster_animation_speed = 0.1, -- seconds per frame
+	thruster_base_scale_x = 1.0,    -- horizontal scale (no stretch)
+	thruster_base_scale_y = 0.9,    -- vertical scale (min stretch)
+	thruster_pulse_speed = 4.0,     -- pulsation speed (Hz)
+	thruster_pulse_amount = 0.1,    -- scale variation (0.8 to 1.0 range)
+	thruster_flip_y = true,         -- mirror flame vertically
+	thruster_offset_x = 3,          -- local X offset for flame position
+	thruster_offset_y = 8,          -- local Y offset for flame position
+
+	-- Chicken bobbing
+	bob_speed = 2.0,                -- bobbing speed (Hz)
+	bob_amount = 4,                 -- pixels of vertical bob
+
+	-- Spaceship position
+	chicken_y = 120,                -- Y position (above center)
+	chicken_offset_x = 120,           -- horizontal offset from center
+	chicken_offset_y = 20,           -- vertical offset adjustment
+
+	-- Night highway parallax background
+	scroll_speed = 1.0,             -- parallax scroll speed
+	night_sky_color = 1,            -- dark blue/black sky
+	road_color = 5,                 -- dark gray asphalt
+	lane_color = 33,                -- white lane markings
+	dash_width = 40,                -- road dash width
+	dash_gap = 25,                  -- gap between road dashes
+
+	-- Starfield
+	star_count = 100,               -- number of stars
+	star_colors = {33, 30, 6},      -- white, light gray, dark gray
+
+	-- Building textures (uses BUILDING_TYPES sprites)
+	window_color = 22,              -- yellow lit windows
+
+	-- Street lamps (uses NIGHT_CONFIG.lamp_sprite)
+	lamp_spacing = 150,             -- distance between lamps
+	lamp_glow_color = 22,           -- yellow glow
+	lamp_bright_color = 33,         -- white center
+
+	-- Text box (for legibility)
+	text_box_color = 1,             -- black background
+	text_box_border = 6,            -- gray border
+	text_box_padding = 6,           -- padding around text
+
+	-- Text colors
+	title_color = 33,               -- white
+	prompt_color = 22,              -- yellow
+	selected_color = 22,            -- yellow for selected option
+	unselected_color = 33,          -- white for unselected
+}
+
+-- ============================================
+-- SAVE CONFIG
+-- ============================================
+SAVE_CONFIG = {
+	filename = "/appdata/grand_theft_pico/save.pod",
+	version = 1,  -- for future compatibility
 }
 
 -- ============================================

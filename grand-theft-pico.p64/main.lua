@@ -62,8 +62,11 @@ include("src/dealer.lua")
 include("src/fox.lua")
 include("src/cactus.lua")
 include("src/kathy.lua")
+include("src/mothership.lua")
+include("src/alien_minion.lua")
 include("src/quest.lua")
 include("src/race.lua")
+include("src/menu.lua")
 
 -- Load input utilities module (for single-press detection)
 input_utils = require("src/input_utils")
@@ -1297,6 +1300,16 @@ function _init()
 	-- Create night mask sprite (screen-sized)
 	night_mask = userdata("u8", SCREEN_W, SCREEN_H)
 
+	-- Initialize menu state (game_state starts as "menu" from menu.lua)
+	menu.phase = "title"
+	menu.has_save = check_save_exists()
+	menu.thruster_timer = time()
+
+	printh("Grand Theft Chicken - Menu initialized!")
+end
+
+-- Initialize game world (called when starting/continuing game from menu)
+function init_game_world()
 	-- Initialize world from map sprite 255
 	-- This parses the map, generates ROADS, COUNTRYSIDE_ROADS, and LEVEL_BUILDINGS
 	init_world_from_map()
@@ -1305,11 +1318,15 @@ function _init()
 	buildings = create_buildings_from_level()
 
 	-- Set player position at world center (0,0) which is map center (128,128)
-	game.player.x = 0
-	game.player.y = 0
-	cam_x = 0
-	cam_y = 0
-	printh("Player starting at: 0, 0 (map center)")
+	-- (unless loading a save, position is already set)
+	if game.player.x == 0 and game.player.y == 0 then
+		cam_x = 0
+		cam_y = 0
+	else
+		cam_x = game.player.x
+		cam_y = game.player.y
+	end
+	printh("Player at: " .. game.player.x .. ", " .. game.player.y)
 
 	-- Generate street lights along roads
 	STREET_LIGHTS = generate_street_lights()
@@ -1318,12 +1335,21 @@ function _init()
 	-- Generate countryside flora
 	generate_flora()
 
+	-- Restore companions if loading a save (before spawning other NPCs)
+	restore_companions()
+
+	-- Calculate how many NPCs to spawn (subtract existing companions)
+	local companion_count = #fans
+	local target_npcs = NPC_CONFIG.update_mode == 2 and NPC_CONFIG.target_npc_count or NPC_CONFIG.spawn_count
+	local npcs_to_spawn = max(0, target_npcs - companion_count)
+
 	-- Spawn NPCs on roads
-	-- Mode 1 uses spawn_count at random roads, mode 2 spawns target_npc_count near player
-	if NPC_CONFIG.update_mode == 2 then
-		spawn_npcs(NPC_CONFIG.target_npc_count, game.player.x, game.player.y)
-	else
-		spawn_npcs(NPC_CONFIG.spawn_count)
+	if npcs_to_spawn > 0 then
+		if NPC_CONFIG.update_mode == 2 then
+			spawn_npcs(npcs_to_spawn, game.player.x, game.player.y)
+		else
+			spawn_npcs(npcs_to_spawn)
+		end
 	end
 
 	-- Spawn vehicles on roads and boats on water
@@ -1348,39 +1374,44 @@ function _init()
 		printh("Debug: gave player all weapons")
 	end
 
-	-- Debug: start at specific quest (or intro by default)
-	local start_at = DEBUG_CONFIG.start_quest
-	-- Support legacy skip_to_quest option
-	-- if DEBUG_CONFIG.skip_to_quest and not start_at then
-	-- 	start_at = "protect_city"
-	-- end
+	-- Start quest if not already set (new game)
+	if not mission.current_quest then
+		-- Debug: start at specific quest (or intro by default)
+		local start_at = DEBUG_CONFIG.start_quest
 
-	if start_at and start_at ~= "intro" then
-		-- Mark fox quest flags so foxes don't spawn unexpectedly
-		mission.fox_quest_offered = true
-		mission.fox_quest_accepted = true
-		foxes_spawned = true
-		foxes = {}
+		if start_at and start_at ~= "intro" then
+			-- Mark fox quest flags so foxes don't spawn unexpectedly
+			mission.fox_quest_offered = true
+			mission.fox_quest_accepted = true
+			foxes_spawned = true
+			foxes = {}
 
-		-- Just start the quest directly
-		start_quest(start_at)
-		printh("Debug: started at quest '" .. start_at .. "'")
+			-- Just start the quest directly
+			start_quest(start_at)
+			printh("Debug: started at quest '" .. start_at .. "'")
+		else
+			-- Start with the intro quest (meet 5 people, then talk to dealer)
+			start_quest("intro")
+		end
 	else
-		-- Start with the intro quest (meet 5 people, then talk to dealer)
-		start_quest("intro")
-		-- Note: intro NPC will be spawned when player meets 5th person (see npc.lua)
+		printh("Resuming quest: " .. mission.current_quest)
 	end
 
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
-	printh("Grand Theft Picotron initialized!")
-	printh("Use arrow keys to move")
+	printh("Grand Theft Chicken - World initialized!")
 	printh("Loaded " .. #buildings .. " buildings")
-	printh("Press X to toggle render mode (tline3d/tri)")
 end
 
 function _update()
+	-- Menu state - only update menu
+	if game_state == "menu" then
+		update_menu()
+		return
+	end
+
+	-- Playing state - run game updates
 	profile("input")
 	handle_input()
 	profile("input")
@@ -1422,6 +1453,10 @@ function _update()
 	update_kathy()
 	update_kathy_bullets()
 	update_kathy_foxes()
+
+	-- Update Mothership boss and alien minions (if quest active)
+	update_mothership()
+	update_alien_minions()
 
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
@@ -1850,6 +1885,8 @@ function start_dialog(npc, fan_data)
 			add(dialog.options, { text = "What's new?", action = "offer_companion_7" })
 		elseif mission.current_quest == "talk_to_companion_8" and not mission.talked_to_companion_8 then
 			add(dialog.options, { text = "What's new?", action = "offer_companion_8" })
+		elseif mission.current_quest == "talk_to_companion_9" and not mission.talked_to_companion_9 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_9" })
 		end
 		-- Race replay option (available after completing mega_race once, only when no main quest active)
 		-- Only show when current quest is find_missions (all main quests complete) or nil
@@ -2097,6 +2134,17 @@ function select_dialog_option()
 		return
 	end
 
+	if opt.action == "offer_companion_9" then
+		dialog.phase = "quest"
+		dialog.quest_text = "Look up! A massive alien mothership has appeared over the city! It's destroying buildings and spawning minions everywhere. You have to stop this invasion!"
+		dialog.options = {
+			{ text = "Time to save the world!", action = "accept_companion_9" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
 	-- ACCEPT companion missions - these advance the quest
 	if opt.action == "accept_companion_1" then
 		mission.talked_to_companion_1 = true
@@ -2169,6 +2217,16 @@ function select_dialog_option()
 		dialog.result_text = "The bomb is in the car! Steal one and deliver it fast!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
+		return
+	end
+
+	if opt.action == "accept_companion_9" then
+		mission.talked_to_companion_9 = true
+		dialog.phase = "result"
+		dialog.result_text = "The fate of the city rests on your shoulders! Destroy the mothership!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		printh("DEBUG: accept_companion_9 triggered, mission.talked_to_companion_9 = " .. tostring(mission.talked_to_companion_9))
 		return
 	end
 
@@ -2612,6 +2670,13 @@ function draw_fan_prompt()
 end
 
 function _draw()
+	-- Menu state - only draw menu
+	if game_state == "menu" then
+		draw_menu()
+		return
+	end
+
+	-- Playing state - draw game
 	cls(1)  -- dark background
 
 	-- Draw ground tiles (grass and dirt roads)
@@ -2733,6 +2798,12 @@ function _draw()
 	draw_kathy_health_bar()
 	draw_kathy_defeated_message()
 	draw_kathy_fox_defeated_message()
+
+	-- Draw Mothership UI
+	draw_mothership_bullets()
+	draw_alien_minion_bullets()
+	draw_mothership_health_bar()
+	draw_mothership_defeated_message()
 
 	-- Draw dealer prompt and boss health bar
 	draw_dealer_prompt()
