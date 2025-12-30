@@ -2314,8 +2314,8 @@ function draw_bomb_delivery_failure()
 	local y = SCREEN_H / 2 - 20
 
 	-- Draw semi-transparent background
-	rectfill(x - 120, y - 10, x + 120, y + 30, 1)
-	rect(x - 120, y - 10, x + 120, y + 30, 12)  -- bright red border
+	rectfill(x - 130, y - 25, x + 130, y + 45, 1)
+	rect(x - 130, y - 25, x + 130, y + 45, 12)  -- bright red border
 
 	-- Draw text centered with proper palette colors
 	local tw1 = print(msg, 0, -100)

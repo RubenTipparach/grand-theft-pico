@@ -19,12 +19,17 @@ function draw_building_back_walls(b)
 	local collapse_y = b.collapse_offset or 0
 
 	-- Calculate wall height based on distance from screen center, scaled by building height multiplier
-	-- Reduce wall height as building collapses
-	local collapse_scale = 1 - (collapse_y / 100)
-	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1) * collapse_scale
+	-- Wall height stays constant during collapse (building sinks, doesn't shrink)
+	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1)
 
 	-- Get perspective offset (walls lean outward from center)
 	local ox, oy = get_wall_offset(cx, cy, wall_h)
+
+	-- During collapse, lock perspective offsets so building slides straight down
+	if b.collapsing then
+		ox = 0
+		oy = 0
+	end
 
 	-- Add collapse offset to Y offset (building sinks down)
 	oy = oy + collapse_y
@@ -40,12 +45,16 @@ function draw_building_back_walls(b)
 
 	-- Draw east/west walls (they slant away, so player draws on top of them)
 	-- West wall (left edge) - only if building is right of screen center
-	if visible.west then
+	if visible.west or b.collapsing then
 		draw_wall(wall_spr, x0, y0, x0, y1, wall_h, ox, oy)
 	end
 	-- East wall (right edge) - only if building is left of screen center
-	if visible.east then
+	if visible.east or b.collapsing then
 		draw_wall(wall_spr, x1, y0, x1, y1, wall_h, ox, oy)
+	end
+	-- North wall (top edge) - normally culled, but draw during collapse
+	if b.collapsing then
+		draw_wall(wall_spr, x0, y0, x1, y0, wall_h, ox, oy)
 	end
 end
 
@@ -64,12 +73,17 @@ function draw_building_front(b)
 	local collapse_y = b.collapse_offset or 0
 
 	-- Calculate wall height based on distance from screen center, scaled by building height multiplier
-	-- Reduce wall height as building collapses
-	local collapse_scale = 1 - (collapse_y / 100)
-	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1) * collapse_scale
+	-- Wall height stays constant during collapse (building sinks, doesn't shrink)
+	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1)
 
 	-- Get perspective offset (walls lean outward from center)
 	local ox, oy = get_wall_offset(cx, cy, wall_h)
+
+	-- During collapse, lock perspective offsets so building slides straight down
+	if b.collapsing then
+		ox = 0
+		oy = 0
+	end
 
 	-- Add collapse offset to Y offset (building sinks down)
 	oy = oy + collapse_y

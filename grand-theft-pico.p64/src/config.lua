@@ -729,6 +729,9 @@ CAMERA_CONFIG = {
 	follow_smoothing = 0.08,  -- smoothing factor (lower = smoother/slower, higher = snappier)
 	deadzone_half_w = 16,     -- half-width of center deadzone (player can move this far before camera follows)
 	deadzone_half_h = 16,     -- half-height of center deadzone
+	-- Vehicle camera lead-ahead (camera looks ahead in direction of travel)
+	vehicle_lead_distance = 50,  -- how far ahead to look when driving
+	vehicle_lead_smoothing = 0.04,  -- how fast the lead adjusts (lower = smoother transitions)
 }
 
 -- ============================================

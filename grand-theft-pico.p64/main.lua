@@ -195,9 +195,11 @@ function remove_fan_status(npc)
 end
 
 -- Player death state
-player_dead = false
+player_dead = false  -- true = show death sprite
+death_sequence_active = false  -- true = death animation is running (separate from player_dead)
 death_timer = 0
 death_fade = 0  -- 0-1 for fade effect
+death_respawned = false  -- track if respawn already happened this death
 
 -- Player hit flash state (show sprite 11 when hit)
 player_hit_flash = 0  -- end time for hit flash
@@ -241,9 +243,13 @@ end
 function handle_player_death()
 	if player_dead then return end
 
+	printh("[DEATH] handle_player_death called, health=" .. game.player.health)
 	player_dead = true
+	death_sequence_active = true
 	death_timer = time()
 	death_fade = 0
+	death_respawned = false  -- reset respawn flag for new death
+	printh("[DEATH] player_dead=true, death_sequence_active=true, death_timer=" .. death_timer)
 
 	-- Lose half money
 	game.player.money = flr(game.player.money / 2)
@@ -284,9 +290,10 @@ death_darken_index = 0
 -- Update death sequence
 -- Timeline: 0-1s show death sprite + text, 1-4s darken screen, 4-5s fade back in
 function update_death()
-	if not player_dead then
-		-- Check if player should die
+	-- Check if player should die (only when not already in death sequence)
+	if not death_sequence_active then
 		if game.player.health <= 0 then
+			printh("[DEATH] update_death: health<=0, calling handle_player_death")
 			handle_player_death()
 			death_darken_index = 0  -- reset darken index
 		end
@@ -310,27 +317,35 @@ function update_death()
 	elseif elapsed < 5 then
 		death_fade = 1 - (elapsed - 4)  -- fade from 1 to 0
 		death_darken_index = flr((1 - (elapsed - 4)) * #death_darken_sequence)
-		-- Respawn player at start position (once, at start of fade-in)
-		-- Set player_dead = false immediately so normal sprite shows during fade-in
-		if elapsed < 4.1 then
+		-- Respawn player at start position (once, when entering phase 3)
+		-- Use flag to ensure respawn only happens once
+		if not death_respawned then
+			printh("[RESPAWN] Phase 3: elapsed=" .. elapsed .. ", triggering respawn")
+			death_respawned = true
 			game.player.x = 0
 			game.player.y = 0
 			game.player.health = PLAYER_CONFIG.max_health
 			cam_x = 0
 			cam_y = 0
-			player_dead = false  -- show normal sprite during fade-in
+			camera_lead_x = 0  -- reset camera lead
+			camera_lead_y = 0
+			player_dead = false  -- show normal sprite during fade-in (but sequence still active)
+			printh("[RESPAWN] Done: pos=(0,0), health=" .. game.player.health .. ", player_dead=false, sequence still active")
 		end
 	else
 		-- Death sequence complete
+		printh("[DEATH] Phase 4: elapsed=" .. elapsed .. ", death sequence complete")
 		player_dead = false
+		death_sequence_active = false
 		death_fade = 0
 		death_darken_index = 0
+		death_respawned = false
 	end
 end
 
 -- Draw death overlay using color table (like night mode transition)
 function draw_death_overlay()
-	if not player_dead and death_fade <= 0 and death_darken_index <= 0 then return end
+	if not death_sequence_active then return end
 
 	local elapsed = time() - death_timer
 
@@ -1275,6 +1290,9 @@ end
 
 function _init()
 	setup_palette()
+
+	-- Hide mouse cursor
+	window{ cursor = 0 }
 
 	-- Create night mask sprite (screen-sized)
 	night_mask = userdata("u8", SCREEN_W, SCREEN_H)
@@ -2695,7 +2713,6 @@ function _draw()
 	-- Draw bomb delivery HUD (timer)
 	draw_bomb_delivery_hud()
 	draw_bomb_countdown_hud()  -- Big countdown timer after reaching final checkpoint
-	draw_bomb_delivery_failure()
 
 	-- Draw repair progress bar (fix_home quest)
 	draw_repair_progress_bar()
@@ -2730,6 +2747,9 @@ function _draw()
 
 	-- Draw death overlay (WASTED screen - overlays everything)
 	draw_death_overlay()
+
+	-- Draw bomb delivery failure (KABOOM!) AFTER death overlay so it appears on top
+	draw_bomb_delivery_failure()
 
 	-- UI with drop shadows (only when debug enabled)
 	profile("ui")

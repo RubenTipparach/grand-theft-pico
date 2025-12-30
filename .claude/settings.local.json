@@ -6,7 +6,8 @@
       "Bash(chmod:*)",
       "Bash(git init:*)",
       "Bash(grep:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(wc:*)"
     ]
   }
 }

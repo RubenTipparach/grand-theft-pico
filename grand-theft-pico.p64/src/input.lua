@@ -21,7 +21,8 @@ function handle_input()
 	if dt > 0.1 then dt = 0.1 end
 	-- Skip walking input if player is in a vehicle (vehicle handles its own input)
 	-- Also skip if dialog or shop is active (player shouldn't move while in menus)
-	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
+	-- Also skip during death sequence (player can't move while dead/respawning)
+	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) and not death_sequence_active then
 		local dx, dy = 0, 0
 
 		if btn(0) then dx = -1 end  -- left
@@ -81,10 +82,10 @@ function handle_input()
 		end
 	end
 
-	-- Weapon controls (only when not in vehicle, dialog, or shop)
+	-- Weapon controls (only when not in vehicle, dialog, shop, or death sequence)
 	-- Also check dialog.close_cooldown to prevent firing right after closing dialog with Z
 	local dialog_cooldown_active = dialog and dialog.close_cooldown and time() < dialog.close_cooldown
-	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) then
+	if not player_vehicle and not (dialog and dialog.active) and not (shop and shop.active) and not death_sequence_active then
 		-- Q: cycle weapon backward (single-trigger)
 		if input_utils.key_pressed("q") then
 			cycle_weapon_backward()
@@ -111,24 +112,47 @@ function handle_input()
 	local base_smooth = CAMERA_CONFIG.follow_smoothing
 	local smooth = 1 - (1 - base_smooth) ^ (dt * 60)
 
-	-- Calculate player offset from camera center
-	local offset_x = game.player.x - cam_x
-	local offset_y = game.player.y - cam_y
+	-- Calculate camera lead-ahead when in vehicle
+	local lead_x, lead_y = 0, 0
+	if player_vehicle and player_vehicle.facing_dir then
+		local lead_dist = CAMERA_CONFIG.vehicle_lead_distance
+		local dir = player_vehicle.facing_dir
+		if dir == "north" then
+			lead_y = -lead_dist
+		elseif dir == "south" then
+			lead_y = lead_dist
+		elseif dir == "east" then
+			lead_x = lead_dist
+		elseif dir == "west" then
+			lead_x = -lead_dist
+		end
+	end
+
+	-- Smooth the lead offset (so it doesn't snap when changing direction)
+	if not camera_lead_x then camera_lead_x = 0 end
+	if not camera_lead_y then camera_lead_y = 0 end
+	local lead_smooth = 1 - (1 - CAMERA_CONFIG.vehicle_lead_smoothing) ^ (dt * 60)
+	camera_lead_x = camera_lead_x + (lead_x - camera_lead_x) * lead_smooth
+	camera_lead_y = camera_lead_y + (lead_y - camera_lead_y) * lead_smooth
+
+	-- Calculate player offset from camera center (including lead)
+	local offset_x = game.player.x + camera_lead_x - cam_x
+	local offset_y = game.player.y + camera_lead_y - cam_y
 
 	-- Target camera position (only move if player outside deadzone)
 	local target_x = cam_x
 	local target_y = cam_y
 
 	if offset_x > dz_hw then
-		target_x = game.player.x - dz_hw
+		target_x = game.player.x + camera_lead_x - dz_hw
 	elseif offset_x < -dz_hw then
-		target_x = game.player.x + dz_hw
+		target_x = game.player.x + camera_lead_x + dz_hw
 	end
 
 	if offset_y > dz_hh then
-		target_y = game.player.y - dz_hh
+		target_y = game.player.y + camera_lead_y - dz_hh
 	elseif offset_y < -dz_hh then
-		target_y = game.player.y + dz_hh
+		target_y = game.player.y + camera_lead_y + dz_hh
 	end
 
 	-- Smooth interpolation towards target (now frame-rate independent)
