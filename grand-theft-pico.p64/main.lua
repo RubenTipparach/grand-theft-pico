@@ -311,12 +311,14 @@ function update_death()
 		death_fade = 1 - (elapsed - 4)  -- fade from 1 to 0
 		death_darken_index = flr((1 - (elapsed - 4)) * #death_darken_sequence)
 		-- Respawn player at start position (once, at start of fade-in)
+		-- Set player_dead = false immediately so normal sprite shows during fade-in
 		if elapsed < 4.1 then
 			game.player.x = 0
 			game.player.y = 0
 			game.player.health = PLAYER_CONFIG.max_health
 			cam_x = 0
 			cam_y = 0
+			player_dead = false  -- show normal sprite during fade-in
 		end
 	else
 		-- Death sequence complete
@@ -1458,6 +1460,7 @@ function _update()
 	update_bomb_delivery()
 	update_bomb_countdown()  -- Handle explosion countdown after reaching final checkpoint
 	update_bomb_delivery_failure()
+	update_building_collapse()  -- Animate building collapse after bomb explosion
 end
 
 -- Update quest system

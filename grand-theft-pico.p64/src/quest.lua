@@ -1833,18 +1833,45 @@ function start_bomb_delivery_timer()
 end
 
 -- Track a hit on the bomb car (called when vehicle takes damage during quest)
-function track_bomb_delivery_hit()
+-- Only counts if the damaged vehicle IS the bomb car
+function track_bomb_delivery_hit(vehicle)
 	if mission.current_quest ~= "bomb_delivery" then return false end
 	if not mission.bomb_delivery_active then return false end
 	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return false end
 
+	-- Only track hits on the actual bomb car
+	if not vehicle or not vehicle.is_bomb_car then return false end
+
 	mission.bomb_delivery_hits = mission.bomb_delivery_hits + 1
 	printh("Bomb car hit! " .. mission.bomb_delivery_hits .. "/" .. QUEST_CONFIG.bomb_delivery.max_hits)
 
-	-- Check if car explodes
+	-- Check if car explodes (3 hits = KABOOM!)
 	if mission.bomb_delivery_hits >= QUEST_CONFIG.bomb_delivery.max_hits then
+		-- Explode the bomb car
+		vehicle.health = 0
+		vehicle.state = "exploding"
+		vehicle.explosion_frame = 1
+		vehicle.explosion_timer = time()
+
+		-- Eject player from vehicle if inside
+		if player_vehicle and player_vehicle == vehicle then
+			player_vehicle.is_player_vehicle = false
+			player_vehicle = nil
+		end
+
+		-- Kill the player (max damage)
+		game.player.health = 0
+		game.player.armor = 0
+
+		-- Spawn explosion effects around the car
+		local now = time()
+		add(collision_effects, { x = vehicle.x, y = vehicle.y, end_time = now + 1.0, is_bomb_explosion = true })
+		add(collision_effects, { x = vehicle.x - 20, y = vehicle.y - 15, end_time = now + 1.2, is_bomb_explosion = true, start_time = now + 0.1 })
+		add(collision_effects, { x = vehicle.x + 20, y = vehicle.y + 15, end_time = now + 1.2, is_bomb_explosion = true, start_time = now + 0.2 })
+
+		-- Fail the mission
 		fail_bomb_delivery("KABOOM!")
-		return true  -- Indicates car should explode
+		return true  -- Indicates car exploded
 	end
 	return false
 end
@@ -1982,18 +2009,24 @@ function trigger_bomb_explosion()
 		mission.bomb_car.explosion_timer = time()
 	end
 
-	-- Spawn multiple explosions around the target
-	spawn_bomb_explosions(explosion_x, explosion_y)
+	-- Spawn multiple explosions around the building
+	local b = mission.bomb_target_building
+	if b then
+		spawn_bomb_explosions_around_building(b)
+	else
+		-- Fallback to checkpoint explosions
+		spawn_bomb_explosions(explosion_x, explosion_y)
+	end
 
-	-- Demolish nearby building
+	-- Start building collapse animation (don't remove immediately)
 	if mission.bomb_target_building then
-		demolish_building(mission.bomb_target_building)
+		start_building_collapse(mission.bomb_target_building)
 	end
 
 	-- Mission complete after explosion
 	mission.bomb_countdown_active = false
 	mission.bomb_delivery_completed = true
-	printh("Bomb delivery complete! Building demolished!")
+	printh("Bomb delivery complete! Building collapsing!")
 end
 
 -- Spawn multiple explosion effects around the bomb site
@@ -2032,6 +2065,95 @@ function add_delayed_explosion(x, y, delay)
 		is_bomb_explosion = true,
 	}
 	add(collision_effects, effect)
+end
+
+-- Spawn many explosions around a building's perimeter and inside
+function spawn_bomb_explosions_around_building(b)
+	if not b then return end
+
+	local cx = b.x + b.w / 2
+	local cy = b.y + b.h / 2
+	local half_w = b.w / 2
+	local half_h = b.h / 2
+
+	-- Create explosion grid covering the building
+	local explosion_points = {}
+
+	-- Center explosion
+	add(explosion_points, { x = cx, y = cy })
+
+	-- Corners
+	add(explosion_points, { x = b.x, y = b.y })
+	add(explosion_points, { x = b.x + b.w, y = b.y })
+	add(explosion_points, { x = b.x, y = b.y + b.h })
+	add(explosion_points, { x = b.x + b.w, y = b.y + b.h })
+
+	-- Edge midpoints
+	add(explosion_points, { x = cx, y = b.y })
+	add(explosion_points, { x = cx, y = b.y + b.h })
+	add(explosion_points, { x = b.x, y = cy })
+	add(explosion_points, { x = b.x + b.w, y = cy })
+
+	-- Extra explosions inside building
+	add(explosion_points, { x = cx - half_w/2, y = cy - half_h/2 })
+	add(explosion_points, { x = cx + half_w/2, y = cy - half_h/2 })
+	add(explosion_points, { x = cx - half_w/2, y = cy + half_h/2 })
+	add(explosion_points, { x = cx + half_w/2, y = cy + half_h/2 })
+
+	-- Outer explosions (outside building perimeter)
+	local outer_offset = 30
+	add(explosion_points, { x = b.x - outer_offset, y = cy })
+	add(explosion_points, { x = b.x + b.w + outer_offset, y = cy })
+	add(explosion_points, { x = cx, y = b.y - outer_offset })
+	add(explosion_points, { x = cx, y = b.y + b.h + outer_offset })
+
+	-- Add random explosions for chaos
+	for i = 1, 8 do
+		local rx = b.x + rnd(b.w)
+		local ry = b.y + rnd(b.h)
+		add(explosion_points, { x = rx, y = ry })
+	end
+
+	-- Spawn all explosions with staggered delays
+	for i, pt in ipairs(explosion_points) do
+		local delay = (i - 1) * 0.08  -- faster stagger for more chaos
+		add_delayed_explosion(pt.x, pt.y, delay)
+	end
+end
+
+-- Building collapse state
+collapsing_building = nil
+collapse_start_time = nil
+collapse_duration = 2.0  -- seconds to sink into ground
+
+-- Start building collapse animation
+function start_building_collapse(building)
+	if not building then return end
+	collapsing_building = building
+	collapse_start_time = time()
+	-- Mark building as collapsing (for rendering offset)
+	building.collapsing = true
+	building.collapse_offset = 0
+end
+
+-- Update building collapse animation
+function update_building_collapse()
+	if not collapsing_building then return end
+
+	local elapsed = time() - collapse_start_time
+	local progress = elapsed / collapse_duration
+
+	if progress >= 1.0 then
+		-- Collapse complete, remove building
+		demolish_building(collapsing_building)
+		collapsing_building = nil
+		collapse_start_time = nil
+	else
+		-- Update collapse offset (building sinks down)
+		-- Use easing: start slow, accelerate
+		local ease_progress = progress * progress  -- quadratic ease-in
+		collapsing_building.collapse_offset = ease_progress * 100  -- sink 100 pixels
+	end
 end
 
 -- Demolish a building (remove it from the buildings list)
@@ -2118,8 +2240,8 @@ function draw_bomb_delivery_hud()
 	-- Format as MM:SS (e.g., 1:30)
 	local time_text = mins .. ":" .. (secs < 10 and "0" or "") .. secs
 	local cp_text = "CP: " .. (current_cp - 1) .. "/" .. total_cps
-	local hits_left = cfg.max_hits - mission.bomb_delivery_hits
-	local hits_text = "HITS: " .. hits_left .. "/" .. cfg.max_hits
+	-- Show hits taken counting UP (e.g., 0/3, 1/3, 2/3)
+	local hits_text = "HITS: " .. mission.bomb_delivery_hits .. "/" .. cfg.max_hits
 
 	-- Measure text widths for centering
 	local time_w = print(time_text, 0, -100)
@@ -2144,7 +2266,7 @@ function draw_bomb_delivery_hud()
 	print_shadow(hits_text, cx - hits_w/2, y + 24, 12)
 end
 
--- Draw bomb countdown HUD (big countdown timer in center of screen)
+-- Draw bomb countdown HUD (countdown number and flashing RUN text - no blocking background)
 function draw_bomb_countdown_hud()
 	if mission.current_quest ~= "bomb_delivery" then return end
 	if not mission.bomb_countdown_active then return end
@@ -2160,28 +2282,24 @@ function draw_bomb_countdown_hud()
 	local cx = SCREEN_W / 2
 	local cy = SCREEN_H / 2
 
-	-- Draw large countdown number
+	-- Draw large countdown number (no background box)
 	local countdown_text = tostr(secs)
 	local text_w = print(countdown_text, 0, -100)
-
-	-- Draw pulsing background
-	local pulse = sin(time() * 8) * 0.3 + 0.7
-	local box_size = 60 + flr(pulse * 10)
-	rectfill(cx - box_size/2, cy - box_size/2, cx + box_size/2, cy + box_size/2, 8)  -- red background
-	rect(cx - box_size/2, cy - box_size/2, cx + box_size/2, cy + box_size/2, 12)  -- bright red border
-
-	-- Draw countdown number (large, centered) - use scale if available, otherwise just print big
 	print_shadow(countdown_text, cx - text_w/2, cy - 4, 33)  -- white
 
-	-- Draw "RUN!" text below
+	-- Draw "RUN!" text below - flashing between red (12) and orange (21)
 	local run_text = "RUN!"
 	local run_w = print(run_text, 0, -100)
-	print_shadow(run_text, cx - run_w/2, cy + 20, 10)  -- yellow
+	-- Flash rapidly between red and orange
+	local flash = flr(time() * 8) % 2
+	local run_color = (flash == 0) and 12 or 21  -- red (12) / orange (21)
+	print_shadow(run_text, cx - run_w/2, cy + 20, run_color)
 
-	-- Draw "GET AWAY FROM THE CAR!" above
+	-- Draw "GET AWAY FROM THE CAR!" above - also flashing
 	local warn_text = "GET AWAY FROM THE CAR!"
 	local warn_w = print(warn_text, 0, -100)
-	print_shadow(warn_text, cx - warn_w/2, cy - 40, 12)  -- red
+	local warn_color = (flash == 0) and 21 or 12  -- alternate with RUN text
+	print_shadow(warn_text, cx - warn_w/2, cy - 30, warn_color)
 end
 
 -- Draw bomb delivery failure message
@@ -2197,13 +2315,20 @@ function draw_bomb_delivery_failure()
 
 	-- Draw semi-transparent background
 	rectfill(x - 120, y - 10, x + 120, y + 30, 1)
-	rect(x - 120, y - 10, x + 120, y + 30, 8)
+	rect(x - 120, y - 10, x + 120, y + 30, 12)  -- bright red border
 
-	-- Draw text centered
+	-- Draw text centered with proper palette colors
 	local tw1 = print(msg, 0, -100)
 	local tw2 = print(msg2, 0, -100)
-	print_shadow(msg, x - tw1/2, y, 8)  -- red
-	print_shadow(msg2, x - tw2/2, y + 14, 7)  -- white
+
+	-- KABOOM! gets special orange/yellow treatment, other failures get red
+	local msg_color = 12  -- red (bright red from palette)
+	if msg == "KABOOM!" then
+		msg_color = 21  -- gold/orange for explosion
+	end
+
+	print_shadow(msg, x - tw1/2, y, msg_color)
+	print_shadow(msg2, x - tw2/2, y + 14, 33)  -- white (color 33)
 end
 
 -- Add bomb delivery current checkpoint to visible list for depth sorting
@@ -2240,10 +2365,11 @@ function add_bomb_target_to_visible(visible)
 end
 
 -- Draw red arrow above a target (bomb pickup or bomb car)
+-- Always shows arrow pointing at bomb car when player is not in it
 function draw_bomb_car_arrow()
 	if mission.current_quest ~= "bomb_delivery" then return end
-	if mission.bomb_delivery_active then return end  -- only show before timer starts
 	if mission.bomb_delivery_completed or mission.bomb_delivery_failed then return end
+	if mission.bomb_countdown_active then return end  -- don't show during countdown (player ejected, running away)
 
 	local sx, sy
 	local color = 12  -- red
@@ -2254,8 +2380,10 @@ function draw_bomb_car_arrow()
 		local pickup = mission.bomb_delivery_checkpoints[1]
 		sx, sy = world_to_screen(pickup.x, pickup.y)
 	else
-		-- Show arrow over bomb car
+		-- Show arrow over bomb car ONLY if player is not in it
 		if not mission.bomb_car then return end
+		-- Skip if player is already in the bomb car
+		if is_in_bomb_car() then return end
 		sx, sy = world_to_screen(mission.bomb_car.x, mission.bomb_car.y)
 	end
 
@@ -2289,10 +2417,20 @@ function draw_bomb_car_arrow()
 	line(arrow_x - 1, arrow_tip - 1, arrow_x + 1, arrow_tip - 1, color)
 end
 
--- Draw bomb target sprite (uses package sprite - same as beyond_the_sea)
-function draw_bomb_target_sprite(sx, sy)
-	local sprite_id = QUEST_CONFIG.beyond_the_sea.package_sprite  -- Reuse package sprite
-	spr(sprite_id, sx - 16, sy - 16, 2, 2)
+-- Draw bomb target as yellow circle (like racing checkpoints)
+function draw_bomb_target_sprite(sx, sy, is_final)
+	local radius = RACE_CONFIG.checkpoint_world_radius
+	local color = RACE_CONFIG.checkpoint_active_color  -- bright yellow
+
+	-- Pulsing effect (same as race checkpoints)
+	local pulse = sin(time() * 4) * 4
+	circ(sx, sy, radius + pulse, color)
+	circ(sx, sy, radius + pulse - 2, color)
+
+	-- Draw "FINAL" label for last checkpoint
+	if is_final then
+		print_shadow("FINAL", sx - 15, sy - radius - 16, 12)  -- red
+	end
 end
 
 -- Draw bomb delivery markers on minimap (bomb pickup, bomb car, or checkpoints)

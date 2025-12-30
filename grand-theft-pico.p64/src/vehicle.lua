@@ -1162,9 +1162,9 @@ function update_player_vehicle(vehicle, dt)
 					vehicle.last_collision_time = now
 					-- Spawn collision effect
 					add(collision_effects, { x = new_x, y = new_y, end_time = now + 0.5 })
-					-- Track bomb delivery hit (if player's vehicle)
-					if vehicle.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
-						track_bomb_delivery_hit()
+					-- Track bomb delivery hit (if bomb car)
+					if vehicle.is_bomb_car and mission and mission.current_quest == "bomb_delivery" then
+						track_bomb_delivery_hit(vehicle)
 					end
 				end
 			end
@@ -1223,9 +1223,9 @@ function check_vehicle_collisions(visible_vehicles)
 								end
 							end
 
-							-- Track bomb delivery hit (if player's vehicle)
-							if v1.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
-								track_bomb_delivery_hit()
+							-- Track bomb delivery hit (if bomb car)
+							if v1.is_bomb_car and mission and mission.current_quest == "bomb_delivery" then
+								track_bomb_delivery_hit(v1)
 							end
 
 							-- If hit by player, start fleeing
@@ -1246,9 +1246,9 @@ function check_vehicle_collisions(visible_vehicles)
 								effect_spawned = true
 							end
 
-							-- Track bomb delivery hit (if player's vehicle)
-							if v2.is_player_vehicle and mission and mission.current_quest == "bomb_delivery" then
-								track_bomb_delivery_hit()
+							-- Track bomb delivery hit (if bomb car)
+							if v2.is_bomb_car and mission and mission.current_quest == "bomb_delivery" then
+								track_bomb_delivery_hit(v2)
 							end
 
 							-- If hit by player, start fleeing

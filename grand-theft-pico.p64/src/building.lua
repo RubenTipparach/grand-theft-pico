@@ -6,17 +6,28 @@ pending_traffic_signals = {}
 
 -- Draw east/west walls only (slant away from center, should be behind player)
 function draw_building_back_walls(b)
+	-- Skip if building is fully collapsed
+	if b.collapsing and b.collapse_offset and b.collapse_offset >= 100 then return end
+
 	local x0, y0 = b.x, b.y
 	local x1, y1 = b.x + b.w, b.y + b.h
 
 	-- Get screen position of building center
 	local cx, cy = world_to_screen(x0 + b.w / 2, y0 + b.h / 2)
 
+	-- Apply collapse offset (building sinks down)
+	local collapse_y = b.collapse_offset or 0
+
 	-- Calculate wall height based on distance from screen center, scaled by building height multiplier
-	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1)
+	-- Reduce wall height as building collapses
+	local collapse_scale = 1 - (collapse_y / 100)
+	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1) * collapse_scale
 
 	-- Get perspective offset (walls lean outward from center)
 	local ox, oy = get_wall_offset(cx, cy, wall_h)
+
+	-- Add collapse offset to Y offset (building sinks down)
+	oy = oy + collapse_y
 
 	-- Get wall sprite from building data
 	local wall_spr = b.wall_sprite
@@ -40,17 +51,28 @@ end
 
 -- Draw south wall and roof (should be in front of player)
 function draw_building_front(b)
+	-- Skip if building is fully collapsed
+	if b.collapsing and b.collapse_offset and b.collapse_offset >= 100 then return end
+
 	local x0, y0 = b.x, b.y
 	local x1, y1 = b.x + b.w, b.y + b.h
 
 	-- Get screen position of building center
 	local cx, cy = world_to_screen(x0 + b.w / 2, y0 + b.h / 2)
 
+	-- Apply collapse offset (building sinks down)
+	local collapse_y = b.collapse_offset or 0
+
 	-- Calculate wall height based on distance from screen center, scaled by building height multiplier
-	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1)
+	-- Reduce wall height as building collapses
+	local collapse_scale = 1 - (collapse_y / 100)
+	local wall_h = get_wall_height(cx, cy) * (b.wall_height or 1) * collapse_scale
 
 	-- Get perspective offset (walls lean outward from center)
 	local ox, oy = get_wall_offset(cx, cy, wall_h)
+
+	-- Add collapse offset to Y offset (building sinks down)
+	oy = oy + collapse_y
 
 	-- Get wall sprite from building data
 	local wall_spr = b.wall_sprite
@@ -351,12 +373,7 @@ profile("cull")
 			local sh = 4   -- shadow height
 			local sy_off = 8  -- offset from center to bottom of sprite
 			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
-		elseif obj.type == "bomb_target" then
-			-- Bomb target shadow (same as package)
-			local sr = 17
-			local sh = 4
-			local sy_off = 8
-			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		-- bomb_target is now a circle, no shadow needed
 		end
 		-- No shadow for vehicles (doesn't look great)
 	end
@@ -483,8 +500,8 @@ profile("cull")
 			-- Draw bomb package sprite (before pickup)
 			draw_bomb_package_sprite(obj.sx, obj.sy)
 		elseif obj.type == "bomb_target" then
-			-- Draw bomb delivery target sprite (uses package sprite)
-			draw_bomb_target_sprite(obj.sx, obj.sy)
+			-- Draw bomb delivery target as yellow circle
+			draw_bomb_target_sprite(obj.sx, obj.sy, obj.is_final)
 		elseif obj.type == "player_melee_weapon" then
 			-- Draw player melee weapon (depth sorted)
 			draw_melee_weapon_at(obj.sx, obj.sy, obj.owner, obj.weapon, obj.facing_dir)
