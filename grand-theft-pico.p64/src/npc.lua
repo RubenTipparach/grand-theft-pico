@@ -149,7 +149,10 @@ end
 -- Spawn NPCs on roads, avoiding buildings and spreading them out
 -- If player_x/player_y provided, spawns near player (for streaming mode)
 function spawn_npcs(count, player_x, player_y)
-	npcs = {}
+	-- Only reset if npcs doesn't exist yet (preserve restored companions)
+	if not npcs then
+		npcs = {}
+	end
 
 	-- Calculate minimum distance based on count and map area
 	-- More NPCs = smaller minimum distance

@@ -392,7 +392,9 @@ function draw_cactus_sword(c, sx, sy)
 
 	-- Facing direction
 	local facing_east = c.facing_right
-	local offset_x = facing_east and wcfg.melee_offset_x or -wcfg.melee_offset_x
+	-- Use cactus-specific offsets for 48x48 sprite
+	local offset_x = facing_east and cfg.melee_offset_x or -cfg.melee_offset_x
+	local offset_y = cfg.melee_offset_y
 	local flip_x = facing_east
 	local base_rot = facing_east and wcfg.melee_base_rot_east or wcfg.melee_base_rot_west
 
@@ -405,7 +407,7 @@ function draw_cactus_sword(c, sx, sy)
 	end
 
 	-- Draw sword using rspr (same as player)
-	rspr(cfg.sword_sprite, sx + offset_x, sy + wcfg.melee_offset_y, 1, 1, base_rot + swing_rot, flip_x, wcfg.melee_pivot_x, wcfg.melee_pivot_y)
+	rspr(cfg.sword_sprite, sx + offset_x, sy + offset_y, 1, 1, base_rot + swing_rot, flip_x, wcfg.melee_pivot_x, wcfg.melee_pivot_y)
 end
 
 -- Draw cactus bullets
@@ -517,4 +519,16 @@ function draw_cactus_on_minimap(cfg, cx, cy, scale)
 
 	-- Draw larger dot for boss
 	circfill(mx, my, ccfg.minimap_size, ccfg.minimap_color)
+end
+
+-- ============================================
+-- CACTUS CLEANUP
+-- ============================================
+
+-- Clean up cactus (called when player dies or quest resets)
+function cleanup_cactus()
+	cactus = nil
+	cactus_bullets = {}
+	cactus_defeated_message.active = false
+	printh("Cactus cleaned up")
 end

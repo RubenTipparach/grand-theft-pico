@@ -652,17 +652,20 @@ function update_race_positions()
 		finished = mission.race_finished
 	})
 
-	-- Add AI racers
+	-- Add AI racers (skip if player stole this racer's car)
 	for i, racer in ipairs(mission.racers) do
-		local progress = mission.racer_progress[i]
-		if progress then
-			add(standings, {
-				is_player = false,
-				lap = progress.lap,
-				checkpoint = progress.checkpoint,
-				dist_to_cp = get_racer_dist_to_checkpoint(racer, progress),
-				finished = progress.finished
-			})
+		-- Skip racers that are now player-controlled (player stole their car)
+		if not racer.is_player_vehicle then
+			local progress = mission.racer_progress[i]
+			if progress then
+				add(standings, {
+					is_player = false,
+					lap = progress.lap,
+					checkpoint = progress.checkpoint,
+					dist_to_cp = get_racer_dist_to_checkpoint(racer, progress),
+					finished = progress.finished
+				})
+			end
 		end
 	end
 

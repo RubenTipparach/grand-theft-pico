@@ -1403,21 +1403,20 @@ function init_game_world()
 	-- Generate countryside flora
 	generate_flora()
 
-	-- Restore companions if loading a save (before spawning other NPCs)
-	restore_companions()
-
-	-- Calculate how many NPCs to spawn (subtract existing companions)
-	local companion_count = #fans
-	local target_npcs = NPC_CONFIG.update_mode == 2 and NPC_CONFIG.target_npc_count or NPC_CONFIG.spawn_count
-	local npcs_to_spawn = max(0, target_npcs - companion_count)
-
 	-- Spawn NPCs on roads
-	if npcs_to_spawn > 0 then
-		if NPC_CONFIG.update_mode == 2 then
-			spawn_npcs(npcs_to_spawn, game.player.x, game.player.y)
-		else
-			spawn_npcs(npcs_to_spawn)
-		end
+	local target_npcs = NPC_CONFIG.update_mode == 2 and NPC_CONFIG.target_npc_count or NPC_CONFIG.spawn_count
+	if NPC_CONFIG.update_mode == 2 then
+		spawn_npcs(target_npcs, game.player.x, game.player.y)
+	else
+		spawn_npcs(target_npcs)
+	end
+
+	-- Restore saved companion count (assigns companions from spawned NPCs)
+	restore_companion_count()
+
+	-- Ensure companion exists if on a talk_to_companion quest (after NPCs spawn)
+	if mission.current_quest and string.find(mission.current_quest, "talk_to_companion") then
+		ensure_companion_exists()
 	end
 
 	-- Spawn vehicles on roads and boats on water
@@ -1473,6 +1472,12 @@ function init_game_world()
 end
 
 function _update()
+	-- Intro state - play intro sequence
+	if game_state == "intro" then
+		update_intro()
+		return
+	end
+
 	-- Menu state - only update menu
 	if game_state == "menu" then
 		update_menu()
@@ -1940,7 +1945,9 @@ function start_dialog(npc, fan_data)
 			add(dialog.options, { text = "What troubles you?", action = "ask_troubles" })
 		end
 		-- Talk to companion quests - offer mission with accept/decline
-		if mission.current_quest == "talk_to_companion_1" and not mission.talked_to_companion_1 then
+		if mission.current_quest == "talk_to_companion_0" and not mission.talked_to_companion_0 then
+			add(dialog.options, { text = "What's new?", action = "offer_companion_0" })
+		elseif mission.current_quest == "talk_to_companion_1" and not mission.talked_to_companion_1 then
 			add(dialog.options, { text = "What's new?", action = "offer_companion_1" })
 		elseif mission.current_quest == "talk_to_companion_2" and not mission.talked_to_companion_2 then
 			add(dialog.options, { text = "What's new?", action = "offer_companion_2" })
@@ -2117,6 +2124,17 @@ function select_dialog_option()
 	end
 
 	-- Talk to companion quest actions - OFFER phase (shows mission description with accept/decline)
+	if opt.action == "offer_companion_0" then
+		dialog.phase = "quest"
+		dialog.quest_text = "A giant cactus monster appeared downtown! It's attacking everyone! Can you stop it?"
+		dialog.options = {
+			{ text = "I'll take it down!", action = "accept_companion_0" },
+			{ text = "Not right now", action = "decline_companion" }
+		}
+		dialog.selected = 1
+		return
+	end
+
 	if opt.action == "offer_companion_1" then
 		dialog.phase = "quest"
 		dialog.quest_text = "My home was damaged in the last attack! Can you help fix it? You'll need a hammer."
@@ -2206,6 +2224,15 @@ function select_dialog_option()
 	end
 
 	-- ACCEPT companion missions - these advance the quest
+	if opt.action == "accept_companion_0" then
+		mission.talked_to_companion_0 = true
+		dialog.phase = "result"
+		dialog.result_text = "The cactus monster is downtown! Find it and take it down!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		return
+	end
+
 	if opt.action == "accept_companion_1" then
 		mission.talked_to_companion_1 = true
 		dialog.phase = "result"
@@ -2725,6 +2752,12 @@ function draw_fan_prompt()
 end
 
 function _draw()
+	-- Intro state - draw intro sequence
+	if game_state == "intro" then
+		draw_intro()
+		return
+	end
+
 	-- Menu state - only draw menu
 	if game_state == "menu" then
 		draw_menu()

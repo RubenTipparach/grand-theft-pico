@@ -689,6 +689,8 @@ CACTUS_CONFIG = {
 	melee_range = 24,
 	melee_cooldown = 1.0,     -- Seconds between swings
 	sword_sprite = 47,        -- Same sword sprite as player (8x16)
+	melee_offset_x = 20,      -- X offset from center (for 48x48 sprite)
+	melee_offset_y = 2,       -- Y offset from center (for 48x48 sprite)
 
 	-- Ranged attack (10-directional bullet burst)
 	ranged_damage = 10,
@@ -839,6 +841,7 @@ DEBUG_CONFIG = {
 		-- "protect_city",
 		-- "make_friends",
 		-- "find_love",
+		-- talk_to_companion_0
 		-- "a_prick",              -- cactus monster right after finding love
 		-- "talk_to_companion_1",  -- leads to fix_home
 		-- "fix_home",
@@ -882,7 +885,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_3",
+	start_quest = nil,
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text
@@ -1692,7 +1695,7 @@ MENU_CONFIG = {
 	thruster_pulse_amount = 0.1,    -- scale variation (0.8 to 1.0 range)
 	thruster_flip_y = true,         -- mirror flame vertically
 	thruster_offset_x = 3,          -- local X offset for flame position
-	thruster_offset_y = 8,          -- local Y offset for flame position
+	thruster_offset_y = 12,          -- local Y offset for flame position
 
 	-- Chicken bobbing
 	bob_speed = 2.0,                -- bobbing speed (Hz)
@@ -1735,6 +1738,68 @@ MENU_CONFIG = {
 	prompt_color = 22,              -- yellow
 	selected_color = 22,            -- yellow for selected option
 	unselected_color = 33,          -- white for unselected
+}
+
+-- ============================================
+-- INTRO CONFIG (Star Wars style opening crawl)
+-- ============================================
+INTRO_CONFIG = {
+	-- Text to display (Star Wars crawl style)
+	story_text = {
+		"You are a chicken from space.",
+		"",
+		"Your planet was destroyed by some",
+		"aliens looking for a moon man.",
+		"",
+		"For eons you wandered in the",
+		"cold, dark void.",
+		"",
+		"You were so lonely.",
+		"",
+		"One day, you came across Earth,",
+		"and saw so many beautiful people.",
+		"",
+		"You decide to stop here, to hit",
+		"on them. Maybe settle",
+		"down and find a happy....peaceful....life",
+	},
+
+	-- Text crawl settings
+	text_scroll_speed = 10,         -- pixels per second
+	text_start_y = 280,             -- start below screen
+	text_end_y = -300,              -- end above screen (when intro finishes)
+	text_line_height = 14,          -- pixels between lines
+	text_color = 22,                -- yellow (Star Wars style)
+	text_shadow_color = 1,          -- dark shadow
+
+	-- Starfield (deeper space feel)
+	star_count = 200,               -- more stars for space
+	star_colors = {33, 30, 6},      -- white, light gray, dark gray
+	star_scroll_speed = 0.3,        -- slow drift
+
+	-- Chicken spaceship
+	chicken_sprite = 256 + 114,     -- same sprite as menu
+	chicken_scale = 2.5,            -- slightly smaller for intro
+	chicken_start_y = 300,          -- start below screen
+	chicken_end_y = 80,             -- end near top center
+	chicken_fly_duration = 4.0,     -- seconds to fly in
+	chicken_bob_speed = 1.0,        -- bobbing speed (slower for intro)
+	chicken_bob_amount = 3,         -- bobbing pixels
+
+	-- Thruster flames
+	thruster_sprites = {256 + 116, 256 + 117, 256 + 118, 256 + 119},
+	thruster_animation_speed = 0.08,
+	thruster_scale_x = 1.2,
+	thruster_scale_y = 1.1,         -- longer flames for flying
+	thruster_pulse_speed = 5.0,
+	thruster_pulse_amount = 0.1,
+	thruster_offset_x = 2,          -- local X offset for flame position
+	thruster_offset_y = 8,          -- local Y offset for flame position
+
+	-- Skip prompt
+	skip_text = "Press E to skip",
+	skip_text_color = 6,            -- gray
+	skip_text_blink_speed = 2.0,    -- blink rate
 }
 
 -- ============================================

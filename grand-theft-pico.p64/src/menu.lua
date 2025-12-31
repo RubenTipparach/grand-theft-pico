@@ -5,7 +5,7 @@
 -- MENU STATE
 -- ============================================
 
-game_state = "menu"  -- "menu", "playing"
+game_state = "menu"  -- "menu", "intro", "playing"
 
 menu = {
 	phase = "title",          -- "title" or "options"
@@ -25,6 +25,209 @@ menu = {
 }
 
 -- ============================================
+-- INTRO STATE (Star Wars style opening)
+-- ============================================
+
+intro = {
+	start_time = nil,         -- when intro started
+	text_y = nil,             -- current text scroll position
+	chicken_y = nil,          -- current chicken Y position
+	stars = nil,              -- intro starfield (separate from menu)
+	thruster_frame = 0,
+	thruster_timer = 0,
+	last_update_time = nil,   -- for delta time
+	text_surface = nil,       -- rendered text for perspective crawl
+	text_surface_height = 0,  -- height of text surface
+}
+
+-- ============================================
+-- INTRO FUNCTIONS (Star Wars style opening)
+-- ============================================
+
+function init_intro()
+	local cfg = INTRO_CONFIG
+	intro.start_time = time()
+	intro.text_y = cfg.text_start_y
+	intro.chicken_y = cfg.chicken_start_y
+	intro.thruster_frame = 0
+	intro.thruster_timer = time()
+	intro.last_update_time = time()
+
+	-- Generate intro starfield
+	intro.stars = {}
+	for i = 1, cfg.star_count do
+		add(intro.stars, {
+			x = rnd(SCREEN_W),
+			y = rnd(SCREEN_H),
+			brightness = flr(rnd(3)),
+			twinkle_offset = rnd(1),
+		})
+	end
+end
+
+function update_intro()
+	local cfg = INTRO_CONFIG
+	local now = time()
+
+	-- Calculate delta time
+	if not intro.last_update_time then
+		intro.last_update_time = now
+	end
+	local dt = now - intro.last_update_time
+	intro.last_update_time = now
+
+	-- Initialize intro if needed
+	if not intro.start_time then
+		init_intro()
+	end
+
+	-- Check for skip (E key)
+	if input_utils.key_pressed("e") then
+		end_intro()
+		return
+	end
+
+	-- Update text scroll
+	intro.text_y = intro.text_y - cfg.text_scroll_speed * dt
+
+	-- Update chicken position (fly in from bottom)
+	local elapsed = now - intro.start_time
+	if elapsed < cfg.chicken_fly_duration then
+		-- Ease-out curve for smooth landing
+		local t = elapsed / cfg.chicken_fly_duration
+		local ease = 1 - (1 - t) * (1 - t)  -- quadratic ease-out
+		intro.chicken_y = cfg.chicken_start_y + (cfg.chicken_end_y - cfg.chicken_start_y) * ease
+	else
+		-- Add bobbing once landed
+		local bob = sin(now * cfg.chicken_bob_speed) * cfg.chicken_bob_amount
+		intro.chicken_y = cfg.chicken_end_y + bob
+	end
+
+	-- Update thruster animation
+	if now >= intro.thruster_timer + cfg.thruster_animation_speed then
+		intro.thruster_timer = now
+		intro.thruster_frame = (intro.thruster_frame + 1) % 4
+	end
+
+	-- Check if intro is complete (text scrolled off)
+	if intro.text_y < cfg.text_end_y then
+		end_intro()
+	end
+end
+
+function end_intro()
+	-- Reset intro state
+	intro.start_time = nil
+	intro.stars = nil
+
+	-- Start the new game after intro finishes
+	reset_game_state()
+	init_game_world()
+	game_state = "playing"
+end
+
+function draw_intro()
+	local cfg = INTRO_CONFIG
+	local now = time()
+
+	-- Deep space background (pure black)
+	cls(0)
+
+	-- Draw starfield
+	if intro.stars then
+		local star_colors = cfg.star_colors
+		for _, star in ipairs(intro.stars) do
+			-- Slow drift
+			local sx = (star.x - (now * cfg.star_scroll_speed * 10)) % SCREEN_W
+			-- Twinkle effect
+			local twinkle = sin(now * 2 + star.twinkle_offset)
+			local color_idx = star.brightness + 1
+			if twinkle > 0.7 then color_idx = max(1, color_idx - 1) end
+			pset(sx, star.y, star_colors[color_idx] or 33)
+		end
+	end
+
+	-- Draw chicken spaceship with thrusters
+	draw_intro_chicken()
+
+	-- Draw scrolling story text (Star Wars style)
+	draw_intro_text()
+
+	-- Draw skip prompt
+	draw_intro_skip_prompt()
+end
+
+function draw_intro_chicken()
+	local cfg = INTRO_CONFIG
+	local now = time()
+
+	local chicken_x = SCREEN_W / 2
+	local chicken_y = intro.chicken_y or cfg.chicken_start_y
+	local chicken_scale = cfg.chicken_scale
+
+	-- Calculate thruster scale with pulsation
+	local pulse = sin(now * cfg.thruster_pulse_speed) * cfg.thruster_pulse_amount
+	local thruster_scale_x = cfg.thruster_scale_x * chicken_scale
+	local thruster_scale_y = (cfg.thruster_scale_y + pulse) * chicken_scale
+
+	-- Get thruster sprite
+	local thruster_sprite_id = cfg.thruster_sprites[intro.thruster_frame + 1]
+
+	-- Draw thruster (below chicken, flames pointing down = flying up)
+	local thruster_x = chicken_x + (cfg.thruster_offset_x or 0)
+	local thruster_y = chicken_y + (32 * chicken_scale) / 2 + (cfg.thruster_offset_y or 8)
+	rspr(thruster_sprite_id, thruster_x, thruster_y, thruster_scale_x, thruster_scale_y, 0.5, true)
+
+	-- Draw chicken spaceship
+	rspr(cfg.chicken_sprite, chicken_x, chicken_y, chicken_scale, chicken_scale, 0, false)
+end
+
+function draw_intro_text()
+	local cfg = INTRO_CONFIG
+	local text_y = intro.text_y or cfg.text_start_y
+
+	-- Get chicken position to clip text above it
+	local chicken_y = intro.chicken_y or cfg.chicken_start_y
+	local chicken_scale = cfg.chicken_scale or 2.5
+	local chicken_bottom = chicken_y + (32 * chicken_scale) / 2 + 20  -- bottom of chicken sprite + margin
+
+	-- Clip region: don't draw text above the chicken
+	local clip_y = chicken_bottom
+
+	-- Draw each line of story text
+	for i, line in ipairs(cfg.story_text) do
+		local line_y = text_y + (i - 1) * cfg.text_line_height
+
+		-- Only draw if on screen AND below the clip region
+		if line_y > clip_y and line_y < SCREEN_H + 20 then
+			-- Measure text width properly using print's return value
+			local text_width = print(line, 0, -100)
+			local text_x = (SCREEN_W - text_width) / 2
+
+			-- Draw shadow
+			print(line, text_x + 1, line_y + 1, cfg.text_shadow_color)
+			-- Draw text
+			print(line, text_x, line_y, cfg.text_color)
+		end
+	end
+end
+
+function draw_intro_skip_prompt()
+	local cfg = INTRO_CONFIG
+	local now = time()
+
+	-- Blink effect
+	local blink = sin(now * cfg.skip_text_blink_speed)
+	if blink > 0 then
+		local text = cfg.skip_text
+		local text_width = print(text, 0, -100)  -- measure width properly
+		local text_x = SCREEN_W - text_width - 20
+		local text_y = SCREEN_H - 15
+		print(text, text_x, text_y, cfg.skip_text_color)
+	end
+end
+
+-- ============================================
 -- MENU OPTIONS
 -- ============================================
 
@@ -34,9 +237,6 @@ function get_menu_options()
 		add(options, {id = "continue", text = "Continue Game"})
 	end
 	add(options, {id = "new", text = "New Game"})
-	if menu.has_save then
-		add(options, {id = "reset", text = "Reset Progress"})
-	end
 	add(options, {id = "exit", text = "Exit"})
 	return options
 end
@@ -483,15 +683,9 @@ function handle_menu_selection(option_id)
 		init_game_world()
 		game_state = "playing"
 	elseif option_id == "new" then
-		-- Reset game state and start fresh
-		reset_game_state()
-		init_game_world()
-		game_state = "playing"
-	elseif option_id == "reset" then
-		-- Delete save file and go back to title
-		delete_save_file()
-		menu.phase = "title"
-		menu.has_save = false
+		-- Start intro sequence, then begin new game
+		init_intro()
+		game_state = "intro"
 	elseif option_id == "exit" then
 		-- Exit Picotron cart
 		stop()
@@ -514,22 +708,6 @@ end
 
 function build_save_data()
 	local p = game.player
-
-	-- Collect companion (fan/lover) data
-	local companions = {}
-	for _, fan_data in ipairs(fans) do
-		local npc = fan_data.npc
-		if npc then
-			add(companions, {
-				x = npc.x,
-				y = npc.y,
-				is_lover = fan_data.is_lover,
-				love = fan_data.love,
-				id = fan_data.id,
-				npc_type_index = get_npc_type_index(npc),
-			})
-		end
-	end
 
 	return {
 		version = SAVE_CONFIG.version,
@@ -568,8 +746,8 @@ function build_save_data()
 			game_complete = mission.game_complete,
 		},
 
-		-- Companions
-		companions = companions,
+		-- Companion count (so we can restore the same number on load)
+		companion_count = #lovers,
 
 		-- Game time
 		game_time_hours = game_time_hours or 8,
@@ -658,48 +836,40 @@ function load_game()
 		game_stats.bullets_fired = data.stats.bullets_fired or 0
 	end
 
-	-- Store companions to restore after world init
-	menu.saved_companions = data.companions or {}
+	-- Store companion count to restore after world init
+	menu.saved_companion_count = data.companion_count or 0
 
 	printh("Game loaded successfully")
 	return true
 end
 
 function restore_companions()
-	if not menu.saved_companions then return end
+	-- Companions are assigned dynamically after NPCs spawn
+	-- This function is called before NPCs spawn, so just log
+	printh("Will restore " .. (menu.saved_companion_count or 0) .. " companions after NPC spawn")
+end
 
-	-- Recreate companions at their saved locations
-	for _, comp_data in ipairs(menu.saved_companions) do
-		-- Create NPC at saved position
-		local npc = create_npc(comp_data.x, comp_data.y, comp_data.npc_type_index or 1)
-		add(npcs, npc)
+-- Assign saved number of companions after NPCs have spawned
+function restore_companion_count()
+	local count = menu.saved_companion_count or 0
+	if count <= 0 then
+		menu.saved_companion_count = nil
+		return
+	end
 
-		-- Add to fans list
-		local fan_data = {
-			npc = npc,
-			is_lover = comp_data.is_lover,
-			love = comp_data.love,
-			id = comp_data.id,
-		}
-		add(fans, fan_data)
+	printh("Restoring " .. count .. " companions...")
 
-		-- Add to lovers list if applicable
-		if comp_data.is_lover then
-			add(lovers, npc)
+	for i = 1, count do
+		local companion = assign_random_companion()
+		if companion then
+			printh("Restored companion " .. i .. " of " .. count)
+		else
+			printh("Warning: Could not assign companion " .. i)
 		end
 	end
 
-	-- Update next_fan_id to avoid conflicts
-	local max_id = 0
-	for _, fan in ipairs(fans) do
-		if fan.id and fan.id > max_id then max_id = fan.id end
-	end
-	next_fan_id = max_id + 1
-
-	printh("Restored " .. #fans .. " companions (" .. #lovers .. " lovers)")
-
-	-- Clear saved data
-	menu.saved_companions = nil
+	menu.saved_companion_count = nil
+	printh("Companion restoration complete: " .. #lovers .. " lovers")
 end
 
 function reset_game_state()

@@ -13,7 +13,8 @@ QUEST_CONFIG = {
 		"protect_city",
 		"make_friends",
 		"find_love",
-		"a_prick",              -- cactus monster right after finding love
+		"talk_to_companion_0",  -- leads to a_prick (fallback if die from cactus)
+		"a_prick",              -- cactus monster
 		"talk_to_companion_1",  -- leads to fix_home
 		"fix_home",
 		"talk_to_companion_2",  -- leads to beyond_the_sea
@@ -38,6 +39,7 @@ QUEST_CONFIG = {
 		protect_city = "Protect The City",
 		make_friends = "Make Friends",
 		find_love = "Find Love",
+		talk_to_companion_0 = "Talk to Companion",
 		a_prick = "A Prick",
 		talk_to_companion_1 = "Talk to Companion",
 		fix_home = "Fix Home",
@@ -70,11 +72,15 @@ QUEST_CONFIG = {
 
 	make_friends = {
 		fans_needed = 5,
-		money_reward = 75,
+		money_reward = 175,
 	},
 
 	find_love = {
-		money_reward = 200,
+		money_reward = 300,
+	},
+
+	talk_to_companion_0 = {
+		money_reward = 0,
 	},
 
 	a_prick = {
@@ -241,6 +247,7 @@ mission = {
 	racer_progress = nil,        -- {lap, checkpoint} for each racer
 
 	-- Talk to Companion checkpoints (between main quests)
+	talked_to_companion_0 = false,  -- before a_prick
 	talked_to_companion_1 = false,  -- before fix_home
 	talked_to_companion_2 = false,  -- before beyond_the_sea
 	talked_to_companion_3 = false,  -- before mega_race
@@ -401,8 +408,13 @@ function check_quest_completion()
 		end
 
 	elseif mission.current_quest == "find_love" then
-		-- Need at least 1 lover AND must have talked to them about troubles
-		if #lovers > 0 and mission.lover_asked_troubles then
+		-- Just need at least 1 lover
+		if #lovers > 0 then
+			complete_current_quest()
+		end
+
+	elseif mission.current_quest == "talk_to_companion_0" then
+		if mission.talked_to_companion_0 then
 			complete_current_quest()
 		end
 
@@ -595,8 +607,11 @@ function start_quest(quest_id)
 
 	elseif quest_id == "find_love" then
 		mission.had_lover_before_quest = false  -- Reset so quest can complete
-		mission.lover_asked_troubles = false
 		printh("Started quest: Find Love")
+
+	elseif quest_id == "talk_to_companion_0" then
+		mission.talked_to_companion_0 = false
+		printh("Started quest: Talk to Companion (before A Prick)")
 
 	elseif quest_id == "a_prick" then
 		mission.cactus_killed = false
@@ -759,7 +774,8 @@ function get_previous_checkpoint_quest()
 		protect_city = "intro",
 		make_friends = "intro",
 		find_love = "intro",
-		a_prick = "find_love",  -- a_prick comes right after find_love, no checkpoint
+		-- a_prick now has talk_to_companion_0 as checkpoint
+		a_prick = "talk_to_companion_0",
 		-- Main quests with checkpoints
 		fix_home = "talk_to_companion_1",
 		beyond_the_sea = "talk_to_companion_2",
@@ -771,7 +787,7 @@ function get_previous_checkpoint_quest()
 		alien_invasion = "talk_to_companion_8",
 	}
 
-	return checkpoint_map[current] or "find_love"
+	return checkpoint_map[current] or "talk_to_companion_0"
 end
 
 -- Reset quest to previous checkpoint on death
@@ -840,6 +856,8 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "make_friends" then
 		next_quest = "find_love"
 	elseif mission.current_quest == "find_love" then
+		next_quest = "talk_to_companion_0"
+	elseif mission.current_quest == "talk_to_companion_0" then
 		next_quest = "a_prick"
 	elseif mission.current_quest == "a_prick" then
 		next_quest = "talk_to_companion_1"
@@ -928,14 +946,13 @@ function get_quest_objectives()
 		add(objectives, status .. " Make " .. mission.new_fans_needed .. " new fans (" .. new_fans .. "/" .. mission.new_fans_needed .. ")")
 
 	elseif mission.current_quest == "find_love" then
-		-- Objective 1: Get a lover
+		-- Just need a lover
 		local lover_status = (#lovers > 0) and "[X]" or "[ ]"
 		add(objectives, lover_status .. " Convince someone to date you")
-		-- Objective 2: Talk to lover about troubles (only shows after having lover)
-		if #lovers > 0 then
-			local troubles_status = mission.lover_asked_troubles and "[X]" or "[ ]"
-			add(objectives, troubles_status .. " Ask your lover about their troubles")
-		end
+
+	elseif mission.current_quest == "talk_to_companion_0" then
+		local status = mission.talked_to_companion_0 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion about the monster")
 
 	elseif mission.current_quest == "a_prick" then
 		local status = mission.cactus_killed and "[X]" or "[ ]"
@@ -997,19 +1014,19 @@ function get_quest_objectives()
 
 	elseif mission.current_quest == "car_wrecker" then
 		local cfg = QUEST_CONFIG.car_wrecker
-		if not mission.wrecker_active then
-			-- Before starting: tell player to steal a car
-			add(objectives, "[ ] Steal a car and start wrecking!")
+		if mission.wrecker_completed then
+			-- Completed successfully - show final status
+			add(objectives, "[X] Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
 		elseif mission.wrecker_failed then
 			-- Failed - need to talk to companion again
 			add(objectives, "[X] Time's up! Talk to your companion to try again")
-		elseif mission.wrecker_completed then
-			-- Completed successfully
-			add(objectives, "[X] Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
-		else
+		elseif mission.wrecker_active then
 			-- Active timer - show progress
 			local status = (mission.wrecker_cars_wrecked >= cfg.cars_needed) and "[X]" or "[ ]"
 			add(objectives, status .. " Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
+		else
+			-- Before starting: tell player to steal a car
+			add(objectives, "[ ] Steal a car and start wrecking!")
 		end
 
 	elseif mission.current_quest == "talk_to_companion_5" then
