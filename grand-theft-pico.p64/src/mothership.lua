@@ -36,6 +36,7 @@ epilogue_message_index = 1
 epilogue_message_timer = 0
 victory_option_selected = 1
 credits_scroll_y = 0
+credits_last_update_time = nil
 
 -- ============================================
 -- MOTHERSHIP CREATION
@@ -519,11 +520,11 @@ CREDITS_CONTENT = {
 	{ type = "header", text = "Programming" },
 	{ type = "name", text = "Ruben Tipparach" },
 	{ type = "spacer" },
-	{ type = "header", text = "Art" },
+	{ type = "header", text = "Art & Music" },
 	{ type = "name", text = "Provided by Tom Hall's Toy Box Game Jam" },
 	{ type = "spacer" },
-	{ type = "header", text = "Music & Sound" },
-	{ type = "name", text = "Picotron Audio" },
+	{ type = "header", text = "Sound FX" },
+	{ type = "name", text = "Ruben Tipparach" },
 	{ type = "spacer" },
 	{ type = "header", text = "Special Thanks" },
 	{ type = "name", text = "All the NPCs who became companions" },
@@ -618,6 +619,7 @@ function draw_epilogue_message()
 		-- Done with epilogue, move to credits
 		epilogue_phase = "credits"
 		credits_scroll_y = SCREEN_H  -- Start credits off-screen at bottom
+		credits_last_update_time = nil  -- Reset timing for smooth scroll start
 		printh("Epilogue done, moving to credits")
 		return
 	end
@@ -671,7 +673,15 @@ function draw_epilogue_message()
 end
 
 function draw_credits()
-	local dt = 1/60
+	-- Calculate actual delta time for smooth scrolling
+	local now = time()
+	if not credits_last_update_time then
+		credits_last_update_time = now
+	end
+	local dt = now - credits_last_update_time
+	credits_last_update_time = now
+	-- Clamp dt to prevent huge jumps
+	if dt > 0.1 then dt = 0.1 end
 
 	-- Update scroll
 	credits_scroll_y = credits_scroll_y - credits_scroll_speed * dt
