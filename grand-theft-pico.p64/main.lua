@@ -2130,9 +2130,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_2" then
 		dialog.phase = "quest"
-		dialog.quest_text = "Thank you for fixing my home! But I heard there's a giant cactus monster downtown... Can you defeat it?"
+		dialog.quest_text = "A hermit on a nearby island needs a package delivered. Can you pick it up and bring it to him?"
 		dialog.options = {
-			{ text = "I'll take it down!", action = "accept_companion_2" },
+			{ text = "I'm on it!", action = "accept_companion_2" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2141,9 +2141,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_3" then
 		dialog.phase = "quest"
-		dialog.quest_text = "A hermit on a nearby island needs a package delivered. Can you pick it up and bring it to him?"
+		dialog.quest_text = "My ex is in the big street race today! I need you to beat them for me. Steal a car and get to the starting line!"
 		dialog.options = {
-			{ text = "I'm on it!", action = "accept_companion_3" },
+			{ text = "Let's race!", action = "accept_companion_3" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2152,9 +2152,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_4" then
 		dialog.phase = "quest"
-		dialog.quest_text = "My ex is in the big street race today! I need you to beat them for me. Steal a car and get to the starting line!"
+		dialog.quest_text = "I work for a corrupt insurance company. We need you to wreck 12+ cars in 60 seconds! Steal a car and start smashing!"
 		dialog.options = {
-			{ text = "Let's race!", action = "accept_companion_4" },
+			{ text = "Time to wreck!", action = "accept_companion_4" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2163,9 +2163,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_5" then
 		dialog.phase = "quest"
-		dialog.quest_text = "I work for a corrupt insurance company. We need you to wreck 12+ cars in 60 seconds! Steal a car and start smashing!"
+		dialog.quest_text = "An insurance auditor named Kathy is investigating all those wrecked cars! She's downtown with her agents. Take her out before she files her report!"
 		dialog.options = {
-			{ text = "Time to wreck!", action = "accept_companion_5" },
+			{ text = "I'll handle it!", action = "accept_companion_5" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2174,9 +2174,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_6" then
 		dialog.phase = "quest"
-		dialog.quest_text = "An insurance auditor named Kathy is investigating all those wrecked cars! She's downtown with her agents. Take her out before she files her report!"
+		dialog.quest_text = "You're getting famous! A TV show wants you for their speed dating segment. Make 3 new lovers in 3 minutes to grow the polycule!"
 		dialog.options = {
-			{ text = "I'll handle it!", action = "accept_companion_6" },
+			{ text = "Love is in the air!", action = "accept_companion_6" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2185,9 +2185,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_7" then
 		dialog.phase = "quest"
-		dialog.quest_text = "You're getting famous! A TV show wants you for their speed dating segment. Make 3 new lovers in 3 minutes to grow the polycule!"
+		dialog.quest_text = "Remember when I was a pizza delivery driver? A customer stiffed me on a tip. I need you to deliver a 'special package' to their house. Don't get hit more than 3 times or KABOOM!"
 		dialog.options = {
-			{ text = "Love is in the air!", action = "accept_companion_7" },
+			{ text = "Revenge is a dish best served... explosive!", action = "accept_companion_7" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2196,20 +2196,9 @@ function select_dialog_option()
 
 	if opt.action == "offer_companion_8" then
 		dialog.phase = "quest"
-		dialog.quest_text = "Remember when I was a pizza delivery driver? A customer stiffed me on a tip. I need you to deliver a 'special package' to their house. Don't get hit more than 3 times or KABOOM!"
-		dialog.options = {
-			{ text = "Revenge is a dish best served... explosive!", action = "accept_companion_8" },
-			{ text = "Not right now", action = "decline_companion" }
-		}
-		dialog.selected = 1
-		return
-	end
-
-	if opt.action == "offer_companion_9" then
-		dialog.phase = "quest"
 		dialog.quest_text = "Look up! A massive alien mothership has appeared over the city! It's destroying buildings and spawning minions everywhere. You have to stop this invasion!"
 		dialog.options = {
-			{ text = "Time to save the world!", action = "accept_companion_9" },
+			{ text = "Time to save the world!", action = "accept_companion_8" },
 			{ text = "Not right now", action = "decline_companion" }
 		}
 		dialog.selected = 1
@@ -2229,7 +2218,7 @@ function select_dialog_option()
 	if opt.action == "accept_companion_2" then
 		mission.talked_to_companion_2 = true
 		dialog.phase = "result"
-		dialog.result_text = "Be careful! That cactus is dangerous!"
+		dialog.result_text = "The package is on an island to the east. You'll need a boat!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
 		return
@@ -2238,7 +2227,7 @@ function select_dialog_option()
 	if opt.action == "accept_companion_3" then
 		mission.talked_to_companion_3 = true
 		dialog.phase = "result"
-		dialog.result_text = "The package is on an island to the east. You'll need a boat!"
+		dialog.result_text = "Show them who's boss! Get to the starting line!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
 		return
@@ -2247,7 +2236,7 @@ function select_dialog_option()
 	if opt.action == "accept_companion_4" then
 		mission.talked_to_companion_4 = true
 		dialog.phase = "result"
-		dialog.result_text = "Show them who's boss! Get to the starting line!"
+		dialog.result_text = "Wreck 12 cars in 60 seconds! Go go go!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
 		return
@@ -2256,7 +2245,7 @@ function select_dialog_option()
 	if opt.action == "accept_companion_5" then
 		mission.talked_to_companion_5 = true
 		dialog.phase = "result"
-		dialog.result_text = "Wreck 12 cars in 60 seconds! Go go go!"
+		dialog.result_text = "Auditor Kathy is downtown with her fox agents. Stop her!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
 		return
@@ -2264,15 +2253,6 @@ function select_dialog_option()
 
 	if opt.action == "accept_companion_6" then
 		mission.talked_to_companion_6 = true
-		dialog.phase = "result"
-		dialog.result_text = "Auditor Kathy is downtown with her fox agents. Stop her!"
-		dialog.mission_dialog = true
-		dialog.result_start_time = time()
-		return
-	end
-
-	if opt.action == "accept_companion_7" then
-		mission.talked_to_companion_7 = true
 		dialog.phase = "result"
 		dialog.result_text = "The cameras are rolling! Find 3 new lovers in 3 minutes!"
 		dialog.mission_dialog = true
@@ -2282,8 +2262,8 @@ function select_dialog_option()
 		return
 	end
 
-	if opt.action == "accept_companion_8" then
-		mission.talked_to_companion_8 = true
+	if opt.action == "accept_companion_7" then
+		mission.talked_to_companion_7 = true
 		dialog.phase = "result"
 		dialog.result_text = "The bomb is in the car! Steal one and deliver it fast!"
 		dialog.mission_dialog = true
@@ -2291,13 +2271,12 @@ function select_dialog_option()
 		return
 	end
 
-	if opt.action == "accept_companion_9" then
-		mission.talked_to_companion_9 = true
+	if opt.action == "accept_companion_8" then
+		mission.talked_to_companion_8 = true
 		dialog.phase = "result"
 		dialog.result_text = "The fate of the city rests on your shoulders! Destroy the mothership!"
 		dialog.mission_dialog = true
 		dialog.result_start_time = time()
-		printh("DEBUG: accept_companion_9 triggered, mission.talked_to_companion_9 = " .. tostring(mission.talked_to_companion_9))
 		return
 	end
 
