@@ -1172,8 +1172,8 @@ function update_player_vehicle(vehicle, dt)
 		end
 	end
 
-	-- Exit vehicle with E key (use input_utils for proper single-press detection)
-	if input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
+	-- Exit vehicle with E key (use key_pressed_repeat for consistent timing)
+	if input_utils.key_pressed_repeat(VEHICLE_CONFIG.steal_key) then
 		exit_vehicle()
 	end
 end
@@ -1662,12 +1662,12 @@ function update_vehicles()
 	profile(" v:respawn")
 
 	-- Check for vehicle stealing (with cooldown after exiting)
-	-- Use input_utils for proper single-press detection (same key as exit)
+	-- Use key_pressed_repeat for consistent timing (same key as exit)
 	-- Don't allow stealing while in dialog or shop
 	if not player_vehicle and time() > vehicle_exit_cooldown then
 		if not (dialog and dialog.active) and not (shop and shop.active) then
 			local nearby = get_nearest_stealable_vehicle(game.player.x, game.player.y)
-			if nearby and input_utils.key_pressed(VEHICLE_CONFIG.steal_key) then
+			if nearby and input_utils.key_pressed_repeat(VEHICLE_CONFIG.steal_key) then
 				steal_vehicle(nearby)
 			end
 		end

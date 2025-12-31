@@ -82,7 +82,7 @@ function update_intro()
 	end
 
 	-- Check for skip (E key)
-	if input_utils.key_pressed("e") then
+	if input_utils.key_pressed_repeat("e") then
 		end_intro()
 		return
 	end
@@ -627,30 +627,32 @@ end
 function update_menu()
 	if menu.phase == "title" then
 		-- Wait for E key to proceed to options
-		if input_utils.key_pressed("e") then
+		if input_utils.key_pressed_repeat("e") then
 			menu.phase = "options"
 			menu.selected_option = 1
 			-- Check for save file
 			menu.has_save = check_save_exists()
 		end
 	else
-		-- Navigate options using input_utils for proper press-once behavior
-		if input_utils.key_pressed("up") then
+		-- Navigate options with key_pressed_repeat for consistent timing
+		if input_utils.key_pressed_repeat("up") then
 			menu.selected_option = menu.selected_option - 1
 			local options = get_menu_options()
 			if menu.selected_option < 1 then
 				menu.selected_option = #options
 			end
-		elseif input_utils.key_pressed("down") then
+			sfx(SFX.selection)
+		elseif input_utils.key_pressed_repeat("down") then
 			menu.selected_option = menu.selected_option + 1
 			local options = get_menu_options()
 			if menu.selected_option > #options then
 				menu.selected_option = 1
 			end
+			sfx(SFX.selection)
 		end
 
-		-- Select option with E or Z
-		if input_utils.key_pressed("e") or input_utils.key_pressed("z") then
+		-- Select option with E, Z, or X
+		if input_utils.key_pressed_repeat("e") or input_utils.key_pressed_repeat("z") or input_utils.key_pressed_repeat("x") then
 			local options = get_menu_options()
 			local selected = options[menu.selected_option]
 			handle_menu_selection(selected.id)
@@ -868,7 +870,7 @@ function reset_game_state()
 	p.popularity = PLAYER_CONFIG.starting_popularity
 	p.weapons = {"hammer"}  -- Start with hammer
 	p.ammo = {}
-	p.equipped_index = 1    -- Hammer equipped by default
+	p.equipped_index = 0    -- Start with no weapon equipped
 
 	-- Reset mission state
 	mission.current_quest = nil

@@ -284,6 +284,7 @@ function damage_mothership(amount)
 	mothership.hit_flash = time() + MOTHERSHIP_CONFIG.hit_flash_duration
 
 	add_collision_effect(mothership.x, mothership.y, 0.3)
+	sfx(SFX.vehicle_collision)  -- damage sound
 
 	printh("Mothership damaged: " .. amount .. ", health: " .. mothership.health)
 end
@@ -518,7 +519,7 @@ CREDITS_CONTENT = {
 	{ type = "header", text = "Programming" },
 	{ type = "name", text = "Ruben Tipparach" },
 	{ type = "spacer" },
-	{ type = "header", text = "Art & Design" },
+	{ type = "header", text = "Art" },
 	{ type = "name", text = "Provided by Tom Hall's Toy Box Game Jam" },
 	{ type = "spacer" },
 	{ type = "header", text = "Music & Sound" },

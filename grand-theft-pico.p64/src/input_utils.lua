@@ -15,6 +15,12 @@ local STATE_PRESSED = 1
 -- Track current state per key
 local key_state = {}
 
+-- Key repeat timing (for menu navigation)
+local key_repeat_time = {}           -- when key was first pressed
+local key_repeat_last = {}           -- when last repeat fired
+local REPEAT_DELAY = 0.35            -- delay before repeat starts (seconds)
+local REPEAT_RATE = 0.08             -- time between repeats (seconds)
+
 -- Check if key was just pressed (fires once on transition)
 function input.key_pressed(k)
 	local is_down = key(k)
@@ -52,6 +58,41 @@ end
 -- Check if key is currently held (not a transition, just current state)
 function input.key_held(k)
 	return key(k)
+end
+
+-- Check if key was pressed OR is repeating (for menu navigation)
+-- Fires once on initial press, then repeats after REPEAT_DELAY at REPEAT_RATE
+function input.key_pressed_repeat(k)
+	local is_down = key(k)
+	local now = time()
+
+	if not is_down then
+		-- Key released - clear repeat state
+		key_repeat_time[k] = nil
+		key_repeat_last[k] = nil
+		key_state[k] = STATE_UNPRESSED
+		return false
+	end
+
+	-- Key is down
+	if not key_repeat_time[k] then
+		-- First frame pressed - start tracking and fire immediately
+		key_repeat_time[k] = now
+		key_repeat_last[k] = now
+		key_state[k] = STATE_PRESSED
+		return true
+	end
+
+	-- Key held - check for repeat
+	local held_duration = now - key_repeat_time[k]
+	local since_last = now - key_repeat_last[k]
+
+	if held_duration >= REPEAT_DELAY and since_last >= REPEAT_RATE then
+		key_repeat_last[k] = now
+		return true
+	end
+
+	return false
 end
 
 -- No update() needed - state is checked lazily on each call

@@ -50,22 +50,23 @@ end
 -- Find a valid spawn position on dirt road outside city center
 function find_fox_spawn_position()
 	local tile_size = 16
+	local cfg = FOX_CONFIG
 
 	-- Safety check for world data
 	if not WORLD_DATA or not WORLD_DATA.tiles then
 		printh("ERROR: find_fox_spawn_position - WORLD_DATA not initialized!")
 		-- Fallback: spawn at a random far location
 		local angle = rnd(1)
-		local dist = 400 + rnd(200)
+		local dist = cfg.spawn_min_radius + rnd(cfg.spawn_max_radius - cfg.spawn_min_radius)
 		return cos(angle) * dist, sin(angle) * dist
 	end
 
 	local map_w = WORLD_DATA.tiles:width()
 	local map_h = WORLD_DATA.tiles:height()
 
-	-- City center is around 0,0 - spawn foxes just outside city radius
-	local min_dist_from_center = 300  -- minimum distance from 0,0
-	local max_dist_from_center = min_dist_from_center + 200  -- max is 200 units beyond min
+	-- City center is around 0,0 - spawn foxes within configured radius band
+	local min_dist_from_center = cfg.spawn_min_radius
+	local max_dist_from_center = cfg.spawn_max_radius
 
 	for attempt = 1, 100 do
 		-- Random map position
@@ -91,9 +92,9 @@ function find_fox_spawn_position()
 		end
 	end
 
-	-- Fallback: spawn at a random location just outside city
+	-- Fallback: spawn at a random location within spawn band
 	local angle = rnd(1)
-	local dist = min_dist_from_center + rnd(200)
+	local dist = cfg.spawn_min_radius + rnd(cfg.spawn_max_radius - cfg.spawn_min_radius)
 	return cos(angle) * dist, sin(angle) * dist
 end
 
@@ -132,6 +133,43 @@ function spawn_foxes()
 	mission.total_foxes = cfg.spawn_count
 	mission.foxes_killed = 0
 	printh("Spawned " .. cfg.spawn_count .. " foxes, #foxes=" .. #foxes)
+end
+
+-- Respawn remaining foxes after death (preserves kill count)
+function respawn_remaining_foxes()
+	local cfg = FOX_CONFIG
+	if not cfg then
+		printh("ERROR: FOX_CONFIG is nil!")
+		return
+	end
+
+	-- Calculate how many foxes to spawn (total minus already killed)
+	local remaining = mission.total_foxes - mission.foxes_killed
+	if remaining <= 0 then
+		printh("No foxes to respawn, all killed")
+		return
+	end
+
+	-- Clear existing foxes
+	foxes = {}
+	foxes_spawned = false
+
+	printh("Respawning " .. remaining .. " foxes (killed=" .. mission.foxes_killed .. ")")
+
+	local name_index = 1
+	for i = 1, remaining do
+		local x, y = find_fox_spawn_position()
+		local name = cfg.names[name_index]
+		create_fox(x, y, name)
+
+		name_index = name_index + 1
+		if name_index > #cfg.names then
+			name_index = 1
+		end
+	end
+
+	foxes_spawned = true
+	printh("Respawned " .. remaining .. " foxes, #foxes=" .. #foxes)
 end
 
 -- Get count of living foxes
@@ -407,6 +445,7 @@ function damage_fox(fox, amount)
 
 	-- Small hit effect
 	add_collision_effect(fox.x, fox.y, 0.2)
+	sfx(SFX.vehicle_collision)  -- damage sound
 end
 
 -- Show fox defeated message

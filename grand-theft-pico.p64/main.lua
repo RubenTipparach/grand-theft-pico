@@ -133,7 +133,7 @@ game = {
 		-- Weapon inventory
 		weapons = {"hammer"}, -- Start with hammer
 		ammo = {},            -- Ammo counts by weapon key (e.g., {pistol = 30})
-		equipped_index = 1,   -- Start with hammer equipped
+		equipped_index = 0,   -- Start with no weapon equipped
 		is_attacking = false,
 		attack_timer = 0,
 		attack_angle = 0,     -- For melee swing rotation
@@ -230,6 +230,9 @@ function damage_player(amount)
 	if amount <= 0 then return end
 
 	local p = game.player
+
+	-- Play damage sound
+	sfx(31)
 
 	-- Armor absorbs damage first
 	if p.armor > 0 then
@@ -1821,6 +1824,95 @@ function draw_quest_hud()
 	end
 end
 
+-- Draw directional arrows pointing to off-screen quest objectives
+function draw_objective_arrows()
+	if not mission.current_quest then return end
+	if dialog and dialog.active then return end
+	if shop and shop.active then return end
+
+	local targets = get_quest_target_positions()
+	if #targets == 0 then return end
+
+	local cfg = OBJECTIVE_ARROW_CONFIG
+	local margin = cfg.screen_margin
+	local size = cfg.arrow_size
+
+	-- Calculate pulse scale
+	local pulse = sin(time() * cfg.pulse_speed)
+	local scale = cfg.pulse_min_scale + (pulse + 1) * 0.5 * (cfg.pulse_max_scale - cfg.pulse_min_scale)
+	local arrow_size = size * scale
+
+	-- Screen center (where player is drawn)
+	local screen_cx = SCREEN_W / 2
+	local screen_cy = SCREEN_H / 2
+
+	for _, target in ipairs(targets) do
+		-- Convert target world position to screen position
+		local sx, sy = world_to_screen(target.x, target.y)
+
+		-- Check if target is on screen (with some padding)
+		local on_screen = sx >= -16 and sx <= SCREEN_W + 16 and sy >= -16 and sy <= SCREEN_H + 16
+
+		if not on_screen then
+			-- Calculate direction from screen center to target
+			local dx = sx - screen_cx
+			local dy = sy - screen_cy
+			local dist = sqrt(dx*dx + dy*dy)
+
+			if dist > 0 then
+				-- Normalize direction
+				local nx = dx / dist
+				local ny = dy / dist
+
+				-- Calculate arrow position on screen edge (with margin)
+				local edge_x = screen_cx
+				local edge_y = screen_cy
+
+				-- Find intersection with screen edges
+				local half_w = SCREEN_W / 2 - margin
+				local half_h = SCREEN_H / 2 - margin
+
+				-- Scale to fit within screen bounds
+				local scale_x = (nx ~= 0) and abs(half_w / nx) or 9999
+				local scale_y = (ny ~= 0) and abs(half_h / ny) or 9999
+				local edge_scale = min(scale_x, scale_y)
+
+				edge_x = screen_cx + nx * edge_scale
+				edge_y = screen_cy + ny * edge_scale
+
+				-- Draw arrow using lines with drop shadow
+				local arrow_color = target.color or cfg.arrow_color
+				local shadow_color = cfg.arrow_outline_color
+				local shadow_offset = 1
+
+				-- Arrow tip
+				local tip_x = edge_x + nx * arrow_size
+				local tip_y = edge_y + ny * arrow_size
+
+				-- Perpendicular for arrow wings
+				local perp_x = -ny * arrow_size * 0.5
+				local perp_y = nx * arrow_size * 0.5
+
+				-- Arrow base points (wings)
+				local base1_x = edge_x - nx * arrow_size * 0.3 + perp_x
+				local base1_y = edge_y - ny * arrow_size * 0.3 + perp_y
+				local base2_x = edge_x - nx * arrow_size * 0.3 - perp_x
+				local base2_y = edge_y - ny * arrow_size * 0.3 - perp_y
+
+				-- Draw drop shadow first (offset down and right)
+				line(tip_x + shadow_offset, tip_y + shadow_offset, base1_x + shadow_offset, base1_y + shadow_offset, shadow_color)
+				line(tip_x + shadow_offset, tip_y + shadow_offset, base2_x + shadow_offset, base2_y + shadow_offset, shadow_color)
+				line(base1_x + shadow_offset, base1_y + shadow_offset, base2_x + shadow_offset, base2_y + shadow_offset, shadow_color)
+
+				-- Draw yellow arrow on top
+				line(tip_x, tip_y, base1_x, base1_y, arrow_color)
+				line(tip_x, tip_y, base2_x, base2_y, arrow_color)
+				line(base1_x, base1_y, base2_x, base2_y, arrow_color)
+			end
+		end
+	end
+end
+
 -- Draw big quest completed text in center of screen
 function draw_quest_complete_banner()
 	if not quest_complete_visual.active then return end
@@ -2106,10 +2198,11 @@ function select_dialog_option()
 	end
 
 	if opt.action == "heal" then
-		-- Heal the player
-		game.player.health = min(PLAYER_CONFIG.max_health, game.player.health + PLAYER_CONFIG.heal_amount)
+		-- Heal the player to full health
+		sfx(30)
+		game.player.health = PLAYER_CONFIG.max_health
 		dialog.phase = "result"
-		dialog.result_text = "You feel better! +" .. PLAYER_CONFIG.heal_amount .. " HP"
+		dialog.result_text = "Fully healed! HP restored to " .. PLAYER_CONFIG.max_health
 		dialog.result_timer = time() + 1.5
 		return
 	end
@@ -2402,6 +2495,7 @@ function select_dialog_option()
 				dialog.result_text = "They're smitten! New lover!"
 			else
 				-- Show NPC's response with love gain
+				sfx(SFX.new_fan)  -- play fan sound on successful flirt
 				dialog.phase = "result"
 				dialog.result_text = opt.response or "..."
 			end
@@ -2468,25 +2562,19 @@ function update_dialog()
 	if not dialog.active then return end
 
 	if dialog.phase == "result" then
-		-- Allow X to skip result phase (for non-mission dialogs only)
-		if not dialog.mission_dialog and btnp(5) then
-			if dialog.npc then dialog.npc.in_dialog = false end
-			dialog.active = false
-			dialog.mission_dialog = false
-			dialog.close_cooldown = time() + 0.1
-			return
-		end
-
-		-- For mission dialogs, wait for E press; for others, wait for timer
+		-- For mission dialogs, only X closes the dialog
+		-- For non-mission dialogs, X also closes or timer auto-closes
 		local should_close = false
 		if dialog.mission_dialog then
-			-- Mission dialogs require E to continue (with small delay to avoid instant close)
-			-- Use input_utils.key_pressed for proper single-press detection
+			-- Mission dialogs require X to close (with small delay to avoid instant close)
 			if dialog.result_start_time and time() > dialog.result_start_time + 0.2 then
-				if input_utils.key_pressed("e") then
+				if input_utils.key_pressed("x") then
 					should_close = true
 				end
 			end
+		elseif btnp(5) then
+			-- Non-mission dialogs: X to skip
+			should_close = true
 		else
 			-- Regular dialogs use timer
 			if time() >= dialog.result_timer then
@@ -2520,8 +2608,8 @@ function update_dialog()
 		if dialog.selected > #dialog.options then dialog.selected = 1 end
 	end
 
-	-- Select with O/Z key or E key (use input_utils for proper single-press detection)
-	if input_utils.key_pressed("z") or input_utils.key_pressed("e") then
+	-- Select with O/Z key or E key (use key_pressed_repeat for consistent timing)
+	if input_utils.key_pressed_repeat("z") or input_utils.key_pressed_repeat("e") then
 		select_dialog_option()
 	end
 
@@ -2734,15 +2822,14 @@ function check_fan_interaction()
 	-- Cooldown after dialog closes to prevent instant re-interaction
 	if dialog.close_cooldown and time() < dialog.close_cooldown then return end
 
-	-- Check for NPC currently in dialog (don't allow re-interaction)
+	-- Check for nearby fan BEFORE consuming key press
 	local npc, fan_data = find_nearby_fan()
-	if npc and npc.in_dialog then return end  -- NPC is still in dialog
+	if not npc or not fan_data then return end
+	if npc.in_dialog then return end  -- NPC is still in dialog
 
-	-- Use keyp for single-press detection (input_utils.key_pressed may be consumed by dealer check)
-	if keyp("e") then
-		if npc and fan_data then
-			start_dialog(npc, fan_data)
-		end
+	-- Use key_pressed_repeat for consistent timing
+	if input_utils.key_pressed_repeat("e") then
+		start_dialog(npc, fan_data)
 	end
 end
 
@@ -2909,6 +2996,9 @@ function _draw()
 	draw_dealer_prompt()
 	draw_boss_health_bar()
 	draw_defeat_message()
+
+	-- Draw objective arrows pointing to off-screen targets (on top of most HUD)
+	draw_objective_arrows()
 
 	-- Draw dialog box (if talking to fan)
 	draw_dialog()

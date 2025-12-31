@@ -468,6 +468,7 @@ function damage_cactus(amount)
 
 	-- Hit effect
 	add_collision_effect(cactus.x, cactus.y, 0.3)
+	sfx(SFX.vehicle_collision)  -- damage sound
 end
 
 -- Show cactus defeated message

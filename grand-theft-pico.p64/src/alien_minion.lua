@@ -338,6 +338,7 @@ function damage_alien_minion(minion, amount)
 	minion.damaged_anim_timer = time()
 
 	add_collision_effect(minion.x, minion.y, 0.2)
+	sfx(SFX.vehicle_collision)  -- damage sound
 
 	if minion.health <= 0 then
 		minion.state = "dead"

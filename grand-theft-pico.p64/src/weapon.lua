@@ -145,6 +145,7 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 							dealer.health = dealer.health - damage
 							make_dealer_hostile(dealer)
 							hit_dealers[dealer] = true
+							sfx(SFX.vehicle_collision)  -- damage sound
 						end
 					end
 				end
@@ -377,6 +378,7 @@ function check_projectile_collision(proj)
 						dealer.damaged_anim_timer = time()
 						make_dealer_hostile(dealer)
 						add_collision_effect(proj.x, proj.y, 0.3)  -- Small explosion
+						sfx(SFX.vehicle_collision)  -- damage sound
 						return true
 					end
 				end
@@ -849,6 +851,7 @@ function check_melee_hit(weapon)
 				if dist < weapon.range then
 					dealer.health = dealer.health - weapon.damage
 					make_dealer_hostile(dealer)
+					sfx(SFX.vehicle_collision)  -- damage sound
 					return true
 				end
 			end
@@ -931,23 +934,22 @@ function draw_weapon_hud()
 	local x = SCREEN_W - 80
 	local y = 8
 
-	if not weapon then
-		print_shadow("No Weapon", x, y, 6)
-		return
-	end
+	-- Display name (either weapon name or "No Weapon")
+	local display_name = weapon and weapon.name or "No Weapon"
+	local name_color = weapon and 33 or 6  -- white if weapon, gray if none
 
 	-- Draw [Q] on the left of weapon name
 	print_shadow("[Q]", x - 24, y, 6)
 
 	-- Weapon name
-	print_shadow(weapon.name, x, y, 33)
+	print_shadow(display_name, x, y, name_color)
 
 	-- Draw [R] on the right of weapon name
-	local name_width = print(weapon.name, 0, -100)
+	local name_width = print(display_name, 0, -100)
 	print_shadow("[R]", x + name_width + 4, y, 6)
 
 	-- Ammo count for ranged weapons
-	if wtype == "ranged" then
+	if wtype == "ranged" and weapon_key then
 		local ammo = game.player.ammo[weapon_key] or 0
 		print_shadow("Ammo: " .. ammo, x, y + 10, ammo > 0 and 11 or 8)
 	end

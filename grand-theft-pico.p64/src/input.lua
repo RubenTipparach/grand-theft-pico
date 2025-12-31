@@ -102,8 +102,8 @@ function handle_input()
 			cycle_weapon_backward()
 		end
 
-		-- T: cycle weapon forward (single-trigger)
-		if input_utils.key_pressed("t") then
+		-- R: cycle weapon forward (single-trigger)
+		if input_utils.key_pressed("r") then
 			cycle_weapon_forward()
 		end
 

@@ -357,9 +357,28 @@ function update_npc(npc, player_x, player_y)
 	local is_fan, fan_data = is_npc_fan(npc)
 	local is_lover = is_npc_lover(npc)
 
-	-- Check if player is too close (trigger surprised state)
-	-- Don't interrupt crossing or returning states
-	-- Fans and lovers don't get scared - they're happy to see you!
+	-- Check if unromanced fan should reset (timeout expired)
+	if is_fan and not is_lover and fan_data and fan_data.fan_since then
+		local fan_timeout = NPC_CONFIG.fan_reset_timeout or 60
+		if now - fan_data.fan_since > fan_timeout then
+			-- Remove from fans list and reset NPC
+			for i = #fans, 1, -1 do
+				if fans[i] == fan_data then
+					del(fans, fan_data)
+					break
+				end
+			end
+			npc.fan_checked = false
+			npc.fan_since = nil
+			is_fan = false
+			fan_data = nil
+			printh("Fan reset due to timeout - NPC can react again")
+		end
+	end
+
+	-- Combined fan detection and scare check
+	-- When player approaches, first check if NPC becomes a fan, then decide reaction
+	-- This ensures we know the outcome BEFORE showing any visual feedback
 	if npc.state ~= "surprised" and npc.state ~= "fleeing" and
 	   npc.state ~= "crossing" and npc.state ~= "returning" and
 	   npc.state ~= "fan_greeting" and not npc.is_hermit and
@@ -367,7 +386,76 @@ function update_npc(npc, player_x, player_y)
 		local dx = npc.x - player_x
 		local dy = npc.y - player_y
 		local dist = sqrt(dx * dx + dy * dy)
+
+		-- Check at scare_radius distance (the outer boundary)
 		if dist < NPC_CONFIG.scare_radius then
+			-- First, do fan check if not already done
+			if not npc.fan_checked and not npc.rejected_player then
+				npc.fan_checked = true  -- only check once per NPC
+
+				-- During "intro" quest, track NPCs encountered
+				local is_fifth_person = false
+				if mission.current_quest == "intro" then
+					mission.npcs_encountered = mission.npcs_encountered + 1
+					printh("Met person " .. mission.npcs_encountered .. "/5")
+					if mission.npcs_encountered == 5 and not mission.intro_npc_spawned then
+						is_fifth_person = true
+					end
+				end
+
+				-- Calculate fan chance based on popularity (higher popularity = more fans)
+				local popularity_pct = game.player.popularity / PLAYER_CONFIG.max_popularity
+				local fan_chance = PLAYER_CONFIG.fan_chance_min +
+					(popularity_pct * (PLAYER_CONFIG.fan_chance_max - PLAYER_CONFIG.fan_chance_min))
+
+				if is_fifth_person or rnd(1) < fan_chance then
+					-- This NPC is a fan! Add to fans list
+					local archetypes = PLAYER_CONFIG.archetypes
+					local archetype = archetypes[flr(rnd(#archetypes)) + 1]
+					local fan_id = next_fan_id
+					next_fan_id = next_fan_id + 1
+					add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype, id = fan_id, fan_since = now })
+					npc.fan_since = now  -- track when they became a fan for reset timeout
+					sfx(SFX.new_fan)
+					printh("Created fan ID=" .. fan_id .. " archetype=" .. archetype)
+					change_popularity(PLAYER_CONFIG.popularity_per_fan)
+
+					-- Track total fans met
+					mission.total_fans_met = mission.total_fans_met + 1
+
+					-- Track lifetime NPCs met stat
+					if game_stats then
+						game_stats.npcs_met = (game_stats.npcs_met or 0) + 1
+					end
+
+					-- 5th person during intro quest becomes the intro NPC
+					if is_fifth_person then
+						npc.is_intro_npc = true
+						mission.intro_npc = npc
+						mission.intro_npc_spawned = true
+						printh("5th person is now intro NPC! Starting dialog immediately.")
+
+						local fan_data = get_fan_data(npc)
+						if fan_data and not dialog.active then
+							start_dialog(npc, fan_data)
+							npc.state = "idle"
+							npc.in_dialog = true
+							return
+						end
+					end
+
+					-- Become a fan - enter greeting state (no exclamation, no fleeing)
+					npc.state = "fan_greeting"
+					npc.state_end_time = now + 2
+					npc.walk_frame = 0
+					return  -- Skip the scare logic below
+				end
+			end
+
+			-- Not a fan - enter surprised state with exclamation and play flee sound
+			if not npc.fan_checked or npc.rejected_player then
+				npc.fan_checked = true  -- mark as checked even if we skip due to rejection
+			end
 			-- Save current state to restore later
 			npc.prev_state = npc.state
 			npc.prev_facing_dir = npc.facing_dir
@@ -379,83 +467,8 @@ function update_npc(npc, player_x, player_y)
 			-- Store player position to calculate flee direction when fleeing starts
 			npc.scare_player_x = player_x
 			npc.scare_player_y = player_y
-		end
-	end
-
-	-- Fan detection: when player approaches a non-fan NPC, chance scales with popularity
-	-- This only triggers once per NPC (checked via fan_checked flag)
-	-- Hermits don't become fans - they're special quest NPCs
-	-- NPCs who rejected the player (3 strikes) can't become fans again
-	if player_x and player_y and not is_fan and not is_lover and not npc.fan_checked and not npc.is_hermit and not npc.rejected_player then
-		local dx = npc.x - player_x
-		local dy = npc.y - player_y
-		local dist = sqrt(dx * dx + dy * dy)
-		if dist < PLAYER_CONFIG.fan_detect_distance then
-			npc.fan_checked = true  -- only check once per NPC
-
-			-- During "intro" quest, track NPCs encountered
-			local is_fifth_person = false
-			if mission.current_quest == "intro" then
-				mission.npcs_encountered = mission.npcs_encountered + 1
-				printh("Met person " .. mission.npcs_encountered .. "/5")
-				if mission.npcs_encountered == 5 and not mission.intro_npc_spawned then
-					is_fifth_person = true
-				end
-			end
-
-			-- Calculate fan chance based on popularity (higher popularity = more fans)
-			local popularity_pct = game.player.popularity / PLAYER_CONFIG.max_popularity
-			local fan_chance = PLAYER_CONFIG.fan_chance_min +
-				(popularity_pct * (PLAYER_CONFIG.fan_chance_max - PLAYER_CONFIG.fan_chance_min))
-			if is_fifth_person or rnd(1) < fan_chance then
-				-- This NPC is a fan! Add to fans list
-				-- Assign a random archetype from config
-				local archetypes = PLAYER_CONFIG.archetypes
-				local archetype = archetypes[flr(rnd(#archetypes)) + 1]
-				local fan_id = next_fan_id
-				next_fan_id = next_fan_id + 1
-				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype, id = fan_id })
-				sfx(SFX.new_fan)
-				printh("Created fan ID=" .. fan_id .. " archetype=" .. archetype)
-				-- Gain popularity for meeting a fan
-				change_popularity(PLAYER_CONFIG.popularity_per_fan)
-
-				-- Track total fans met
-				mission.total_fans_met = mission.total_fans_met + 1
-
-				-- Track lifetime NPCs met stat
-				if game_stats then
-					game_stats.npcs_met = (game_stats.npcs_met or 0) + 1
-				end
-
-				-- 5th person during intro quest becomes the intro NPC
-				if is_fifth_person then
-					npc.is_intro_npc = true
-					mission.intro_npc = npc
-					mission.intro_npc_spawned = true
-					printh("5th person is now intro NPC! Starting dialog immediately.")
-
-					-- Start dialog immediately for the intro NPC
-					local fan_data = get_fan_data(npc)
-					if fan_data and not dialog.active then
-						start_dialog(npc, fan_data)
-						npc.state = "idle"
-						npc.in_dialog = true
-						return
-					end
-				end
-
-				-- Stop fleeing if they were about to flee
-				if npc.state == "surprised" then
-					npc.state = "fan_greeting"
-					npc.state_end_time = now + 2  -- greet for 2 seconds
-					npc.show_surprise = false
-				else
-					npc.state = "fan_greeting"
-					npc.state_end_time = now + 2
-				end
-				npc.walk_frame = 0
-			end
+			-- Play flee jingle immediately when exclamation appears
+			sfx(SFX.npc_fleeing)
 		end
 	end
 
@@ -704,7 +717,7 @@ function update_npc(npc, player_x, player_y)
 		if now >= npc.state_end_time then
 			npc.state = "fleeing"
 			npc.state_end_time = now + NPC_CONFIG.flee_duration
-			sfx(SFX.npc_fleeing)
+			-- sfx already played when exclamation appeared
 			npc.show_surprise = false
 			npc.flee_recheck_time = now
 			-- Calculate flee direction NOW based on current player position
@@ -776,6 +789,8 @@ function update_npc(npc, player_x, player_y)
 			npc.prev_facing_dir = nil
 			npc.flee_dir = nil
 			npc.show_surprise = false
+			-- Reset fan_checked so NPC can react to player again
+			npc.fan_checked = false
 		end
 
 	elseif npc.state == "returning" then

@@ -561,12 +561,12 @@ function update_shop()
 	local item = items[shop.selected]
 
 	-- Navigation (gamepad buttons OR keyboard arrows using single-press detection)
-	if input_utils.key_pressed("up") or input_utils.key_pressed("w") then  -- Up
+	if input_utils.key_pressed_repeat("up") or input_utils.key_pressed_repeat("w") then  -- Up
 		shop.selected = shop.selected - 1
 		if shop.selected < 1 then shop.selected = #items end
 		shop.ammo_quantity = 1
 	end
-	if input_utils.key_pressed("down") or input_utils.key_pressed("s") then  -- Down
+	if input_utils.key_pressed_repeat("down") or input_utils.key_pressed_repeat("s") then  -- Down
 		shop.selected = shop.selected + 1
 		if shop.selected > #items then shop.selected = 1 end
 		shop.ammo_quantity = 1
@@ -574,23 +574,23 @@ function update_shop()
 
 	-- Ammo quantity (for owned ranged weapons)
 	if item and item.owned and item.type == "ranged" then
-		if input_utils.key_pressed("left") or input_utils.key_pressed("a") then  -- Left
+		if input_utils.key_pressed_repeat("left") or input_utils.key_pressed_repeat("a") then  -- Left
 			shop.ammo_quantity = max(1, shop.ammo_quantity - 1)
 		end
-		if input_utils.key_pressed("right") or input_utils.key_pressed("d") then  -- Right
+		if input_utils.key_pressed_repeat("right") or input_utils.key_pressed_repeat("d") then  -- Right
 			shop.ammo_quantity = shop.ammo_quantity + 1
 		end
 	end
 
 	-- Purchase (E or Z key for single-press)
-	if input_utils.key_pressed("z") or (input_utils.key_pressed("e") and time() > (shop.open_time or 0) + 0.1) then
+	if input_utils.key_pressed_repeat("z") or (input_utils.key_pressed_repeat("e") and time() > (shop.open_time or 0) + 0.1) then
 		if item then
 			try_purchase(item)
 		end
 	end
 
 	-- Close shop (X key only)
-	if input_utils.key_pressed("x") then
+	if input_utils.key_pressed_repeat("x") then
 		close_shop()
 	end
 
@@ -783,11 +783,12 @@ function check_dealer_interaction()
 	if player_vehicle then return end
 	if dialog and dialog.active then return end
 
-	-- E key to interact (use input_utils for single-press detection)
-	if input_utils.key_pressed("e") then
-		local dealer = get_nearby_dealer()
-		if dealer then
-			open_shop(dealer)
-		end
+	-- Check if dealer is nearby BEFORE consuming the key press
+	local dealer = get_nearby_dealer()
+	if not dealer then return end
+
+	-- E key to interact (use key_pressed_repeat for consistent timing)
+	if input_utils.key_pressed_repeat("e") then
+		open_shop(dealer)
 	end
 end

@@ -649,6 +649,8 @@ FOX_CONFIG = {
 	target_distance = 100,    -- stop and shoot when within this distance of player
 	aggro_distance = 200,     -- distance at which fox notices player
 	spawn_count = 8,          -- number of foxes to spawn
+	spawn_min_radius = 700,   -- minimum distance from center (0,0) to spawn
+	spawn_max_radius = 800,   -- maximum distance from center (0,0) to spawn
 	minimap_color = 12,       -- red on minimap (color 12 = red)
 	minimap_size = 1,
 	bullet_speed = 150,       -- bullet speed (slightly slower than dealer)
@@ -737,6 +739,22 @@ CAMERA_CONFIG = {
 }
 
 -- ============================================
+-- OBJECTIVE ARROW CONFIG
+-- ============================================
+OBJECTIVE_ARROW_CONFIG = {
+	-- Distance from screen edge where arrows appear
+	screen_margin = 30,           -- pixels from edge of screen
+	-- Arrow appearance
+	arrow_size = 8,               -- size of arrow triangle
+	arrow_color = 21,             -- gold color (matches quest title)
+	arrow_outline_color = 0,      -- black outline
+	-- Pulsing animation
+	pulse_speed = 3,              -- pulses per second
+	pulse_min_scale = 0.8,        -- minimum scale during pulse
+	pulse_max_scale = 1.2,        -- maximum scale during pulse
+}
+
+-- ============================================
 -- NPC CONFIG
 -- ============================================
 NPC_CONFIG = {
@@ -779,6 +797,10 @@ NPC_CONFIG = {
 	surprise_duration = 1.0,     -- seconds
 	flee_duration = 15.0,        -- seconds
 	surprise_sprite = 135,
+
+	-- Reset behavior - NPCs who fled or weren't romanced can be re-encountered
+	fan_reset_timeout = 60.0,    -- seconds before unromanced fans reset (can be re-encountered)
+	fled_reset_timeout = 30.0,   -- seconds before fled NPCs reset (can become fans again)
 }
 
 -- NPC type definitions (sprite sets)
@@ -1853,7 +1875,15 @@ MUSIC_CONFIG = {
 	},
 
 	-- Music volume (0x00 to 0x40, where 0x40 is full volume)
-	volume = 0x30,  -- 75% volume
+	-- Volume levels:
+	--   0x40 = 100% (full volume)
+	--   0x30 = 75%
+	--   0x20 = 50%
+	--   0x18 = 37.5%
+	--   0x10 = 25%
+	--   0x08 = 12.5%
+	--   0x00 = 0% (muted)
+	volume = 0x20,  -- 50% volume
 
 	-- Fade duration in milliseconds
 	fade_in_ms = 500,

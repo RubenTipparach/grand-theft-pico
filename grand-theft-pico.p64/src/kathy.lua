@@ -749,6 +749,7 @@ function damage_kathy(amount)
 
 	-- Hit effect
 	add_collision_effect(kathy.x, kathy.y, 0.3)
+	sfx(SFX.vehicle_collision)  -- damage sound
 end
 
 -- Check if a projectile hits Kathy
@@ -774,6 +775,7 @@ function damage_kathy_fox(fox, amount)
 	fox.damaged_anim_timer = time()
 
 	add_collision_effect(fox.x, fox.y, 0.2)
+	sfx(SFX.vehicle_collision)  -- damage sound
 end
 
 -- Check if a projectile hits any Kathy fox

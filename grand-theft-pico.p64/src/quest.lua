@@ -771,11 +771,11 @@ function get_previous_checkpoint_quest()
 
 	-- Map main quests to their preceding talk_to_companion checkpoint
 	local checkpoint_map = {
-		-- Early quests don't have talk_to_companion checkpoints
+		-- Early quests restart themselves to preserve progress
 		intro = "intro",  -- restart from beginning
-		protect_city = "intro",
-		make_friends = "intro",
-		find_love = "intro",
+		protect_city = "protect_city",  -- restart mission, preserve kill count
+		make_friends = "make_friends",  -- restart mission, preserve fan count
+		find_love = "find_love",  -- restart mission
 		-- a_prick now has talk_to_companion_0 as checkpoint
 		a_prick = "talk_to_companion_0",
 		-- Main quests with checkpoints
@@ -802,8 +802,12 @@ function reset_quest_on_death()
 
 	-- Clean up active quest state based on current quest
 	if current == "protect_city" then
-		-- Clean up foxes
+		-- Full reset: cleanup foxes and respawn all of them
 		if cleanup_foxes then cleanup_foxes() end
+		-- Reset kill counter and spawn fresh foxes
+		mission.foxes_killed = 0
+		foxes_spawned = false  -- allow spawn_foxes to run again
+		if spawn_foxes then spawn_foxes() end
 	elseif current == "a_prick" then
 		-- Clean up cactus
 		if cleanup_cactus then cleanup_cactus() end
@@ -1122,6 +1126,170 @@ function get_quest_objectives()
 	end
 
 	return objectives
+end
+
+-- Get world positions of current quest objectives for on-screen arrows
+-- Returns a table of {x, y, color} for each active objective
+function get_quest_target_positions()
+	local targets = {}
+	local cfg = OBJECTIVE_ARROW_CONFIG
+
+	if not mission.current_quest then return targets end
+
+	-- INTRO: Arms dealer location after meeting 5 people
+	if mission.current_quest == "intro" then
+		if mission.npcs_encountered >= 5 and not mission.talked_to_dealer then
+			-- Point to nearest arms dealer
+			if arms_dealers and #arms_dealers > 0 then
+				local nearest = nil
+				local nearest_dist = 99999
+				for _, dealer in ipairs(arms_dealers) do
+					local dx = dealer.x - game.player.x
+					local dy = dealer.y - game.player.y
+					local dist = sqrt(dx*dx + dy*dy)
+					if dist < nearest_dist then
+						nearest = dealer
+						nearest_dist = dist
+					end
+				end
+				if nearest then
+					add(targets, {x = nearest.x, y = nearest.y, color = cfg.arrow_color})
+				end
+			end
+		end
+
+	-- PROTECT_CITY: Point to foxes
+	elseif mission.current_quest == "protect_city" then
+		-- Point to arms dealer if player needs a weapon
+		if not mission.has_weapon then
+			if arms_dealers and #arms_dealers > 0 then
+				local nearest = nil
+				local nearest_dist = 99999
+				for _, dealer in ipairs(arms_dealers) do
+					local dx = dealer.x - game.player.x
+					local dy = dealer.y - game.player.y
+					local dist = sqrt(dx*dx + dy*dy)
+					if dist < nearest_dist then
+						nearest = dealer
+						nearest_dist = dist
+					end
+				end
+				if nearest then
+					add(targets, {x = nearest.x, y = nearest.y, color = cfg.arrow_color})
+				end
+			end
+		else
+			-- Point to living foxes
+			if foxes then
+				for _, fox in ipairs(foxes) do
+					if fox.state ~= "dead" then
+						add(targets, {x = fox.x, y = fox.y, color = 12})  -- red for enemies
+					end
+				end
+			end
+		end
+
+	-- TALK_TO_COMPANION quests: Point to first lover
+	elseif sub(mission.current_quest, 1, 18) == "talk_to_companion_" then
+		if lovers and #lovers > 0 then
+			local lover = lovers[1]
+			if lover and lover.npc then
+				add(targets, {x = lover.npc.x, y = lover.npc.y, color = 18})  -- salmon for lovers
+			end
+		end
+
+	-- A_PRICK: Point to cactus boss
+	elseif mission.current_quest == "a_prick" then
+		if cactus and cactus.state ~= "dead" then
+			add(targets, {x = cactus.x, y = cactus.y, color = 12})  -- red for boss
+		end
+
+	-- FIX_HOME: Point to damaged building
+	elseif mission.current_quest == "fix_home" then
+		if not mission.has_hammer then
+			-- Point to arms dealer for hammer
+			if arms_dealers and #arms_dealers > 0 then
+				local nearest = nil
+				local nearest_dist = 99999
+				for _, dealer in ipairs(arms_dealers) do
+					local dx = dealer.x - game.player.x
+					local dy = dealer.y - game.player.y
+					local dist = sqrt(dx*dx + dy*dy)
+					if dist < nearest_dist then
+						nearest = dealer
+						nearest_dist = dist
+					end
+				end
+				if nearest then
+					add(targets, {x = nearest.x, y = nearest.y, color = cfg.arrow_color})
+				end
+			end
+		elseif mission.damaged_building then
+			-- Point to damaged building center
+			local b = mission.damaged_building
+			add(targets, {x = b.x + b.w/2, y = b.y + b.h/2, color = cfg.arrow_color})
+		end
+
+	-- BEYOND_THE_SEA: Package pickup, boat, or hermit
+	elseif mission.current_quest == "beyond_the_sea" then
+		if not mission.has_package and mission.package_location then
+			add(targets, {x = mission.package_location.x, y = mission.package_location.y, color = cfg.arrow_color})
+		elseif mission.has_package and not mission.delivered_package and mission.hermit_location then
+			add(targets, {x = mission.hermit_location.x, y = mission.hermit_location.y, color = cfg.arrow_color})
+		end
+
+	-- MEGA_RACE: Point to next checkpoint
+	elseif mission.current_quest == "mega_race" then
+		if not mission.race_started and mission.race_checkpoints and #mission.race_checkpoints > 0 then
+			-- Point to start line
+			local start = mission.race_checkpoints[1]
+			add(targets, {x = start.x, y = start.y, color = cfg.arrow_color})
+		elseif mission.race_started and not mission.race_finished and mission.race_checkpoints then
+			-- Point to current checkpoint
+			local cp_idx = mission.player_checkpoint or 1
+			if cp_idx <= #mission.race_checkpoints then
+				local cp = mission.race_checkpoints[cp_idx]
+				add(targets, {x = cp.x, y = cp.y, color = cfg.arrow_color})
+			end
+		end
+
+	-- AUDITOR_KATHY: Point to Kathy and her foxes
+	elseif mission.current_quest == "auditor_kathy" then
+		if kathy and kathy.state ~= "dead" then
+			add(targets, {x = kathy.x, y = kathy.y, color = 12})  -- red for boss
+		end
+		-- Point to kathy's fox minions
+		if kathy_foxes then
+			for _, fox in ipairs(kathy_foxes) do
+				if fox.state ~= "dead" then
+					add(targets, {x = fox.x, y = fox.y, color = 12})  -- red for enemies
+				end
+			end
+		end
+
+	-- BOMB_DELIVERY: Point to current checkpoint
+	elseif mission.current_quest == "bomb_delivery" then
+		if not mission.bomb_picked_up and mission.bomb_delivery_checkpoints and #mission.bomb_delivery_checkpoints > 0 then
+			-- Point to bomb pickup
+			local pickup = mission.bomb_delivery_checkpoints[1]
+			add(targets, {x = pickup.x, y = pickup.y, color = cfg.arrow_color})
+		elseif mission.bomb_delivery_active and not mission.bomb_delivery_completed and not mission.bomb_delivery_failed then
+			-- Point to current checkpoint
+			local cp_idx = mission.bomb_delivery_current_cp
+			if mission.bomb_delivery_checkpoints and cp_idx and cp_idx <= #mission.bomb_delivery_checkpoints then
+				local cp = mission.bomb_delivery_checkpoints[cp_idx]
+				add(targets, {x = cp.x, y = cp.y, color = cfg.arrow_color})
+			end
+		end
+
+	-- ALIEN_INVASION: Point to mothership
+	elseif mission.current_quest == "alien_invasion" then
+		if mothership and mothership.state ~= "dead" then
+			add(targets, {x = mothership.x, y = mothership.y, color = 12})  -- red for boss
+		end
+	end
+
+	return targets
 end
 
 -- ============================================
