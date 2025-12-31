@@ -134,11 +134,21 @@ end
 
 -- Update Kathy AI and state
 function update_kathy()
-	if not kathy or kathy.state == "dead" then return end
+	if not kathy then return end
 	if not game or not game.player then return end
 
 	local cfg = KATHY_CONFIG
 	local now = time()
+	local despawn_delay = cfg.death_despawn_delay or 3  -- seconds before dead Kathy despawns
+
+	-- Handle dead state - check for despawn
+	if kathy.state == "dead" then
+		if kathy.death_time and now > kathy.death_time + despawn_delay then
+			kathy = nil  -- Despawn Kathy
+		end
+		return
+	end
+
 	local p = game.player
 
 	-- Calculate distance to player
@@ -205,6 +215,7 @@ function update_kathy()
 	-- Check if Kathy died
 	if kathy.health <= 0 and kathy.state ~= "dead" then
 		kathy.state = "dead"
+		kathy.death_time = now  -- Record death time for despawn timer
 		mission.kathy_killed = true
 		-- Show defeated message
 		show_kathy_defeated()
@@ -400,8 +411,12 @@ function update_kathy_foxes()
 	local now = time()
 	local p = game.player
 	local cfg = FOX_CONFIG
+	local despawn_delay = cfg.death_despawn_delay or 3  -- seconds before dead fox despawns
 
-	for _, fox in ipairs(kathy_foxes) do
+	-- Track dead foxes to remove
+	local to_remove = {}
+
+	for i, fox in ipairs(kathy_foxes) do
 		if fox.state ~= "dead" then
 			-- Calculate distance to player
 			local dx = p.x - fox.x
@@ -436,6 +451,7 @@ function update_kathy_foxes()
 			-- Check if fox died
 			if fox.health <= 0 and fox.state ~= "dead" then
 				fox.state = "dead"
+				fox.death_time = now  -- Record death time for despawn timer
 				mission.kathy_foxes_killed = mission.kathy_foxes_killed + 1
 				add_collision_effect(fox.x, fox.y, 0.5)
 				show_kathy_fox_defeated(fox.name)
@@ -444,7 +460,17 @@ function update_kathy_foxes()
 					check_quest_completion()
 				end
 			end
+		else
+			-- Fox is dead - check if it should despawn
+			if fox.death_time and now > fox.death_time + despawn_delay then
+				add(to_remove, i)
+			end
 		end
+	end
+
+	-- Remove despawned foxes (iterate backwards to preserve indices)
+	for i = #to_remove, 1, -1 do
+		deli(kathy_foxes, to_remove[i])
 	end
 end
 

@@ -12,6 +12,7 @@ menu = {
 	selected_option = 1,
 	has_save = false,
 	chicken_y_offset = 0,
+	chicken2_y_offset = 0,    -- second chicken has different bob rate
 	thruster_frame = 0,
 	thruster_timer = 0,
 	thruster_scale_pulse = 0,
@@ -19,6 +20,8 @@ menu = {
 	scroll_x = 0,
 	-- Starfield (generated once)
 	stars = nil,
+	-- Night mask for menu (created once)
+	night_mask = nil,
 }
 
 -- ============================================
@@ -45,6 +48,7 @@ end
 function draw_menu()
 	draw_menu_background()
 	draw_menu_chicken()
+	draw_menu_night_overlay()  -- Apply night shading with light masks
 	draw_menu_title()
 	draw_menu_prompt()
 end
@@ -101,17 +105,27 @@ function draw_menu_background()
 	end
 
 	-- Far building layer (slow parallax) - using actual building sprites
-	draw_menu_textured_buildings(menu.scroll_x * 0.3, street_y, cfg.far_building_types or {
-		{btype = "BRICK", w = 48, h = 60},
-		{btype = "GLASS_TOWER", w = 40, h = 90},
-		{btype = "CONCRETE", w = 56, h = 50},
-		{btype = "TECHNO_TOWER", w = 44, h = 100},
-		{btype = "LARGE_BRICK", w = 52, h = 55},
-		{btype = "BULKHEAD_TOWER", w = 48, h = 85},
+	-- Move down 10 pixels so buildings sit on street properly
+	draw_menu_textured_buildings(menu.scroll_x * 0.3, street_y + 10, cfg.far_building_types or {
+		{btype = "BRICK", w = 48, h = 160},
+		{btype = "GLASS_TOWER", w = 40, h = 240},
+		{btype = "CONCRETE", w = 56, h = 140},
+		{btype = "TECHNO_TOWER", w = 44, h = 260},
+		{btype = "LARGE_BRICK", w = 52, h = 150},
+		{btype = "BULKHEAD_TOWER", w = 48, h = 220},
 	}, 0.5)
 
+	-- Apply extra darken layer over far buildings (before drawing near buildings)
+	local coltab_sprite = get_spr(shadow_coltab_mode)
+	memmap(0x8000, coltab_sprite)
+	poke(0x550b, 0x3f)  -- enable color table
+	rectfill(0, 0, SCREEN_W - 1, street_y + 10, cfg.far_building_darken or 20)
+	unmap(coltab_sprite)
+	poke(0x550b, 0x00)
+
 	-- Near building layer (faster parallax) - using actual building sprites
-	draw_menu_textured_buildings(menu.scroll_x * 0.7, street_y, cfg.near_building_types or {
+	-- Move down 5 pixels so buildings sit on street properly
+	draw_menu_textured_buildings(menu.scroll_x * 0.7, street_y + 15, cfg.near_building_types or {
 		{btype = "GLASS_TOWER", w = 64, h = 120},
 		{btype = "TECHNO_TOWER", w = 56, h = 140},
 		{btype = "BULKHEAD_TOWER", w = 72, h = 100},
@@ -120,7 +134,7 @@ function draw_menu_background()
 	}, 0.8)
 
 	-- Street lamps using actual lamp sprite
-	draw_menu_street_lamps(menu.scroll_x, street_y)
+	draw_menu_street_lamps(menu.scroll_x, street_y +5)
 end
 
 -- Draw a parallax layer of buildings using actual wall textures
@@ -144,11 +158,8 @@ function draw_menu_textured_buildings(scroll, base_y, buildings, scale)
 				-- Draw building wall (tiled texture)
 				draw_menu_tiled_rect(x, base_y - bh, bw, bh, wall_sprite)
 
-				-- Draw roof at top
-				draw_menu_tiled_rect(x, base_y - bh - 8 * scale, bw, 8 * scale, roof_sprite)
-
-				-- Add some lit windows on top
-				draw_menu_building_windows(x, base_y - bh, bw, bh)
+				-- Draw roof at top (moved down 2 pixels to touch building)
+				draw_menu_tiled_rect(x, base_y - bh - 8 * scale + 2, bw, 8 * scale, roof_sprite)
 			end
 			x = x + b.w * scale + gap
 		end
@@ -167,25 +178,6 @@ function draw_menu_tiled_rect(rx, ry, rw, rh, sprite_id)
 			local th = min(tile_size, ry + rh - ty)
 			if tw > 0 and th > 0 then
 				sspr(sprite, 0, 0, tw, th, tx, ty, tw, th)
-			end
-		end
-	end
-end
-
--- Draw lit windows on building (static, no flickering)
-function draw_menu_building_windows(bx, by, bw, bh)
-	local window_color = MENU_CONFIG.window_color or 22  -- yellow
-	local win_size = 4
-	local win_spacing = 12
-	-- Use fixed seed based on building position for consistent window pattern
-	local seed = flr(bx * 17 + by * 31) % 100
-	for wy = by + 8, by + bh - 12, win_spacing do
-		for wx = bx + 6, bx + bw - 10, win_spacing do
-			-- Deterministic pattern based on position within building (not screen position)
-			local rel_x = flr(wx - bx)
-			local rel_y = flr(wy - by)
-			if ((rel_x * 7 + rel_y * 13 + seed) % 5) < 2 then
-				rectfill(flr(wx), flr(wy), flr(wx) + win_size, flr(wy) + win_size - 1, window_color)
 			end
 		end
 	end
@@ -210,18 +202,98 @@ function draw_menu_street_lamps(scroll, street_y)
 		-- Draw lamp sprite
 		sspr(lamp_sprite, 0, 0, lamp_w, lamp_h, lx - lamp_w / 2, lamp_y, lamp_w, lamp_h)
 		-- Add glow effect at lamp head
-		circfill(lx, lamp_y + 8, 12, cfg.lamp_glow_color or 22)
-		circfill(lx, lamp_y + 8, 7, cfg.lamp_bright_color or 33)
+		-- circfill(lx, lamp_y + 8, 12, cfg.lamp_glow_color or 22)
+		-- circfill(lx, lamp_y + 8, 7, cfg.lamp_bright_color or 33)
 	end
 end
 
+-- Night overlay using color tables with light masks
+-- Same technique as in-game night shading
+function draw_menu_night_overlay()
+	local cfg = MENU_CONFIG
+	local night_cfg = NIGHT_CONFIG
+
+	-- Create night mask if not exists
+	if not menu.night_mask then
+		menu.night_mask = userdata("u8", SCREEN_W, SCREEN_H)
+	end
+
+	local darken_color = night_cfg.darken_color or 16
+	local ambient_color = night_cfg.ambient_color or 31
+	local lamp_light_radius = cfg.lamp_light_radius or 35
+	local chicken_light_radius = cfg.chicken_light_radius or 50
+
+	-- First pass: draw ambient tint over everything
+	local coltab_sprite = get_spr(shadow_coltab_mode)
+	memmap(0x8000, coltab_sprite)
+	poke(0x550b, 0x3f)  -- enable color table
+	rectfill(0, 0, SCREEN_W - 1, SCREEN_H - 1, ambient_color)
+	unmap(coltab_sprite)
+	poke(0x550b, 0x00)
+
+	-- Second pass: draw darker areas with light holes
+	set_draw_target(menu.night_mask)
+
+	-- Fill with darken color
+	cls(darken_color)
+
+	-- Calculate symmetric chicken positions
+	local chicken_scale = cfg.chicken_scale or 2.0
+	local scaled_chicken_size = cfg.chicken_size * chicken_scale
+	local chicken_margin = scaled_chicken_size / 2 + 20  -- distance from edge
+	local chicken_offset_from_center = SCREEN_W / 2 - chicken_margin  -- symmetric offset
+
+	-- Punch out light for right chicken
+	local chicken_x = SCREEN_W / 2 + chicken_offset_from_center
+	local chicken_y = cfg.chicken_y + menu.chicken_y_offset + (cfg.chicken_offset_y or 0)
+	circfill(chicken_x, chicken_y, chicken_light_radius, 0)
+
+	-- Punch out light for left chicken (symmetric, independent bob)
+	local chicken2_x = SCREEN_W / 2 - chicken_offset_from_center
+	local chicken2_y = cfg.chicken_y + menu.chicken2_y_offset + (cfg.chicken2_y_offset or 10)
+	circfill(chicken2_x, chicken2_y, chicken_light_radius, 0)
+
+	-- Punch out lights for street lamps
+	local lamp_spacing = cfg.lamp_spacing or 150
+	local lamp_offset = menu.scroll_x % lamp_spacing
+	local street_y = flr(SCREEN_H * 0.7)
+	local lamp_h = 48
+	local lamp_y = street_y - lamp_h + 12
+
+	for x = -lamp_spacing, SCREEN_W + lamp_spacing, lamp_spacing do
+		local lx = x - lamp_offset
+		-- Light emanates from lamp head
+		circfill(lx, lamp_y + 8, lamp_light_radius, 0)
+	end
+
+	-- Reset draw target to screen
+	set_draw_target()
+
+	-- Apply color table and draw the mask
+	coltab_sprite = get_spr(shadow_coltab_mode)
+	memmap(0x8000, coltab_sprite)
+	poke(0x550b, 0x3f)  -- enable color table
+
+	-- Ensure color 0 is transparent when drawing sprite
+	palt(0, true)
+
+	-- Draw mask as sprite (color 0 is transparent, darken color gets darkened)
+	spr(menu.night_mask, 0, 0)
+
+	-- Reset color table and transparency
+	palt(0, true)
+	unmap(coltab_sprite)
+	poke(0x550b, 0x00)
+end
 
 function draw_menu_chicken()
 	local cfg = MENU_CONFIG
 	local now = time()
 
-	-- Update bobbing
+	-- Update bobbing (main chicken)
 	menu.chicken_y_offset = sin(now * cfg.bob_speed) * cfg.bob_amount
+	-- Update bobbing for second chicken (different rate - 0.7x speed for variety)
+	menu.chicken2_y_offset = sin(now * cfg.bob_speed * 0.7) * cfg.bob_amount
 
 	-- Update thruster animation
 	if now >= menu.thruster_timer + cfg.thruster_animation_speed then
@@ -232,8 +304,14 @@ function draw_menu_chicken()
 	-- Update pulsation (oscillates between 0.8 and 1.0)
 	menu.thruster_scale_pulse = sin(now * cfg.thruster_pulse_speed) * cfg.thruster_pulse_amount
 
-	-- Calculate chicken position (centered horizontally with offset)
-	local chicken_x = SCREEN_W / 2 + (cfg.chicken_offset_x or 0)
+	-- Calculate symmetric chicken positions
+	local chicken_scale = cfg.chicken_scale or 2.0
+	local scaled_chicken_size = cfg.chicken_size * chicken_scale
+	local chicken_margin = scaled_chicken_size / 2 + 20  -- distance from edge
+	local chicken_offset_from_center = SCREEN_W / 2 - chicken_margin  -- symmetric offset
+
+	-- Right chicken position
+	local chicken_x = SCREEN_W / 2 + chicken_offset_from_center
 	local chicken_y = cfg.chicken_y + menu.chicken_y_offset + (cfg.chicken_offset_y or 0)
 
 	-- Get sprites
@@ -241,29 +319,41 @@ function draw_menu_chicken()
 	local chicken_spr = get_spr(cfg.chicken_sprite)
 
 	-- Calculate thruster scale with pulsation (range 0.8 to 1.0)
-	local chicken_scale = cfg.chicken_scale or 2.0
 	local thruster_scale_x = cfg.thruster_base_scale_x * chicken_scale
 	local thruster_scale_y = (cfg.thruster_base_scale_y + menu.thruster_scale_pulse) * chicken_scale
 
 	-- RENDER ORDER: Thrusters FIRST, then chicken on top
 
-	-- Thruster position (below scaled chicken) with local offset
-	local scaled_chicken_size = cfg.chicken_size * chicken_scale
+	-- Right thruster position (below scaled chicken) with local offset
 	local thruster_cx = chicken_x + (cfg.thruster_offset_x or 0)
 	local thruster_cy = chicken_y + scaled_chicken_size / 2 - 4 * chicken_scale + (cfg.thruster_offset_y or 0)
 
-	-- Draw thruster using rspr (scaled, flipped vertically)
-	-- rspr(sprite, cx, cy, sx, sy, rot, flip_x, pivot_x, pivot_y)
-	-- Since rspr doesn't have flip_y, we use rotation of 0.5 (180 degrees) and flip_x
+	-- Draw right thruster using rspr (scaled, flipped vertically)
 	if cfg.thruster_flip_y then
-		-- Flip by rotating 180 and flip_x to get vertical flip effect
 		rspr(thruster_sprite_id, thruster_cx, thruster_cy, thruster_scale_x, thruster_scale_y, 0.5, true)
 	else
 		rspr(thruster_sprite_id, thruster_cx, thruster_cy, thruster_scale_x, thruster_scale_y, 0, false)
 	end
 
-	-- Chicken spaceship using rspr for proper quad scaling
+	-- Right chicken spaceship using rspr for proper quad scaling
 	rspr(cfg.chicken_sprite, chicken_x, chicken_y, chicken_scale, chicken_scale, 0, false)
+
+	-- === LEFT CHICKEN (mirrored, symmetric from center) ===
+	local chicken2_x = SCREEN_W / 2 - chicken_offset_from_center  -- symmetric left position
+	local chicken2_y = cfg.chicken_y + menu.chicken2_y_offset + (cfg.chicken2_y_offset or 10)  -- independent bob
+
+	-- Left thruster (mirrored - flip the x offset for mirror effect)
+	local thruster2_cx = chicken2_x - (cfg.thruster_offset_x or 0)  -- mirror x offset
+	local thruster2_cy = chicken2_y + scaled_chicken_size / 2 - 4 * chicken_scale + (cfg.thruster_offset_y or 0)
+
+	if cfg.thruster_flip_y then
+		rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0.5, true)
+	else
+		rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0, false)
+	end
+
+	-- Second chicken spaceship (mirrored with flip_x = true)
+	rspr(cfg.chicken_sprite, chicken2_x, chicken2_y, chicken_scale, chicken_scale, 0, true)
 end
 
 function draw_menu_title()
@@ -483,6 +573,16 @@ function build_save_data()
 
 		-- Game time
 		game_time_hours = game_time_hours or 8,
+
+		-- Lifetime stats
+		stats = {
+			cars_wrecked = game_stats.cars_wrecked or 0,
+			boats_wrecked = game_stats.boats_wrecked or 0,
+			flirts_failed = game_stats.flirts_failed or 0,
+			times_died = game_stats.times_died or 0,
+			npcs_met = game_stats.npcs_met or 0,
+			bullets_fired = game_stats.bullets_fired or 0,
+		},
 	}
 end
 
@@ -547,6 +647,16 @@ function load_game()
 
 	-- Restore game time
 	game_time_hours = data.game_time_hours or 8
+
+	-- Restore lifetime stats
+	if data.stats then
+		game_stats.cars_wrecked = data.stats.cars_wrecked or 0
+		game_stats.boats_wrecked = data.stats.boats_wrecked or 0
+		game_stats.flirts_failed = data.stats.flirts_failed or 0
+		game_stats.times_died = data.stats.times_died or 0
+		game_stats.npcs_met = data.stats.npcs_met or 0
+		game_stats.bullets_fired = data.stats.bullets_fired or 0
+	end
 
 	-- Store companions to restore after world init
 	menu.saved_companions = data.companions or {}
@@ -629,6 +739,14 @@ function reset_game_state()
 
 	-- Reset game time
 	game_time_hours = DAY_NIGHT_CYCLE_CONFIG.start_hour
+
+	-- Reset lifetime stats
+	game_stats.cars_wrecked = 0
+	game_stats.boats_wrecked = 0
+	game_stats.flirts_failed = 0
+	game_stats.times_died = 0
+	game_stats.npcs_met = 0
+	game_stats.bullets_fired = 0
 
 	printh("Game state reset for new game")
 end

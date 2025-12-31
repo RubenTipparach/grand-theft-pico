@@ -419,6 +419,11 @@ function update_npc(npc, player_x, player_y)
 				-- Track total fans met
 				mission.total_fans_met = mission.total_fans_met + 1
 
+				-- Track lifetime NPCs met stat
+				if game_stats then
+					game_stats.npcs_met = (game_stats.npcs_met or 0) + 1
+				end
+
 				-- 5th person during intro quest becomes the intro NPC
 				if is_fifth_person then
 					npc.is_intro_npc = true

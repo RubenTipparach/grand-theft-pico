@@ -40,6 +40,11 @@ function create_alien_minion(x, y)
 
 		-- Spawn time
 		spawn_time = time(),
+
+		-- Surround behavior - each minion gets a unique orbit angle
+		orbit_angle = rnd(1),  -- random starting angle around player
+		orbit_wobble = rnd(1),  -- phase offset for wobble
+		hover_offset = 0,  -- vertical hover animation
 	}
 end
 
@@ -122,25 +127,45 @@ function update_single_minion(m)
 	-- Update facing direction
 	m.facing_right = dx > 0
 
+	-- Update hover offset for floating animation
+	m.hover_offset = sin(now * cfg.hover_speed + m.orbit_wobble) * cfg.hover_amplitude
+
 	-- State machine
 	if m.attacking then
-		-- Continue attack animation
+		-- Continue attack animation (stay in place while attacking)
 		update_minion_attack(m)
-	elseif dist < cfg.target_distance then
-		-- In attack range
-		m.state = "attacking"
-		if now >= m.last_attack_time + cfg.attack_cooldown then
+	elseif dist < cfg.aggro_distance then
+		-- Within aggro range - orbit around player
+		m.state = "chasing"
+
+		-- Update orbit angle (each minion orbits at their own pace)
+		m.orbit_angle = m.orbit_angle + cfg.orbit_speed * dt
+
+		-- Calculate target orbit position around player
+		local wobble = sin(now * cfg.wobble_speed + m.orbit_wobble * 6.28) * cfg.wobble_amplitude
+		local target_x = game.player.x + cos(m.orbit_angle) * (cfg.orbit_radius + wobble)
+		local target_y = game.player.y + sin(m.orbit_angle) * (cfg.orbit_radius + wobble)
+
+		-- Move towards target orbit position
+		local target_dx = target_x - m.x
+		local target_dy = target_y - m.y
+		local target_dist = sqrt(target_dx * target_dx + target_dy * target_dy)
+
+		if target_dist > 2 then
+			local move_speed = cfg.chase_speed * dt
+			local norm = target_dist > 0 and target_dist or 1
+			m.x = m.x + (target_dx / norm) * move_speed
+			m.y = m.y + (target_dy / norm) * move_speed
+		end
+
+		-- Check if in attack range and ready to attack
+		if dist < cfg.target_distance and now >= m.last_attack_time + cfg.attack_cooldown then
 			start_minion_attack(m)
 		end
-	elseif dist < cfg.aggro_distance then
-		-- Chase player
-		m.state = "chasing"
-		local move_dist = cfg.chase_speed * dt
-		local norm = dist > 0 and dist or 1
-		m.x = m.x + (dx / norm) * move_dist
-		m.y = m.y + (dy / norm) * move_dist
 	else
 		m.state = "idle"
+		-- Drift slowly when idle
+		m.orbit_angle = m.orbit_angle + cfg.orbit_speed * 0.3 * dt
 	end
 
 	-- Update animation
@@ -228,6 +253,9 @@ function update_alien_minion_bullets()
 		if dist < 12 then  -- player collision radius
 			damage_player(b.damage)
 			add_collision_effect(b.x, b.y, 0.2)
+			deli(alien_minion_bullets, i)
+		-- Check collision with buildings (player can hide behind them)
+		elseif point_in_building and point_in_building(b.x, b.y) then
 			deli(alien_minion_bullets, i)
 		-- Remove if too old (3 seconds) or off screen
 		elseif now - b.spawn_time > 3 then
@@ -368,7 +396,8 @@ end
 
 function draw_alien_minion(m, sx, sy)
 	local cfg = ALIEN_MINION_CONFIG
-	local now = time()
+
+	-- Shadow is now drawn in building.lua shadow pass (with color table for transparency)
 
 	local sprite_id = get_minion_sprite(m)
 	local sprite = get_spr(sprite_id)
@@ -377,8 +406,10 @@ function draw_alien_minion(m, sx, sy)
 	local scale = cfg.sprite_scale
 	local dst_size = src_size * scale
 
+	-- Apply hover offset to draw position (float above ground)
+	local hover = m.hover_offset or 0
 	local draw_x = sx - dst_size / 2
-	local draw_y = sy - dst_size + 4
+	local draw_y = sy - dst_size + 4 + hover
 
 	local flip_x = not m.facing_right
 

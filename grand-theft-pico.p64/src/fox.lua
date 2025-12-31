@@ -200,8 +200,12 @@ function update_foxes()
 	local now = time()
 	local p = game.player
 	local cfg = FOX_CONFIG
+	local despawn_delay = cfg.death_despawn_delay or 3  -- seconds before dead fox despawns
 
-	for _, fox in ipairs(foxes) do
+	-- Track dead foxes to remove
+	local to_remove = {}
+
+	for i, fox in ipairs(foxes) do
 		if fox.state ~= "dead" then
 			-- Calculate distance to player
 			local dx = p.x - fox.x
@@ -239,6 +243,7 @@ function update_foxes()
 			-- Check if fox died
 			if fox.health <= 0 and fox.state ~= "dead" then
 				fox.state = "dead"
+				fox.death_time = now  -- Record when fox died for despawn timer
 				-- Track kill for quest
 				mission.foxes_killed = mission.foxes_killed + 1
 				-- Small explosion effect
@@ -250,7 +255,17 @@ function update_foxes()
 					check_quest_completion()
 				end
 			end
+		else
+			-- Fox is dead - check if it should despawn
+			if fox.death_time and now > fox.death_time + despawn_delay then
+				add(to_remove, i)
+			end
 		end
+	end
+
+	-- Remove despawned foxes (iterate backwards to preserve indices)
+	for i = #to_remove, 1, -1 do
+		deli(foxes, to_remove[i])
 	end
 end
 

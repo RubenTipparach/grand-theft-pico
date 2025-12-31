@@ -98,11 +98,21 @@ end
 
 -- Update cactus AI and state
 function update_cactus()
-	if not cactus or cactus.state == "dead" then return end
+	if not cactus then return end
 	if not game or not game.player then return end
 
 	local cfg = CACTUS_CONFIG
 	local now = time()
+	local despawn_delay = cfg.death_despawn_delay or 3  -- seconds before dead cactus despawns
+
+	-- Handle dead state - check for despawn
+	if cactus.state == "dead" then
+		if cactus.death_time and now > cactus.death_time + despawn_delay then
+			cactus = nil  -- Despawn the cactus
+		end
+		return
+	end
+
 	local p = game.player
 
 	-- Calculate distance to player
@@ -163,6 +173,7 @@ function update_cactus()
 	-- Check if cactus died
 	if cactus.health <= 0 and cactus.state ~= "dead" then
 		cactus.state = "dead"
+		cactus.death_time = now  -- Record death time for despawn timer
 		mission.cactus_killed = true
 		-- Show defeated message
 		show_cactus_defeated()

@@ -116,10 +116,11 @@ function check_beam_hits(start_x, start_y, dx, dy, length, damage, owner)
 				hit_dealers[kathy_fox] = true
 			end
 
-			-- Check mothership
+			-- Check mothership (use visual position with hover_offset)
 			if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+				local visual_y = mothership.y + MOTHERSHIP_CONFIG.hover_offset
 				local mdx = check_x - mothership.x
-				local mdy = check_y - mothership.y
+				local mdy = check_y - visual_y
 				local mdist = sqrt(mdx * mdx + mdy * mdy)
 				if mdist < MOTHERSHIP_CONFIG.collision_radius then
 					damage_mothership(damage)
@@ -300,6 +301,12 @@ function create_projectile(x, y, dir, weapon_key, owner)
 	}
 
 	add(projectiles, proj)
+
+	-- Track bullet fired stat (only for player projectiles)
+	if proj.owner == "player" and game_stats then
+		game_stats.bullets_fired = (game_stats.bullets_fired or 0) + 1
+	end
+
 	return proj
 end
 
@@ -327,6 +334,9 @@ function update_projectiles()
 		-- Check collisions FIRST (before off-screen check)
 		local hit = check_projectile_collision(proj)
 		if hit then
+			add(to_remove, i)
+		-- Check building collision (bullets blocked by buildings)
+		elseif point_in_building and point_in_building(proj.x, proj.y) then
 			add(to_remove, i)
 		else
 			-- Check if off screen (despawn) - only if no hit
@@ -432,9 +442,12 @@ function check_projectile_collision(proj)
 		end
 
 		-- Check collision with mothership
+		-- Note: hover_offset is negative (e.g. -80), so visual_y = world_y + hover_offset
+		-- We need to check collision against the VISUAL position, not world position
 		if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+			local visual_y = mothership.y + MOTHERSHIP_CONFIG.hover_offset
 			local mdx = proj.x - mothership.x
-			local mdy = proj.y - mothership.y
+			local mdy = proj.y - visual_y
 			local mdist = sqrt(mdx * mdx + mdy * mdy)
 			if mdist < MOTHERSHIP_CONFIG.collision_radius then
 				damage_mothership(proj.damage)
@@ -804,10 +817,11 @@ function check_melee_hit(weapon)
 		return true
 	end
 
-	-- Check mothership
+	-- Check mothership (use visual position with hover_offset)
 	if mothership and mothership.state ~= "dead" and mothership.state ~= "dying" then
+		local visual_y = mothership.y + MOTHERSHIP_CONFIG.hover_offset
 		local mdx = hit_x - mothership.x
-		local mdy = hit_y - mothership.y
+		local mdy = hit_y - visual_y
 		local mdist = sqrt(mdx * mdx + mdy * mdy)
 		if mdist < MOTHERSHIP_CONFIG.collision_radius + weapon.range then
 			damage_mothership(weapon.damage)

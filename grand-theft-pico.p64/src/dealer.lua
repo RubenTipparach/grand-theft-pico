@@ -559,13 +559,13 @@ function update_shop()
 	local items = get_shop_items()
 	local item = items[shop.selected]
 
-	-- Navigation
-	if btnp(2) then  -- Up
+	-- Navigation (gamepad buttons OR keyboard arrows using single-press detection)
+	if input_utils.key_pressed("up") or input_utils.key_pressed("w") then  -- Up
 		shop.selected = shop.selected - 1
 		if shop.selected < 1 then shop.selected = #items end
 		shop.ammo_quantity = 1
 	end
-	if btnp(3) then  -- Down
+	if input_utils.key_pressed("down") or input_utils.key_pressed("s") then  -- Down
 		shop.selected = shop.selected + 1
 		if shop.selected > #items then shop.selected = 1 end
 		shop.ammo_quantity = 1
@@ -573,23 +573,23 @@ function update_shop()
 
 	-- Ammo quantity (for owned ranged weapons)
 	if item and item.owned and item.type == "ranged" then
-		if btnp(0) then  -- Left
+		if input_utils.key_pressed("left") or input_utils.key_pressed("a") then  -- Left
 			shop.ammo_quantity = max(1, shop.ammo_quantity - 1)
 		end
-		if btnp(1) then  -- Right
+		if input_utils.key_pressed("right") or input_utils.key_pressed("d") then  -- Right
 			shop.ammo_quantity = shop.ammo_quantity + 1
 		end
 	end
 
-	-- Purchase
-	if btnp(4) then  -- O/Z button
+	-- Purchase (Z key for single-press)
+	if input_utils.key_pressed("z") then
 		if item then
 			try_purchase(item)
 		end
 	end
 
-	-- Close shop (with cooldown to prevent same E press from closing)
-	if btnp(5) or (keyp("e") and time() > (shop.open_time or 0) + 0.1) then  -- X button or E key
+	-- Close shop (E or X key, with cooldown to prevent same E press from closing)
+	if input_utils.key_pressed("x") or (input_utils.key_pressed("e") and time() > (shop.open_time or 0) + 0.1) then
 		close_shop()
 	end
 

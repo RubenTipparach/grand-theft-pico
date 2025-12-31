@@ -1334,6 +1334,14 @@ function update_vehicle_state(vehicle, dt)
 		-- Track car wreck for car_wrecker quest (only count non-player vehicles)
 		if not vehicle.is_player_vehicle then
 			track_car_wreck()
+			-- Track lifetime stats
+			if game_stats then
+				if vehicle.vtype and vehicle.vtype.water_only then
+					game_stats.boats_wrecked = (game_stats.boats_wrecked or 0) + 1
+				else
+					game_stats.cars_wrecked = (game_stats.cars_wrecked or 0) + 1
+				end
+			end
 		end
 
 		-- If player was in this vehicle, exit and take damage

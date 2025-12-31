@@ -47,10 +47,13 @@ function would_collide(new_x, new_y)
 	local col_w = PLAYER_COLLISION.w
 	local col_h = PLAYER_COLLISION.h
 
-	-- Check against all buildings
+	-- Check against all buildings (skip collapsed ones)
 	for _, b in ipairs(buildings) do
-		if check_building_collision(col_x, col_y, col_w, col_h, b) then
-			return true
+		-- Skip collapsed buildings (no collision)
+		if not b.collapsing and not b.collapsed then
+			if check_building_collision(col_x, col_y, col_w, col_h, b) then
+				return true
+			end
 		end
 	end
 
@@ -129,4 +132,22 @@ function move_with_collision(old_x, old_y, dx, dy, speed)
 
 	-- Can't move at all, stay in place (but use pushed-out position)
 	return start_x, start_y
+end
+
+-- Check if a point is inside any building (for bullet collision)
+-- Skips collapsed/destroyed buildings
+function point_in_building(x, y)
+	for _, b in ipairs(buildings) do
+		-- Skip collapsed buildings (no collision)
+		if b.collapsing or b.collapsed then
+			-- Skip this building
+		else
+			-- Simple AABB check against building footprint
+			if x >= b.x and x <= b.x + b.w and
+			   y >= b.y and y <= b.y + b.h then
+				return true
+			end
+		end
+	end
+	return false
 end

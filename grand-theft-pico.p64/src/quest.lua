@@ -754,6 +754,89 @@ function start_quest(quest_id)
 	save_game()
 end
 
+-- Get the previous talk_to_companion quest for the current quest
+-- Returns the talk_to_companion quest that precedes the current main quest
+-- For early quests (intro through find_love), returns "find_love" as checkpoint
+-- For talk_to_companion quests themselves, returns that same quest
+function get_previous_checkpoint_quest()
+	local current = mission.current_quest
+	if not current then return "find_love" end
+
+	-- If already on a talk_to_companion quest, just restart it
+	if string.find(current, "talk_to_companion") then
+		return current
+	end
+
+	-- Map main quests to their preceding talk_to_companion checkpoint
+	local checkpoint_map = {
+		-- Early quests don't have talk_to_companion checkpoints
+		intro = "intro",  -- restart from beginning
+		protect_city = "intro",
+		make_friends = "intro",
+		find_love = "intro",
+		-- Main quests with checkpoints
+		fix_home = "talk_to_companion_1",
+		a_prick = "talk_to_companion_2",
+		beyond_the_sea = "talk_to_companion_3",
+		mega_race = "talk_to_companion_4",
+		car_wrecker = "talk_to_companion_5",
+		auditor_kathy = "talk_to_companion_6",
+		speed_dating = "talk_to_companion_7",
+		bomb_delivery = "talk_to_companion_8",
+		alien_invasion = "talk_to_companion_9",
+	}
+
+	return checkpoint_map[current] or "find_love"
+end
+
+-- Reset quest to previous checkpoint on death
+-- Cleans up any active quest state and restarts from checkpoint
+function reset_quest_on_death()
+	local checkpoint = get_previous_checkpoint_quest()
+	local current = mission.current_quest
+
+	printh("[DEATH] Resetting quest from '" .. tostring(current) .. "' to checkpoint '" .. checkpoint .. "'")
+
+	-- Clean up active quest state based on current quest
+	if current == "protect_city" then
+		-- Clean up foxes
+		if cleanup_foxes then cleanup_foxes() end
+	elseif current == "a_prick" then
+		-- Clean up cactus
+		if cleanup_cactus then cleanup_cactus() end
+	elseif current == "mega_race" then
+		-- Clean up race
+		if cleanup_race then cleanup_race() end
+	elseif current == "car_wrecker" then
+		-- Clean up demolition derby
+		if cleanup_derby then cleanup_derby() end
+	elseif current == "auditor_kathy" then
+		-- Clean up Kathy boss
+		if cleanup_kathy then cleanup_kathy() end
+	elseif current == "speed_dating" then
+		-- Reset speed dating state
+		mission.speed_dating_active = false
+		mission.speed_dating_completed = false
+		mission.speed_dating_failed = false
+	elseif current == "bomb_delivery" then
+		-- Reset bomb delivery state
+		mission.bomb_delivery_active = false
+		mission.bomb_delivery_completed = false
+		mission.bomb_delivery_failed = false
+		mission.bomb_picked_up = false
+		mission.bomb_car = nil
+	elseif current == "alien_invasion" then
+		-- Clean up mothership and alien minions
+		if cleanup_mothership then cleanup_mothership() end
+		if cleanup_alien_minions then cleanup_alien_minions() end
+	end
+
+	-- Start the checkpoint quest
+	start_quest(checkpoint)
+
+	printh("[DEATH] Quest reset complete, now on: " .. tostring(mission.current_quest))
+end
+
 -- Advance to next quest in chain
 function advance_to_next_quest()
 	local next_quest = nil

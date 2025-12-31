@@ -391,6 +391,23 @@ profile("cull")
 			local sh = 4   -- shadow height
 			local sy_off = 8  -- offset from center to bottom of sprite
 			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "alien_minion" then
+			-- Alien minion shadow (at feet, scaled by hover height)
+			local m = obj.data
+			local cfg = ALIEN_MINION_CONFIG
+			-- Scale shadow based on hover height (higher = smaller shadow)
+			local shadow_scale = 1 - (m.hover_offset or 0) / 20
+			shadow_scale = max(0.5, min(1.5, shadow_scale))
+			local sr = cfg.shadow_radius * shadow_scale
+			local sh = cfg.shadow_height * shadow_scale
+			local sy_off = 4  -- offset below sprite center
+			ovalfill(obj.sx - sr, obj.sy + sy_off, obj.sx + sr, obj.sy + sy_off + sh, PLAYER_CONFIG.shadow_color)
+		elseif obj.type == "mothership" then
+			-- Mothership shadow (large oval at ground level)
+			local cfg = MOTHERSHIP_CONFIG
+			local sy_off = 40  -- offset to ground level (mothership hovers high)
+			ovalfill(obj.sx - cfg.shadow_radius_x, obj.sy + sy_off - cfg.shadow_radius_y,
+			         obj.sx + cfg.shadow_radius_x, obj.sy + sy_off + cfg.shadow_radius_y, PLAYER_CONFIG.shadow_color)
 		-- bomb_target is now a circle, no shadow needed
 		end
 		-- No shadow for vehicles (doesn't look great)

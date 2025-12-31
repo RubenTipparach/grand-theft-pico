@@ -140,6 +140,16 @@ game = {
 	}
 }
 
+-- Game stats tracking (lifetime stats for end-game display)
+game_stats = {
+	cars_wrecked = 0,
+	boats_wrecked = 0,
+	flirts_failed = 0,
+	times_died = 0,
+	npcs_met = 0,
+	bullets_fired = 0,
+}
+
 -- List of NPCs that are fans/lovers (by NPC reference)
 -- Fans: NPCs who recognized the player, won't flee, show heart
 -- Lovers: Fans who filled love meter, always show heart, can heal
@@ -252,6 +262,12 @@ function handle_player_death()
 	death_timer = time()
 	death_fade = 0
 	death_respawned = false  -- reset respawn flag for new death
+
+	-- Track death stat
+	if game_stats then
+		game_stats.times_died = (game_stats.times_died or 0) + 1
+	end
+
 	printh("[DEATH] player_dead=true, death_sequence_active=true, death_timer=" .. death_timer)
 
 	-- Lose half money
@@ -333,6 +349,24 @@ function update_death()
 			camera_lead_x = 0  -- reset camera lead
 			camera_lead_y = 0
 			player_dead = false  -- show normal sprite during fade-in (but sequence still active)
+
+			-- Clear all enemies and bullets immediately on respawn
+			-- Mothership cleanup
+			mothership = nil
+			mothership_bullets = {}
+			mothership_spawned = false
+			mothership_spiral_active = false
+			mothership_buildings_destroyed = false
+			mothership_dying = false
+			mothership_defeated_message_active = false
+			epilogue_active = false  -- Also reset epilogue on death
+			-- Alien minion cleanup
+			alien_minions = {}
+			alien_minion_bullets = {}
+			last_minion_spawn_time = 0
+
+			-- Reset quest to previous checkpoint (talk_to_companion)
+			reset_quest_on_death()
 			printh("[RESPAWN] Done: pos=(0,0), health=" .. game.player.health .. ", player_dead=false, sequence still active")
 		end
 	else
@@ -1257,6 +1291,40 @@ function draw_night_mode(player_sx, player_sy)
 		end
 	end
 
+	-- Kathy (auditor boss) light
+	if kathy and kathy.state ~= "dead" then
+		local sx, sy = world_to_screen(kathy.x, kathy.y)
+		if sx > -enemy_radius and sx < SCREEN_W + enemy_radius and
+		   sy > -enemy_radius and sy < SCREEN_H + enemy_radius then
+			circfill(sx, sy, enemy_radius + 5, 0)  -- slightly larger for boss
+		end
+	end
+
+	-- Alien minion lights
+	if alien_minions then
+		for _, minion in ipairs(alien_minions) do
+			if minion.state ~= "dead" then
+				local sx, sy = world_to_screen(minion.x, minion.y)
+				if sx > -enemy_radius and sx < SCREEN_W + enemy_radius and
+				   sy > -enemy_radius and sy < SCREEN_H + enemy_radius then
+					circfill(sx, sy, enemy_radius, 0)
+				end
+			end
+		end
+	end
+
+	-- Mothership light (larger glow for big boss, follows visual position)
+	if mothership and mothership.state ~= "dead" then
+		local sx, sy = world_to_screen(mothership.x, mothership.y)
+		-- Apply hover offset so light follows the visual sprite position
+		sy = sy + MOTHERSHIP_CONFIG.hover_offset
+		local boss_radius = enemy_radius + 20  -- much larger for mothership
+		if sx > -boss_radius and sx < SCREEN_W + boss_radius and
+		   sy > -boss_radius and sy < SCREEN_H + boss_radius then
+			circfill(sx, sy, boss_radius, 0)
+		end
+	end
+
 	-- Arms dealer lights
 	local dealer_radius = NIGHT_CONFIG.dealer_light_radius
 	if arms_dealers then
@@ -1457,6 +1525,9 @@ function _update()
 	-- Update Mothership boss and alien minions (if quest active)
 	update_mothership()
 	update_alien_minions()
+
+	-- Update epilogue input (handles skip button presses)
+	update_epilogue()
 
 	-- If player is in a vehicle, sync player position to vehicle
 	if player_vehicle then
@@ -2323,6 +2394,11 @@ function select_dialog_option()
 			local fan_id = fan_data.id or "?"
 			printh("Flirt failed! fan_id=" .. fan_id .. " failures=" .. fan_data.failures .. " max=" .. PLAYER_CONFIG.max_failures)
 
+			-- Track flirt failed stat
+			if game_stats then
+				game_stats.flirts_failed = (game_stats.flirts_failed or 0) + 1
+			end
+
 			-- Check if they've had enough (3 strikes)
 			if fan_data.failures >= PLAYER_CONFIG.max_failures then
 				printh("Fan ID=" .. fan_id .. " gave up! 3 strikes - removing and fleeing immediately")
@@ -2677,7 +2753,7 @@ function _draw()
 	end
 
 	-- Playing state - draw game
-	cls(1)  -- dark background
+	cls(0)  -- dark background
 
 	-- Draw ground tiles (grass and dirt roads)
 	profile("ground")

@@ -345,10 +345,10 @@ PLAYER_CONFIG = {
 	prompt_color = 21,           -- color for interaction prompts (E: FLIRT etc)
 
 	-- Money system
-	starting_money = 20000,        -- player starts with $100
+	starting_money = 500,        -- player starts with $100
 	money_color = 33,            -- green for money text
 	money_display_x = 8,
-	money_display_y = 60,        -- below popularity bar
+	money_display_y = 64,        -- below popularity bar
 
 	-- Dialog/Flirting
 	interact_key = "e",          -- key to talk/interact
@@ -1077,8 +1077,8 @@ NIGHT_CONFIG = {
 	ambient_color = 31,          -- color index for ambient tint (even in lit areas)
 	transition_speed = 16,        -- frames per transition step
 	-- Transition sequences (darken_color values)
-	day_to_night = { 33, 30, 20, 25, 11 },  -- day gets darker
-	night_to_day = { 11, 25, 20, 30, 33 },  -- night gets lighter
+	day_to_night = { 33, 30, 20, 25, 15 },  -- day gets darker
+	night_to_day = { 15, 25, 20, 30, 33 },  -- night gets lighter
 	-- Lamp sprite (visual representation of street lights)
 	lamp_sprite = 192,           -- sprite ID for lamp
 	lamp_width = 24,             -- lamp sprite width
@@ -1520,7 +1520,7 @@ MOTHERSHIP_CONFIG = {
 	health = 1200,
 
 	-- Movement (slow drift around city center)
-	drift_speed = 25,
+	drift_speed = 5,  -- slowed for easier targeting
 	drift_radius = 100,       -- circular drift radius
 	hover_offset = -80,       -- visual height above ground (negative = higher)
 
@@ -1560,6 +1560,11 @@ MOTHERSHIP_CONFIG = {
 	-- Victory
 	death_explosion_delay = 3.0,    -- seconds before final explosion
 	victory_display_delay = 5.0,    -- seconds before showing options
+
+	-- Shadow (ground shadow when hovering)
+	shadow_color = 1,               -- dark shadow color
+	shadow_radius_x = 25,           -- shadow ellipse x radius
+	shadow_radius_y = 8,            -- shadow ellipse y radius
 }
 
 -- ============================================
@@ -1571,10 +1576,18 @@ ALIEN_MINION_CONFIG = {
 	target_distance = 80,           -- attack range
 	aggro_distance = 300,
 
+	-- Surround/orbit behavior
+	orbit_radius = 100,             -- ideal distance to orbit player
+	orbit_speed = 0.15,             -- how fast they orbit (turns per second)
+	hover_amplitude = 8,            -- vertical bob amplitude
+	hover_speed = 2.5,              -- hover bob speed
+	wobble_amplitude = 15,          -- horizontal wobble during orbit
+	wobble_speed = 1.8,             -- wobble speed
+
 	-- Attack pattern (N, S, E, W spread)
 	attack_cooldown = 3.0,          -- seconds between attacks
 	attack_pulses = 10,             -- bullets fired per attack
-	pulse_interval = 0.1,           -- seconds between pulses
+	pulse_interval = 0.25,           -- seconds between pulses
 	bullet_speed = 120,
 	bullet_damage = 10,
 	bullet_sprite = 114,            -- use existing laser bullet
@@ -1606,6 +1619,11 @@ ALIEN_MINION_CONFIG = {
 
 	-- Spawn
 	spawn_radius = 80,              -- spawn distance from mothership
+
+	-- Shadow (ground shadow when hovering)
+	shadow_color = 1,               -- dark shadow color
+	shadow_radius = 10,             -- base shadow radius
+	shadow_height = 3,              -- shadow ellipse height
 }
 
 -- ============================================
@@ -1705,6 +1723,8 @@ MENU_CONFIG = {
 	lamp_spacing = 150,             -- distance between lamps
 	lamp_glow_color = 22,           -- yellow glow
 	lamp_bright_color = 33,         -- white center
+	lamp_light_radius = 20,         -- light mask radius for street lamps
+	chicken_light_radius = 50,      -- light mask radius for chicken spaceship
 
 	-- Text box (for legibility)
 	text_box_color = 1,             -- black background
