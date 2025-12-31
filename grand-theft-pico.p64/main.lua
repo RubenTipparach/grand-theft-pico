@@ -1433,7 +1433,7 @@ function init_game_world()
 	-- Spawn arms dealers
 	spawn_arms_dealers()
 
-	-- Debug weapons: give player all weapons with ammo
+	-- Debug weapons: give player all weapons with ammo and max armor
 	if DEBUG_CONFIG.debug_weapons then
 		local p = game.player
 		p.weapons = {}
@@ -1446,7 +1446,8 @@ function init_game_world()
 			end
 		end
 		p.equipped_index = 1  -- equip first weapon
-		printh("Debug: gave player all weapons")
+		p.armor = PLAYER_CONFIG.max_armor  -- give max armor
+		printh("Debug: gave player all weapons and max armor")
 	end
 
 	-- Start quest if not already set (new game)

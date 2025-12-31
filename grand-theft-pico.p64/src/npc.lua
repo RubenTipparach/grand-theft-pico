@@ -353,6 +353,38 @@ function update_npc(npc, player_x, player_y)
 		return  -- skip all other state processing
 	end
 
+	-- During epilogue ending sequence, NPCs run towards the player and gather around them
+	if epilogue_active and player_x and player_y then
+		local dx = player_x - npc.x
+		local dy = player_y - npc.y
+		local dist = sqrt(dx * dx + dy * dy)
+		local gather_radius = 100  -- stop within this radius of player
+
+		if dist > gather_radius then
+			-- Run towards player (faster than normal walk)
+			local speed = NPC_CONFIG.walk_speed * 1.5 * dt
+			local move_x = (dx / dist) * speed
+			local move_y = (dy / dist) * speed
+
+			-- Move towards player (ignore collision for celebration)
+			npc.x = npc.x + move_x
+			npc.y = npc.y + move_y
+
+			-- Face the player while running
+			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
+
+			-- Animate walking
+			npc.walk_timer = (npc.walk_timer or 0) + dt
+			local anim_speed = 0.15
+			npc.walk_frame = flr(npc.walk_timer / anim_speed) % 2 + 1
+		else
+			-- Close enough - stop and face player
+			npc.walk_frame = 0
+			npc.facing_dir = get_direction_towards(npc.x, npc.y, player_x, player_y)
+		end
+		return  -- skip all other state processing during epilogue
+	end
+
 	-- Check if this NPC is a fan or lover (they don't flee)
 	local is_fan, fan_data = is_npc_fan(npc)
 	local is_lover = is_npc_lover(npc)
