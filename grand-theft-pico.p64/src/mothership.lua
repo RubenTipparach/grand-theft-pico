@@ -584,6 +584,7 @@ function update_epilogue()
 				reset_epilogue_state()
 				game_state = "menu"
 				menu.phase = "title"
+				play_music("menu")
 				printh("Player chose to return to menu")
 			end
 		end

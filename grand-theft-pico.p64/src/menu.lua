@@ -124,6 +124,9 @@ function end_intro()
 	reset_game_state()
 	init_game_world()
 	game_state = "playing"
+
+	-- Play gameplay music
+	play_music("playing")
 end
 
 function draw_intro()
@@ -660,10 +663,14 @@ function handle_menu_selection(option_id)
 		load_game()
 		init_game_world()
 		game_state = "playing"
+		-- Play gameplay music
+		play_music("playing")
 	elseif option_id == "new" then
 		-- Start intro sequence, then begin new game
 		init_intro()
 		game_state = "intro"
+		-- Play intro/space music
+		play_music("intro")
 	elseif option_id == "exit" then
 		-- Exit Picotron cart
 		stop()

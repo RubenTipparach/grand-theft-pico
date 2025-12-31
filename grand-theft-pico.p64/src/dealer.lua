@@ -581,15 +581,15 @@ function update_shop()
 		end
 	end
 
-	-- Purchase (Z key for single-press)
-	if input_utils.key_pressed("z") then
+	-- Purchase (E or Z key for single-press)
+	if input_utils.key_pressed("z") or (input_utils.key_pressed("e") and time() > (shop.open_time or 0) + 0.1) then
 		if item then
 			try_purchase(item)
 		end
 	end
 
-	-- Close shop (E or X key, with cooldown to prevent same E press from closing)
-	if input_utils.key_pressed("x") or (input_utils.key_pressed("e") and time() > (shop.open_time or 0) + 0.1) then
+	-- Close shop (X key only)
+	if input_utils.key_pressed("x") then
 		close_shop()
 	end
 

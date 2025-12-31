@@ -67,6 +67,7 @@ include("src/alien_minion.lua")
 include("src/quest.lua")
 include("src/race.lua")
 include("src/menu.lua")
+include("src/music.lua")
 
 -- Load input utilities module (for single-press detection)
 input_utils = require("src/input_utils")
@@ -1372,6 +1373,9 @@ function _init()
 	menu.phase = "title"
 	menu.has_save = check_save_exists()
 	menu.thruster_timer = time()
+
+	-- Play menu music
+	play_music("menu")
 
 	printh("Grand Theft Chicken - Menu initialized!")
 end

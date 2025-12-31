@@ -689,8 +689,8 @@ CACTUS_CONFIG = {
 	melee_range = 24,
 	melee_cooldown = 1.0,     -- Seconds between swings
 	sword_sprite = 47,        -- Same sword sprite as player (8x16)
-	melee_offset_x = 20,      -- X offset from center (for 48x48 sprite)
-	melee_offset_y = 2,       -- Y offset from center (for 48x48 sprite)
+	melee_offset_x = 15,      -- X offset from center (for 48x48 sprite)
+	melee_offset_y = -4,       -- Y offset from center (for 48x48 sprite)
 
 	-- Ranged attack (10-directional bullet burst)
 	ranged_damage = 10,
@@ -1800,6 +1800,39 @@ INTRO_CONFIG = {
 	skip_text = "Press E to skip",
 	skip_text_color = 6,            -- gray
 	skip_text_blink_speed = 2.0,    -- blink rate
+}
+
+-- ============================================
+-- MUSIC CONFIG
+-- ============================================
+MUSIC_CONFIG = {
+	-- Memory address to load music into (above normal memory)
+	memory_address = 0x80000,
+
+	-- Menu music (custom menu theme)
+	menu = {
+		sfx_file = "sfx/music/custom_menu_music.sfx",
+		pattern = 0,
+	},
+
+	-- Intro/space music (space theme)
+	intro = {
+		sfx_file = "sfx/music/4_space.sfx",
+		pattern = 0,
+	},
+
+	-- Gameplay music (able song)
+	playing = {
+		sfx_file = "sfx/music/able_song.sfx",
+		pattern = 0,
+	},
+
+	-- Music volume (0x00 to 0x40, where 0x40 is full volume)
+	volume = 0x30,  -- 75% volume
+
+	-- Fade duration in milliseconds
+	fade_in_ms = 500,
+	fade_out_ms = 300,
 }
 
 -- ============================================
