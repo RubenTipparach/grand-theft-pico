@@ -933,8 +933,15 @@ function draw_weapon_hud()
 		return
 	end
 
+	-- Draw [Q] on the left of weapon name
+	print_shadow("[Q]", x - 24, y, 6)
+
 	-- Weapon name
 	print_shadow(weapon.name, x, y, 33)
+
+	-- Draw [R] on the right of weapon name
+	local name_width = print(weapon.name, 0, -100)
+	print_shadow("[R]", x + name_width + 4, y, 6)
 
 	-- Ammo count for ranged weapons
 	if wtype == "ranged" then

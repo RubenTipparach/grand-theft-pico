@@ -1,6 +1,9 @@
 --[[pod_format="raw"]]
 -- mothership.lua - Alien Mothership final boss
 
+-- Import input utilities for single-trigger key detection
+local input_utils = require("src/input_utils")
+
 -- ============================================
 -- MOTHERSHIP STATE
 -- ============================================
@@ -303,11 +306,15 @@ function update_mothership_death()
 	local now = time()
 	local elapsed = now - mothership_death_time
 
+	-- Use visual position (with hover_offset) so explosions center on the sprite
+	local visual_x = mothership.x
+	local visual_y = mothership.y + cfg.hover_offset
+
 	-- Add intermittent explosions while dying
 	if flr(elapsed * 4) ~= flr((elapsed - 1/60) * 4) then
 		local ox = (rnd(2) - 1) * 30
 		local oy = (rnd(2) - 1) * 30
-		add_collision_effect(mothership.x + ox, mothership.y + oy, 0.5)
+		add_collision_effect(visual_x + ox, visual_y + oy, 0.5)
 	end
 
 	-- Final explosion after delay
@@ -318,9 +325,9 @@ function update_mothership_death()
 			local dist = 40
 			local ox = cos(angle) * dist
 			local oy = sin(angle) * dist
-			add_collision_effect(mothership.x + ox, mothership.y + oy, 1.0)
+			add_collision_effect(visual_x + ox, visual_y + oy, 1.0)
 		end
-		add_collision_effect(mothership.x, mothership.y, 1.5)
+		add_collision_effect(visual_x, visual_y, 1.5)
 
 		mothership.state = "dead"
 		mothership_dying = false
@@ -535,30 +542,33 @@ function update_epilogue()
 
 	local now = time()
 
+	-- Use keyp() directly since input_utils has state conflicts
+	local e_pressed = keyp("e")
+
 	if epilogue_phase == "victory" or epilogue_phase == "epilogue" then
-		-- Skip current message with E (btnp(4))
+		-- Skip current message with E key
 		local msg = EPILOGUE_MESSAGES[epilogue_message_index]
 		if msg then
 			local elapsed = now - epilogue_message_timer
-			if elapsed > 0.3 and btnp(4) then
+			if elapsed > 0.3 and e_pressed then
 				epilogue_message_index = epilogue_message_index + 1
 				epilogue_message_timer = now
-				printh("Skipped to message " .. epilogue_message_index)
+				printh("[EPILOGUE] SKIPPED to message " .. epilogue_message_index)
 			end
 		end
 	elseif epilogue_phase == "credits" then
-		-- Skip credits with E or X
-		if btnp(4) or btnp(5) then
+		-- Skip credits with E key
+		if e_pressed then
 			epilogue_phase = "options"
-			printh("Skipped credits")
+			printh("[EPILOGUE] SKIPPED credits!")
 		end
 	elseif epilogue_phase == "options" then
 		-- Handle victory options input
-		if btnp(2) then  -- up
+		if keyp("up") then
 			victory_option_selected = 1
-		elseif btnp(3) then  -- down
+		elseif keyp("down") then
 			victory_option_selected = 2
-		elseif btnp(4) or btnp(5) then  -- confirm
+		elseif keyp("e") or keyp("z") then
 			if victory_option_selected == 1 then
 				-- Continue playing
 				epilogue_active = false
@@ -641,15 +651,10 @@ function draw_epilogue_message()
 	-- Draw message
 	print_shadow(text, cx - tw/2, cy - 4, msg.color)
 
-	-- Draw progress indicator
-	local progress = epilogue_message_index .. "/" .. #EPILOGUE_MESSAGES
-	local pw = print(progress, 0, -100)
-	print(progress, cx - pw/2, SCREEN_H - 26, 6)
-
-	-- Draw skip hint (centered)
+	-- Draw skip hint (centered, with drop shadow)
 	local hint = "Press E to skip"
 	local hw = print(hint, 0, -100)
-	print(hint, cx - hw/2, SCREEN_H - 16, 6)
+	print_shadow(hint, cx - hw/2, SCREEN_H - 16, 6)
 
 	-- Check if time to advance (auto-advance after duration)
 	if elapsed >= msg.duration then
@@ -713,10 +718,10 @@ function draw_credits()
 		epilogue_phase = "options"
 	end
 
-	-- Draw "Press E to skip" hint at bottom
+	-- Draw "Press E to skip" hint at bottom (with drop shadow)
 	local hint = "Press E to skip"
 	local hw = print(hint, 0, -100)
-	print(hint, SCREEN_W/2 - hw/2, SCREEN_H - 16, 6)
+	print_shadow(hint, SCREEN_W/2 - hw/2, SCREEN_H - 16, 6)
 	-- NOTE: Skip input is handled in update_epilogue()
 end
 
@@ -747,7 +752,7 @@ function draw_victory_options()
 	local money_text = "Money: $" .. (game and game.player and game.player.money or 0)
 	print_shadow(money_text, col1_x, stats_y, 28)
 
-	local companions_text = "Companions: " .. (companions and #companions or 0)
+	local companions_text = "Companions: " .. (lovers and #lovers or 0)
 	print_shadow(companions_text, col1_x, stats_y + line_h, 28)
 
 	local npcs_text = "NPCs Met: " .. (game_stats and game_stats.npcs_met or 0)

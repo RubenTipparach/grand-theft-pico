@@ -63,8 +63,9 @@ function find_fox_spawn_position()
 	local map_w = WORLD_DATA.tiles:width()
 	local map_h = WORLD_DATA.tiles:height()
 
-	-- City center is around 0,0 - spawn foxes far from center
+	-- City center is around 0,0 - spawn foxes just outside city radius
 	local min_dist_from_center = 300  -- minimum distance from 0,0
+	local max_dist_from_center = min_dist_from_center + 200  -- max is 200 units beyond min
 
 	for attempt = 1, 100 do
 		-- Random map position
@@ -75,9 +76,9 @@ function find_fox_spawn_position()
 		local wx = (mx - map_w / 2) * tile_size
 		local wy = (my - map_h / 2) * tile_size
 
-		-- Check distance from center
+		-- Check distance from center (must be within spawn band)
 		local dist = sqrt(wx * wx + wy * wy)
-		if dist > min_dist_from_center then
+		if dist > min_dist_from_center and dist < max_dist_from_center then
 			-- Check if it's a dirt road
 			if is_dirt_road_from_map(wx, wy) then
 				return wx, wy
@@ -90,9 +91,9 @@ function find_fox_spawn_position()
 		end
 	end
 
-	-- Fallback: spawn at a random far location
+	-- Fallback: spawn at a random location just outside city
 	local angle = rnd(1)
-	local dist = 400 + rnd(200)
+	local dist = min_dist_from_center + rnd(200)
 	return cos(angle) * dist, sin(angle) * dist
 end
 

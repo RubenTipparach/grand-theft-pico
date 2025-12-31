@@ -345,7 +345,7 @@ PLAYER_CONFIG = {
 	prompt_color = 21,           -- color for interaction prompts (E: FLIRT etc)
 
 	-- Money system
-	starting_money = 500,        -- player starts with $100
+	starting_money = 100,        -- player starts with $100
 	money_color = 33,            -- green for money text
 	money_display_x = 8,
 	money_display_y = 64,        -- below popularity bar
@@ -830,7 +830,7 @@ GROUND_CONFIG = {
 -- ============================================
 DEBUG_CONFIG = {
 	enabled = false,         -- set to false to disable debug features (FPS, profiler, etc.)
-	debug_weapons = true,    -- set to true to start with all weapons and 999 ammo
+	debug_weapons = false,    -- set to true to start with all weapons and 999 ammo
 	show_all_npcs = false,    -- set to true to show all NPCs on minimap (overrides MINIMAP_CONFIG.show_npcs)
 	show_all_vehicles = false, -- set to true to show all vehicles on minimap and vehicle debug info
 	-- skip_to_quest = false,    -- DEPRECATED: use start_quest instead
@@ -839,23 +839,22 @@ DEBUG_CONFIG = {
 		-- "protect_city",
 		-- "make_friends",
 		-- "find_love",
+		-- "a_prick",              -- cactus monster right after finding love
 		-- "talk_to_companion_1",  -- leads to fix_home
 		-- "fix_home",
-		-- "talk_to_companion_2",  -- leads to a_prick
-		-- "a_prick",
-		-- "talk_to_companion_3",  -- leads to beyond_the_sea
+		-- "talk_to_companion_2",  -- leads to beyond_the_sea
 		-- "beyond_the_sea",
-		-- "talk_to_companion_4",  -- leads to mega_race
+		-- "talk_to_companion_3",  -- leads to mega_race
 		-- "mega_race",
-		-- "talk_to_companion_5",  -- leads to car_wrecker
+		-- "talk_to_companion_4",  -- leads to car_wrecker
 		-- "car_wrecker",
-		-- "talk_to_companion_6",  -- leads to auditor_kathy
+		-- "talk_to_companion_5",  -- leads to auditor_kathy
 		-- "auditor_kathy",
-		-- "talk_to_companion_7",  -- leads to speed_dating
+		-- "talk_to_companion_6",  -- leads to speed_dating
 		-- "speed_dating",
-		-- "talk_to_companion_8",  -- leads to bomb_delivery
+		-- "talk_to_companion_7",  -- leads to bomb_delivery
 		-- "bomb_delivery",
-		-- "talk_to_companion_9",  -- leads to alien_invasion
+		-- "talk_to_companion_8",  -- leads to alien_invasion
 		-- "alien_invasion",
 
 		-- sketch:
@@ -883,7 +882,7 @@ DEBUG_CONFIG = {
 		-- alien invasion. Aliens are invading the city, defeat them and beat the game! 
 			-- you can continue playing the game and running around the sand box after this if you want to
 	-- start_quest = nil,
-	start_quest = "talk_to_companion_9",
+	start_quest = "talk_to_companion_3",
 }
 
 -- when major combat quests complete add popularity and show it on the quest complete text

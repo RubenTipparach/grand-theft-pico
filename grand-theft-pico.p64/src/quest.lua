@@ -13,23 +13,22 @@ QUEST_CONFIG = {
 		"protect_city",
 		"make_friends",
 		"find_love",
+		"a_prick",              -- cactus monster right after finding love
 		"talk_to_companion_1",  -- leads to fix_home
 		"fix_home",
-		"talk_to_companion_2",  -- leads to a_prick
-		"a_prick",
-		"talk_to_companion_3",  -- leads to beyond_the_sea
+		"talk_to_companion_2",  -- leads to beyond_the_sea
 		"beyond_the_sea",
-		"talk_to_companion_4",  -- leads to mega_race
+		"talk_to_companion_3",  -- leads to mega_race
 		"mega_race",
-		"talk_to_companion_5",  -- leads to car_wrecker
+		"talk_to_companion_4",  -- leads to car_wrecker
 		"car_wrecker",
-		"talk_to_companion_6",  -- leads to auditor_kathy
+		"talk_to_companion_5",  -- leads to auditor_kathy
 		"auditor_kathy",
-		"talk_to_companion_7",  -- leads to speed_dating
+		"talk_to_companion_6",  -- leads to speed_dating
 		"speed_dating",
-		"talk_to_companion_8",  -- leads to bomb_delivery
+		"talk_to_companion_7",  -- leads to bomb_delivery
 		"bomb_delivery",
-		"talk_to_companion_9",  -- leads to alien_invasion
+		"talk_to_companion_8",  -- leads to alien_invasion
 		"alien_invasion",
 	},
 
@@ -39,23 +38,22 @@ QUEST_CONFIG = {
 		protect_city = "Protect The City",
 		make_friends = "Make Friends",
 		find_love = "Find Love",
+		a_prick = "A Prick",
 		talk_to_companion_1 = "Talk to Companion",
 		fix_home = "Fix Home",
 		talk_to_companion_2 = "Talk to Companion",
-		a_prick = "A Prick",
-		talk_to_companion_3 = "Talk to Companion",
 		beyond_the_sea = "Beyond The Sea",
-		talk_to_companion_4 = "Talk to Companion",
+		talk_to_companion_3 = "Talk to Companion",
 		mega_race = "Mega Race",
-		talk_to_companion_5 = "Talk to Companion",
+		talk_to_companion_4 = "Talk to Companion",
 		car_wrecker = "Insurance Fraud",
-		talk_to_companion_6 = "Talk to Companion",
+		talk_to_companion_5 = "Talk to Companion",
 		auditor_kathy = "Defeat Auditor Kathy",
-		talk_to_companion_7 = "Talk to Companion",
+		talk_to_companion_6 = "Talk to Companion",
 		speed_dating = "Speed Dating",
-		talk_to_companion_8 = "Talk to Companion",
+		talk_to_companion_7 = "Talk to Companion",
 		bomb_delivery = "Special Delivery",
-		talk_to_companion_9 = "Talk to Companion",
+		talk_to_companion_8 = "Talk to Companion",
 		alien_invasion = "Alien Invasion",
 	},
 
@@ -67,7 +65,7 @@ QUEST_CONFIG = {
 
 	protect_city = {
 		popularity_reward = 10,
-		money_reward = 100,
+		money_reward = 200,
 	},
 
 	make_friends = {
@@ -76,7 +74,11 @@ QUEST_CONFIG = {
 	},
 
 	find_love = {
-		money_reward = 100,
+		money_reward = 200,
+	},
+
+	a_prick = {
+		money_reward = 400,
 	},
 
 	talk_to_companion_1 = {
@@ -86,18 +88,10 @@ QUEST_CONFIG = {
 	fix_home = {
 		damaged_building_sprite = 129,  -- Cracked concrete sprite
 		repair_hits_needed = 10,        -- Hammer hits to fully repair
-		money_reward = 150,
+		money_reward = 250,
 	},
 
 	talk_to_companion_2 = {
-		money_reward = 0,
-	},
-
-	a_prick = {
-		money_reward = 200,
-	},
-
-	talk_to_companion_3 = {
 		money_reward = 0,
 	},
 
@@ -109,10 +103,10 @@ QUEST_CONFIG = {
 		package_sprite = 134,           -- Package sprite
 		hermit_sprite_x = 37,
 		hermit_sprite_y = 217,
-		money_reward = 250,
+		money_reward = 350,
 	},
 
-	talk_to_companion_4 = {
+	talk_to_companion_3 = {
 		money_reward = 0,
 	},
 
@@ -122,27 +116,27 @@ QUEST_CONFIG = {
 		popularity_win = 50,      -- +50 popularity for winning (1st place)
 	},
 
-	talk_to_companion_5 = {
+	talk_to_companion_4 = {
 		money_reward = 0,
 	},
 
 	car_wrecker = {
-		money_reward = 300,
+		money_reward = 1000,
 		time_limit = 90,          -- 60 seconds to wreck cars
 		cars_needed = 12,         -- need to wreck 12+ cars to win
 		popularity_reward = 25,   -- bonus popularity for completing
 	},
 
-	talk_to_companion_6 = {
+	talk_to_companion_5 = {
 		money_reward = 0,
 	},
 
 	auditor_kathy = {
-		money_reward = 750,
+		money_reward = 1250,
 		popularity_reward = 30,   -- bonus popularity for defeating boss
 	},
 
-	talk_to_companion_7 = {
+	talk_to_companion_6 = {
 		money_reward = 0,
 	},
 
@@ -151,18 +145,18 @@ QUEST_CONFIG = {
 		time_limit = 120,         -- seconds to complete (180 = 3 minutes)
 		lovers_needed = 3,        -- number of new lovers required to win
 		-- Rewards
-		money_reward = 400,
+		money_reward = 600,
 		popularity_reward = 40,   -- big popularity boost for TV appearance
 	},
 
-	talk_to_companion_8 = {
+	talk_to_companion_7 = {
 		money_reward = 0,
 	},
 
 	bomb_delivery = {
 		time_limit = 90,          -- 90 seconds to deliver the bomb (longer route)
 		max_hits = 3,             -- car explodes after 3 hits
-		money_reward = 500,
+		money_reward = 1000,
 		-- Checkpoint route (Aseprite coords, converted to world at runtime)
 		-- Route: start -> checkpoint1 -> checkpoint2 -> end
 		checkpoints = {
@@ -174,7 +168,7 @@ QUEST_CONFIG = {
 		checkpoint_radius = 40,   -- radius to trigger checkpoint
 	},
 
-	talk_to_companion_9 = {
+	talk_to_companion_8 = {
 		money_reward = 0,
 	},
 
@@ -248,11 +242,10 @@ mission = {
 
 	-- Talk to Companion checkpoints (between main quests)
 	talked_to_companion_1 = false,  -- before fix_home
-	talked_to_companion_2 = false,  -- before a_prick
-	talked_to_companion_3 = false,  -- before beyond_the_sea
-	talked_to_companion_4 = false,  -- before mega_race
-	talked_to_companion_5 = false,  -- before car_wrecker
-	talked_to_companion_6 = false,  -- before auditor_kathy
+	talked_to_companion_2 = false,  -- before beyond_the_sea
+	talked_to_companion_3 = false,  -- before mega_race
+	talked_to_companion_4 = false,  -- before car_wrecker
+	talked_to_companion_5 = false,  -- before auditor_kathy
 
 	-- Quest 8: Car Wrecker (Insurance Fraud)
 	wrecker_active = false,      -- is the wrecker timer running?
@@ -266,9 +259,10 @@ mission = {
 	kathy_foxes_killed = 0,      -- foxes killed during this quest
 	total_kathy_foxes = 3,       -- total foxes spawned with Kathy
 
-	-- Talk to Companion 7 & 8 checkpoints
-	talked_to_companion_7 = false,  -- before speed_dating
-	talked_to_companion_8 = false,  -- before bomb_delivery
+	-- Talk to Companion 6, 7 & 8 checkpoints
+	talked_to_companion_6 = false,  -- before speed_dating
+	talked_to_companion_7 = false,  -- before bomb_delivery
+	talked_to_companion_8 = false,  -- before alien_invasion
 
 	-- Quest 10: Speed Dating (TV gameshow)
 	speed_dating_active = false,      -- is the speed dating timer running?
@@ -412,6 +406,12 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
+	elseif mission.current_quest == "a_prick" then
+		-- Defeat the cactus monster
+		if mission.cactus_killed then
+			complete_current_quest()
+		end
+
 	elseif mission.current_quest == "talk_to_companion_1" then
 		if mission.talked_to_companion_1 then
 			complete_current_quest()
@@ -438,25 +438,14 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "a_prick" then
-		-- Defeat the cactus monster
-		if mission.cactus_killed then
-			complete_current_quest()
-		end
-
-	elseif mission.current_quest == "talk_to_companion_3" then
-		if mission.talked_to_companion_3 then
-			complete_current_quest()
-		end
-
 	elseif mission.current_quest == "beyond_the_sea" then
 		-- Delivered package to hermit
 		if mission.delivered_package then
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_4" then
-		if mission.talked_to_companion_4 then
+	elseif mission.current_quest == "talk_to_companion_3" then
+		if mission.talked_to_companion_3 then
 			complete_current_quest()
 		end
 
@@ -467,8 +456,8 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_5" then
-		if mission.talked_to_companion_5 then
+	elseif mission.current_quest == "talk_to_companion_4" then
+		if mission.talked_to_companion_4 then
 			complete_current_quest()
 		end
 
@@ -478,8 +467,8 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_6" then
-		if mission.talked_to_companion_6 then
+	elseif mission.current_quest == "talk_to_companion_5" then
+		if mission.talked_to_companion_5 then
 			complete_current_quest()
 		end
 
@@ -489,8 +478,8 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_7" then
-		if mission.talked_to_companion_7 then
+	elseif mission.current_quest == "talk_to_companion_6" then
+		if mission.talked_to_companion_6 then
 			complete_current_quest()
 		end
 
@@ -500,8 +489,8 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_8" then
-		if mission.talked_to_companion_8 then
+	elseif mission.current_quest == "talk_to_companion_7" then
+		if mission.talked_to_companion_7 then
 			complete_current_quest()
 		end
 
@@ -511,8 +500,8 @@ function check_quest_completion()
 			complete_current_quest()
 		end
 
-	elseif mission.current_quest == "talk_to_companion_9" then
-		if mission.talked_to_companion_9 then
+	elseif mission.current_quest == "talk_to_companion_8" then
+		if mission.talked_to_companion_8 then
 			complete_current_quest()
 		end
 
@@ -609,6 +598,12 @@ function start_quest(quest_id)
 		mission.lover_asked_troubles = false
 		printh("Started quest: Find Love")
 
+	elseif quest_id == "a_prick" then
+		mission.cactus_killed = false
+		-- Spawn cactus monster
+		spawn_cactus()
+		printh("Started quest: A Prick - Cactus monster spawned!")
+
 	elseif quest_id == "talk_to_companion_1" then
 		mission.talked_to_companion_1 = false
 		printh("Started quest: Talk to Companion (before Fix Home)")
@@ -622,16 +617,6 @@ function start_quest(quest_id)
 
 	elseif quest_id == "talk_to_companion_2" then
 		mission.talked_to_companion_2 = false
-		printh("Started quest: Talk to Companion (before A Prick)")
-
-	elseif quest_id == "a_prick" then
-		mission.cactus_killed = false
-		-- Spawn cactus monster
-		spawn_cactus()
-		printh("Started quest: A Prick - Cactus monster spawned!")
-
-	elseif quest_id == "talk_to_companion_3" then
-		mission.talked_to_companion_3 = false
 		printh("Started quest: Talk to Companion (before Beyond The Sea)")
 
 	elseif quest_id == "beyond_the_sea" then
@@ -651,8 +636,8 @@ function start_quest(quest_id)
 		spawn_hermit(hermit_x, hermit_y)
 		printh("Started quest: Beyond The Sea - Package at " .. pkg_x .. "," .. pkg_y .. " Hermit at " .. hermit_x .. "," .. hermit_y)
 
-	elseif quest_id == "talk_to_companion_4" then
-		mission.talked_to_companion_4 = false
+	elseif quest_id == "talk_to_companion_3" then
+		mission.talked_to_companion_3 = false
 		printh("Started quest: Talk to Companion (before Mega Race)")
 
 	elseif quest_id == "mega_race" then
@@ -671,8 +656,8 @@ function start_quest(quest_id)
 		end
 		printh("Started quest: Mega Race - " .. #mission.race_checkpoints .. " checkpoints")
 
-	elseif quest_id == "talk_to_companion_5" then
-		mission.talked_to_companion_5 = false
+	elseif quest_id == "talk_to_companion_4" then
+		mission.talked_to_companion_4 = false
 		printh("Started quest: Talk to Companion (before Car Wrecker)")
 
 	elseif quest_id == "car_wrecker" then
@@ -683,8 +668,8 @@ function start_quest(quest_id)
 		mission.wrecker_failed = false
 		printh("Started quest: Insurance Fraud - Wreck " .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars in " .. QUEST_CONFIG.car_wrecker.time_limit .. " seconds!")
 
-	elseif quest_id == "talk_to_companion_6" then
-		mission.talked_to_companion_6 = false
+	elseif quest_id == "talk_to_companion_5" then
+		mission.talked_to_companion_5 = false
 		printh("Started quest: Talk to Companion (before Auditor Kathy)")
 
 	elseif quest_id == "auditor_kathy" then
@@ -697,8 +682,8 @@ function start_quest(quest_id)
 		spawn_kathy_foxes()
 		printh("Started quest: Defeat Auditor Kathy - Boss spawned with " .. mission.total_kathy_foxes .. " fox minions!")
 
-	elseif quest_id == "talk_to_companion_7" then
-		mission.talked_to_companion_7 = false
+	elseif quest_id == "talk_to_companion_6" then
+		mission.talked_to_companion_6 = false
 		printh("Started quest: Talk to Companion (before Speed Dating)")
 
 	elseif quest_id == "speed_dating" then
@@ -711,8 +696,8 @@ function start_quest(quest_id)
 		mission.speed_dating_failed = false
 		printh("Started quest: Speed Dating - Make " .. QUEST_CONFIG.speed_dating.lovers_needed .. " new lovers in " .. QUEST_CONFIG.speed_dating.time_limit .. " seconds!")
 
-	elseif quest_id == "talk_to_companion_8" then
-		mission.talked_to_companion_8 = false
+	elseif quest_id == "talk_to_companion_7" then
+		mission.talked_to_companion_7 = false
 		printh("Started quest: Talk to Companion (before Bomb Delivery)")
 
 	elseif quest_id == "bomb_delivery" then
@@ -734,8 +719,8 @@ function start_quest(quest_id)
 		-- Car will spawn when player picks up the bomb (not at quest start)
 		printh("Started quest: Special Delivery - " .. #mission.bomb_delivery_checkpoints .. " checkpoints, " .. cfg.time_limit .. " seconds!")
 
-	elseif quest_id == "talk_to_companion_9" then
-		mission.talked_to_companion_9 = false
+	elseif quest_id == "talk_to_companion_8" then
+		mission.talked_to_companion_8 = false
 		printh("Started quest: Talk to Companion (before Alien Invasion)")
 
 	elseif quest_id == "alien_invasion" then
@@ -774,16 +759,16 @@ function get_previous_checkpoint_quest()
 		protect_city = "intro",
 		make_friends = "intro",
 		find_love = "intro",
+		a_prick = "find_love",  -- a_prick comes right after find_love, no checkpoint
 		-- Main quests with checkpoints
 		fix_home = "talk_to_companion_1",
-		a_prick = "talk_to_companion_2",
-		beyond_the_sea = "talk_to_companion_3",
-		mega_race = "talk_to_companion_4",
-		car_wrecker = "talk_to_companion_5",
-		auditor_kathy = "talk_to_companion_6",
-		speed_dating = "talk_to_companion_7",
-		bomb_delivery = "talk_to_companion_8",
-		alien_invasion = "talk_to_companion_9",
+		beyond_the_sea = "talk_to_companion_2",
+		mega_race = "talk_to_companion_3",
+		car_wrecker = "talk_to_companion_4",
+		auditor_kathy = "talk_to_companion_5",
+		speed_dating = "talk_to_companion_6",
+		bomb_delivery = "talk_to_companion_7",
+		alien_invasion = "talk_to_companion_8",
 	}
 
 	return checkpoint_map[current] or "find_love"
@@ -855,44 +840,42 @@ function advance_to_next_quest()
 	elseif mission.current_quest == "make_friends" then
 		next_quest = "find_love"
 	elseif mission.current_quest == "find_love" then
+		next_quest = "a_prick"
+	elseif mission.current_quest == "a_prick" then
 		next_quest = "talk_to_companion_1"
 	elseif mission.current_quest == "talk_to_companion_1" then
 		next_quest = "fix_home"
 	elseif mission.current_quest == "fix_home" then
 		next_quest = "talk_to_companion_2"
 	elseif mission.current_quest == "talk_to_companion_2" then
-		next_quest = "a_prick"
-	elseif mission.current_quest == "a_prick" then
-		next_quest = "talk_to_companion_3"
-	elseif mission.current_quest == "talk_to_companion_3" then
 		next_quest = "beyond_the_sea"
 	elseif mission.current_quest == "beyond_the_sea" then
-		next_quest = "talk_to_companion_4"
-	elseif mission.current_quest == "talk_to_companion_4" then
+		next_quest = "talk_to_companion_3"
+	elseif mission.current_quest == "talk_to_companion_3" then
 		next_quest = "mega_race"
 	elseif mission.current_quest == "mega_race" then
 		-- Clean up race
 		cleanup_race()
-		next_quest = "talk_to_companion_5"
-	elseif mission.current_quest == "talk_to_companion_5" then
+		next_quest = "talk_to_companion_4"
+	elseif mission.current_quest == "talk_to_companion_4" then
 		next_quest = "car_wrecker"
 	elseif mission.current_quest == "car_wrecker" then
-		next_quest = "talk_to_companion_6"
-	elseif mission.current_quest == "talk_to_companion_6" then
+		next_quest = "talk_to_companion_5"
+	elseif mission.current_quest == "talk_to_companion_5" then
 		next_quest = "auditor_kathy"
 	elseif mission.current_quest == "auditor_kathy" then
 		-- Clean up Kathy boss
 		cleanup_kathy()
-		next_quest = "talk_to_companion_7"
-	elseif mission.current_quest == "talk_to_companion_7" then
+		next_quest = "talk_to_companion_6"
+	elseif mission.current_quest == "talk_to_companion_6" then
 		next_quest = "speed_dating"
 	elseif mission.current_quest == "speed_dating" then
-		next_quest = "talk_to_companion_8"
-	elseif mission.current_quest == "talk_to_companion_8" then
+		next_quest = "talk_to_companion_7"
+	elseif mission.current_quest == "talk_to_companion_7" then
 		next_quest = "bomb_delivery"
 	elseif mission.current_quest == "bomb_delivery" then
-		next_quest = "talk_to_companion_9"
-	elseif mission.current_quest == "talk_to_companion_9" then
+		next_quest = "talk_to_companion_8"
+	elseif mission.current_quest == "talk_to_companion_8" then
 		next_quest = "alien_invasion"
 	elseif mission.current_quest == "alien_invasion" then
 		-- Clean up mothership and minions
@@ -934,6 +917,11 @@ function get_quest_objectives()
 		local fox_status = (living == 0 and mission.total_foxes > 0) and "[X]" or "[ ]"
 		add(objectives, fox_status .. " Get rid of all foxes (" .. mission.foxes_killed .. "/" .. mission.total_foxes .. ")")
 
+		-- Add attack hint if player has a weapon but foxes remain
+		if mission.has_weapon and living > 0 then
+			add(objectives, "    [Z] to attack")
+		end
+
 	elseif mission.current_quest == "make_friends" then
 		local new_fans = #fans - mission.fans_at_quest_start
 		local status = (new_fans >= mission.new_fans_needed) and "[X]" or "[ ]"
@@ -949,6 +937,14 @@ function get_quest_objectives()
 			add(objectives, troubles_status .. " Ask your lover about their troubles")
 		end
 
+	elseif mission.current_quest == "a_prick" then
+		local status = mission.cactus_killed and "[X]" or "[ ]"
+		add(objectives, status .. " Defeat the cactus monster")
+
+	elseif mission.current_quest == "talk_to_companion_1" then
+		local status = mission.talked_to_companion_1 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
 	elseif mission.current_quest == "fix_home" then
 		-- Objective 1: Get a hammer
 		local hammer_status = mission.has_hammer and "[X]" or "[ ]"
@@ -958,32 +954,8 @@ function get_quest_objectives()
 		local repair_status = (mission.building_repair_progress >= fix_cfg.repair_hits_needed) and "[X]" or "[ ]"
 		add(objectives, repair_status .. " Repair the damaged building")
 
-	elseif mission.current_quest == "a_prick" then
-		local status = mission.cactus_killed and "[X]" or "[ ]"
-		add(objectives, status .. " Defeat the cactus monster")
-
-	elseif mission.current_quest == "talk_to_companion_1" then
-		local status = mission.talked_to_companion_1 and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to your companion")
-
 	elseif mission.current_quest == "talk_to_companion_2" then
 		local status = mission.talked_to_companion_2 and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to your companion")
-
-	elseif mission.current_quest == "talk_to_companion_3" then
-		local status = mission.talked_to_companion_3 and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to your companion")
-
-	elseif mission.current_quest == "talk_to_companion_4" then
-		local status = mission.talked_to_companion_4 and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to your companion")
-
-	elseif mission.current_quest == "talk_to_companion_5" then
-		local status = mission.talked_to_companion_5 and "[X]" or "[ ]"
-		add(objectives, status .. " Talk to your companion")
-
-	elseif mission.current_quest == "talk_to_companion_6" then
-		local status = mission.talked_to_companion_6 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
 	elseif mission.current_quest == "beyond_the_sea" then
@@ -1001,6 +973,10 @@ function get_quest_objectives()
 			add(objectives, deliver_status .. " Deliver to the island hermit")
 		end
 
+	elseif mission.current_quest == "talk_to_companion_3" then
+		local status = mission.talked_to_companion_3 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
 	elseif mission.current_quest == "mega_race" then
 		if not mission.race_started then
 			-- Before race: drive to start line
@@ -1014,6 +990,10 @@ function get_quest_objectives()
 			local pos_suffix = get_ordinal_suffix(mission.player_position)
 			add(objectives, "    Position: " .. mission.player_position .. pos_suffix)
 		end
+
+	elseif mission.current_quest == "talk_to_companion_4" then
+		local status = mission.talked_to_companion_4 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
 
 	elseif mission.current_quest == "car_wrecker" then
 		local cfg = QUEST_CONFIG.car_wrecker
@@ -1032,6 +1012,10 @@ function get_quest_objectives()
 			add(objectives, status .. " Wreck " .. cfg.cars_needed .. " cars (" .. mission.wrecker_cars_wrecked .. "/" .. cfg.cars_needed .. ")")
 		end
 
+	elseif mission.current_quest == "talk_to_companion_5" then
+		local status = mission.talked_to_companion_5 and "[X]" or "[ ]"
+		add(objectives, status .. " Talk to your companion")
+
 	elseif mission.current_quest == "auditor_kathy" then
 		-- Objective 1: Defeat Kathy
 		local kathy_status = mission.kathy_killed and "[X]" or "[ ]"
@@ -1040,8 +1024,8 @@ function get_quest_objectives()
 		local fox_status = (mission.kathy_foxes_killed >= mission.total_kathy_foxes) and "[X]" or "[ ]"
 		add(objectives, fox_status .. " Defeat fox minions (" .. mission.kathy_foxes_killed .. "/" .. mission.total_kathy_foxes .. ")")
 
-	elseif mission.current_quest == "talk_to_companion_7" then
-		local status = mission.talked_to_companion_7 and "[X]" or "[ ]"
+	elseif mission.current_quest == "talk_to_companion_6" then
+		local status = mission.talked_to_companion_6 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
 	elseif mission.current_quest == "speed_dating" then
@@ -1061,8 +1045,8 @@ function get_quest_objectives()
 			add(objectives, status .. " Make " .. cfg.lovers_needed .. " new lovers (" .. mission.speed_dating_new_lovers .. "/" .. cfg.lovers_needed .. ")")
 		end
 
-	elseif mission.current_quest == "talk_to_companion_8" then
-		local status = mission.talked_to_companion_8 and "[X]" or "[ ]"
+	elseif mission.current_quest == "talk_to_companion_7" then
+		local status = mission.talked_to_companion_7 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
 	elseif mission.current_quest == "bomb_delivery" then
@@ -1095,8 +1079,8 @@ function get_quest_objectives()
 			end
 		end
 
-	elseif mission.current_quest == "talk_to_companion_9" then
-		local status = mission.talked_to_companion_9 and "[X]" or "[ ]"
+	elseif mission.current_quest == "talk_to_companion_8" then
+		local status = mission.talked_to_companion_8 and "[X]" or "[ ]"
 		add(objectives, status .. " Talk to your companion")
 
 	elseif mission.current_quest == "alien_invasion" then
@@ -1196,10 +1180,10 @@ function update_car_wrecker_failure()
 	if not mission.wrecker_fail_timer then return end
 
 	if time() >= mission.wrecker_fail_timer then
-		-- Revert to talk_to_companion_5
+		-- Revert to talk_to_companion_4
 		mission.wrecker_fail_timer = nil
-		mission.talked_to_companion_5 = false  -- Reset so player can accept again
-		mission.current_quest = "talk_to_companion_5"
+		mission.talked_to_companion_4 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_4"
 		mission.quest_complete = false
 
 		-- Reset wrecker state for retry
@@ -1736,10 +1720,10 @@ function update_speed_dating_failure()
 	if not mission.speed_dating_fail_timer then return end
 
 	if time() >= mission.speed_dating_fail_timer then
-		-- Revert to talk_to_companion_7
+		-- Revert to talk_to_companion_6
 		mission.speed_dating_fail_timer = nil
-		mission.talked_to_companion_7 = false  -- Reset so player can accept again
-		mission.current_quest = "talk_to_companion_7"
+		mission.talked_to_companion_6 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_6"
 		mission.quest_complete = false
 
 		-- Reset speed dating state for retry
@@ -2321,10 +2305,10 @@ function update_bomb_delivery_failure()
 	if not mission.bomb_delivery_fail_timer then return end
 
 	if time() >= mission.bomb_delivery_fail_timer then
-		-- Revert to talk_to_companion_8
+		-- Revert to talk_to_companion_7
 		mission.bomb_delivery_fail_timer = nil
-		mission.talked_to_companion_8 = false  -- Reset so player can accept again
-		mission.current_quest = "talk_to_companion_8"
+		mission.talked_to_companion_7 = false  -- Reset so player can accept again
+		mission.current_quest = "talk_to_companion_7"
 		mission.quest_complete = false
 
 		-- Reset bomb delivery state for retry
