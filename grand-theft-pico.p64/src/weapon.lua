@@ -260,6 +260,8 @@ function create_projectile(x, y, dir, weapon_key, owner)
 	local weapon = WEAPON_CONFIG.ranged[weapon_key]
 	if not weapon then return end
 
+	sfx(SFX.bullet_shot)
+
 	-- Direction vectors
 	local dir_vectors = {
 		north = { dx = 0, dy = -1 },
@@ -665,6 +667,7 @@ function try_attack()
 			p.is_attacking = true
 			p.attack_timer = now
 			p.attack_angle = 0  -- Start angle
+			sfx(SFX.melee_attack)
 			return true
 		end
 	elseif wtype == "ranged" then

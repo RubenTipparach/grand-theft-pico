@@ -261,6 +261,7 @@ function kathy_spiral_attack()
 
 		add(kathy_bullets, bullet)
 	end
+	sfx(SFX.bullet_shot)
 
 	printh("Kathy fired spiral attack with " .. cfg.spiral_bullet_count .. " bullets")
 end
@@ -305,6 +306,7 @@ function kathy_sweep_attack()
 
 		add(kathy_bullets, bullet)
 	end
+	sfx(SFX.bullet_shot)
 
 	printh("Kathy fired sweep attack with " .. cfg.sweep_bullet_count .. " bullets")
 end

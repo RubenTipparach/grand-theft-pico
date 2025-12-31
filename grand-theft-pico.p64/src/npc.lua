@@ -415,6 +415,7 @@ function update_npc(npc, player_x, player_y)
 				local fan_id = next_fan_id
 				next_fan_id = next_fan_id + 1
 				add(fans, { npc = npc, is_lover = false, love = 0, archetype = archetype, id = fan_id })
+				sfx(SFX.new_fan)
 				printh("Created fan ID=" .. fan_id .. " archetype=" .. archetype)
 				-- Gain popularity for meeting a fan
 				change_popularity(PLAYER_CONFIG.popularity_per_fan)
@@ -703,6 +704,7 @@ function update_npc(npc, player_x, player_y)
 		if now >= npc.state_end_time then
 			npc.state = "fleeing"
 			npc.state_end_time = now + NPC_CONFIG.flee_duration
+			sfx(SFX.npc_fleeing)
 			npc.show_surprise = false
 			npc.flee_recheck_time = now
 			-- Calculate flee direction NOW based on current player position

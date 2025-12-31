@@ -187,6 +187,7 @@ function fire_spiral_bullet()
 	}
 
 	add(mothership_bullets, bullet)
+	sfx(SFX.bullet_shot)
 end
 
 -- ============================================
@@ -352,6 +353,8 @@ function show_mothership_defeated()
 	epilogue_active = true
 	reset_epilogue_state()
 	epilogue_message_timer = time()  -- Start the timer now
+	-- Play ending/epilogue music
+	play_music("ending")
 	printh("Epilogue started!")
 end
 

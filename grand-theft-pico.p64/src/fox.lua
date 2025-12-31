@@ -188,6 +188,7 @@ function fire_fox_bullet(fox)
 	}
 
 	add(projectiles, proj)
+	sfx(SFX.bullet_shot)
 end
 
 -- ============================================

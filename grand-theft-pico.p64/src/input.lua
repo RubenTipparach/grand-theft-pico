@@ -4,6 +4,7 @@
 -- Animation timer (global so it persists, now time-based)
 walk_timer = 0
 player_last_update_time = nil  -- for delta time calculation
+player_was_walking = false     -- for footstep sound start/stop
 
 -- Import input utilities for single-trigger key detection
 local input_utils = require("src/input_utils")
@@ -76,9 +77,19 @@ function handle_input()
 			-- 2-frame walk cycle: alternate between 1 and 2 (not 0 which is idle)
 			local frame_index = flr(walk_timer / anim_duration) % 2 + 1
 			game.player.walk_frame = frame_index  -- 1 or 2
+			-- Start looping footstep sound when walking begins
+			if not player_was_walking then
+				sfx(SFX.player_walk, 0, 0, 1)  -- channel 0, offset 0, loop
+				player_was_walking = true
+			end
 		else
 			walk_timer = 0
 			game.player.walk_frame = 0  -- idle when not moving
+			-- Stop footstep sound when walking stops
+			if player_was_walking then
+				sfx(-1, 0)  -- stop channel 0
+				player_was_walking = false
+			end
 		end
 	end
 

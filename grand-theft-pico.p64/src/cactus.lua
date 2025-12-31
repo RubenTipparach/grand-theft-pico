@@ -247,6 +247,7 @@ function cactus_ranged_attack()
 
 		add(cactus_bullets, bullet)
 	end
+	sfx(SFX.bullet_shot)
 end
 
 -- Update cactus bullets

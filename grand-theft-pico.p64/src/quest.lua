@@ -530,6 +530,8 @@ function complete_current_quest()
 	if mission.quest_complete then return end  -- already completed
 	mission.quest_complete = true
 
+	sfx(SFX.mission_complete)  -- mission complete sound
+
 	-- Store quest name and start visual feedback
 	local quest_name = get_quest_name(mission.current_quest)
 	quest_complete_visual.active = true
@@ -1188,6 +1190,8 @@ function fail_car_wrecker()
 	mission.wrecker_active = false
 	printh("Car Wrecker failed! Only wrecked " .. mission.wrecker_cars_wrecked .. "/" .. QUEST_CONFIG.car_wrecker.cars_needed .. " cars")
 
+	sfx(SFX.death_or_fail)  -- mission failure sound
+
 	-- Show failure message briefly, then revert quest
 	mission.wrecker_fail_timer = time() + 3  -- 3 seconds to show failure message
 end
@@ -1727,6 +1731,8 @@ function fail_speed_dating()
 	mission.speed_dating_failed = true
 	mission.speed_dating_active = false
 	printh("Speed Dating failed! Only made " .. mission.speed_dating_new_lovers .. "/" .. QUEST_CONFIG.speed_dating.lovers_needed .. " lovers")
+
+	sfx(SFX.death_or_fail)  -- mission failure sound
 
 	-- Show failure message briefly, then revert quest
 	mission.speed_dating_fail_timer = time() + 3  -- 3 seconds to show failure message
@@ -2312,6 +2318,8 @@ function fail_bomb_delivery(reason)
 	mission.bomb_delivery_active = false
 	mission.bomb_delivery_fail_reason = reason or "MISSION FAILED!"
 	printh("Bomb Delivery failed: " .. mission.bomb_delivery_fail_reason)
+
+	sfx(SFX.death_or_fail)  -- mission failure sound
 
 	-- Show failure message briefly, then revert quest
 	mission.bomb_delivery_fail_timer = time() + 3  -- 3 seconds to show failure message

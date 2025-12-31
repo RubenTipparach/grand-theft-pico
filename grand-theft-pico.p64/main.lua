@@ -131,9 +131,9 @@ game = {
 		-- Money system
 		money = PLAYER_CONFIG.starting_money,
 		-- Weapon inventory
-		weapons = {},         -- List of owned weapon keys (e.g., {"hammer", "pistol"})
+		weapons = {"hammer"}, -- Start with hammer
 		ammo = {},            -- Ammo counts by weapon key (e.g., {pistol = 30})
-		equipped_index = 0,   -- 0 = no weapon, 1+ = index into weapons
+		equipped_index = 1,   -- Start with hammer equipped
 		is_attacking = false,
 		attack_timer = 0,
 		attack_angle = 0,     -- For melee swing rotation
@@ -271,8 +271,9 @@ function handle_player_death()
 
 	printh("[DEATH] player_dead=true, death_sequence_active=true, death_timer=" .. death_timer)
 
-	-- Lose half money
-	game.player.money = flr(game.player.money / 2)
+	sfx(SFX.death_or_fail)  -- death sound
+
+	-- No money loss from dying (removed to reduce punishment)
 
 	-- No popularity loss from dying (player shouldn't be punished twice)
 
@@ -1899,6 +1900,7 @@ end
 -- Start dialog with a fan
 function start_dialog(npc, fan_data)
 	dialog.active = true
+	sfx(SFX.dialog_open)
 	dialog.npc = npc
 	dialog.fan_data = fan_data
 	dialog.selected = 1
@@ -2051,10 +2053,15 @@ function select_dialog_option()
 	local opt = dialog.options[dialog.selected]
 	if not opt then return end
 
+	sfx(SFX.selection)
+
 	if opt.action == "cancel" then
 		-- Clear dialog flag on NPC
 		if dialog.npc then dialog.npc.in_dialog = false end
 		dialog.active = false
+		sfx(SFX.dialog_close)
+		-- Set cooldown to prevent immediate re-open
+		dialog.close_cooldown = time() + 0.3
 		return
 	end
 
@@ -2388,6 +2395,7 @@ function select_dialog_option()
 				fan_data.love = PLAYER_CONFIG.love_meter_max
 				-- Add to lovers list for minimap
 				add(lovers, fan_data.npc)
+				sfx(SFX.new_lover)
 				-- Track for speed dating quest
 				track_speed_dating_lover()
 				dialog.phase = "result"
@@ -2512,8 +2520,8 @@ function update_dialog()
 		if dialog.selected > #dialog.options then dialog.selected = 1 end
 	end
 
-	-- Select with O/Z key or E key (use input_utils for E to share state with check_fan_interaction)
-	if btnp(4) or input_utils.key_pressed("e") then
+	-- Select with O/Z key or E key (use input_utils for proper single-press detection)
+	if input_utils.key_pressed("z") or input_utils.key_pressed("e") then
 		select_dialog_option()
 	end
 

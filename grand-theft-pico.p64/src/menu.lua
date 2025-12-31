@@ -659,6 +659,7 @@ function update_menu()
 end
 
 function handle_menu_selection(option_id)
+	sfx(SFX.selection)
 	if option_id == "continue" then
 		load_game()
 		init_game_world()
@@ -865,9 +866,9 @@ function reset_game_state()
 	p.armor = 0
 	p.money = PLAYER_CONFIG.starting_money
 	p.popularity = PLAYER_CONFIG.starting_popularity
-	p.weapons = {}
+	p.weapons = {"hammer"}  -- Start with hammer
 	p.ammo = {}
-	p.equipped_index = 0
+	p.equipped_index = 1    -- Hammer equipped by default
 
 	-- Reset mission state
 	mission.current_quest = nil

@@ -228,6 +228,7 @@ function fire_minion_bullets(m)
 		}
 		add(alien_minion_bullets, bullet)
 	end
+	sfx(SFX.bullet_shot)
 end
 
 -- ============================================

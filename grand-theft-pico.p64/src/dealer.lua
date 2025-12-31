@@ -268,6 +268,7 @@ function fire_dealer_bullet(dealer)
 	}
 
 	add(projectiles, proj)
+	sfx(SFX.bullet_shot)
 end
 
 -- Update dealer animation
@@ -618,6 +619,7 @@ function try_purchase(item)
 			p.armor = min(pcfg.max_armor, p.armor + pcfg.armor_per_purchase)
 			shop.message = "Armor purchased!"
 			shop.message_timer = time() + 1.5
+			sfx(SFX.selection)  -- purchase sound
 		else
 			shop.message = "Not enough money!"
 			shop.message_timer = time() + 1.5
@@ -634,6 +636,7 @@ function try_purchase(item)
 				add_ammo(item.key, item.ammo_count * shop.ammo_quantity)
 				shop.message = "Bought ammo!"
 				shop.message_timer = time() + 1.5
+				sfx(SFX.selection)  -- purchase sound
 			else
 				shop.message = "Not enough money!"
 				shop.message_timer = time() + 1.5
@@ -650,6 +653,7 @@ function try_purchase(item)
 			item.owned = true
 			shop.message = "Purchased " .. item.name .. "!"
 			shop.message_timer = time() + 1.5
+			sfx(SFX.selection)  -- purchase sound
 		else
 			shop.message = "Not enough money!"
 			shop.message_timer = time() + 1.5

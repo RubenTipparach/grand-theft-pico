@@ -1803,6 +1803,25 @@ INTRO_CONFIG = {
 }
 
 -- ============================================
+-- SOUND EFFECTS CONFIG
+-- ============================================
+SFX = {
+	dialog_open = 16,
+	vehicle_collision = 17,
+	dialog_close = 18,
+	selection = 19,        -- menu, dialog, shop selection/purchase
+	bullet_shot = 20,
+	melee_attack = 21,
+	explosion = 22,        -- big explosion (car blow up)
+	mission_complete = 23,
+	npc_fleeing = 24,
+	new_fan = 25,
+	new_lover = 26,
+	death_or_fail = 27,    -- player death or mission failure
+	player_walk = 28,      -- player footstep sound
+}
+
+-- ============================================
 -- MUSIC CONFIG
 -- ============================================
 MUSIC_CONFIG = {
@@ -1824,6 +1843,12 @@ MUSIC_CONFIG = {
 	-- Gameplay music (able song)
 	playing = {
 		sfx_file = "sfx/music/able_song.sfx",
+		pattern = 0,
+	},
+
+	-- Ending/epilogue music (pastoral theme)
+	ending = {
+		sfx_file = "sfx/music/2_pastoral.sfx",
 		pattern = 0,
 	},
 

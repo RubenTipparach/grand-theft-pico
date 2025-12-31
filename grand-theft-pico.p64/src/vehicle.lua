@@ -1162,6 +1162,7 @@ function update_player_vehicle(vehicle, dt)
 					vehicle.last_collision_time = now
 					-- Spawn collision effect
 					add(collision_effects, { x = new_x, y = new_y, end_time = now + 0.5 })
+					sfx(SFX.vehicle_collision)
 					-- Track bomb delivery hit (if bomb car)
 					if vehicle.is_bomb_car and mission and mission.current_quest == "bomb_delivery" then
 						track_bomb_delivery_hit(vehicle)
@@ -1217,6 +1218,7 @@ function check_vehicle_collisions(visible_vehicles)
 								local cy = (v1.y + v2.y) / 2
 								add(collision_effects, { x = cx, y = cy, end_time = now + 0.5 })
 								effect_spawned = true
+								sfx(SFX.vehicle_collision)
 								-- Lose popularity for crashing (but not when hitting racer AI or during car_wrecker quest)
 								if not v1.is_racer and not v2.is_racer and mission.current_quest ~= "car_wrecker" then
 									change_popularity(-PLAYER_CONFIG.popularity_loss_crash)
@@ -1330,6 +1332,7 @@ function update_vehicle_state(vehicle, dt)
 		vehicle.state = "exploding"
 		vehicle.explosion_frame = 1
 		vehicle.explosion_timer = now
+		sfx(SFX.explosion)
 
 		-- Track car wreck for car_wrecker quest (only count non-player vehicles)
 		if not vehicle.is_player_vehicle then
