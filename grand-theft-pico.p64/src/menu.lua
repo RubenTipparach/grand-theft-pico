@@ -437,21 +437,10 @@ function draw_menu_night_overlay()
 	-- Fill with darken color
 	cls(darken_color)
 
-	-- Calculate symmetric chicken positions
-	local chicken_scale = cfg.chicken_scale or 2.0
-	local scaled_chicken_size = cfg.chicken_size * chicken_scale
-	local chicken_margin = scaled_chicken_size / 2 + 20  -- distance from edge
-	local chicken_offset_from_center = SCREEN_W / 2 - chicken_margin  -- symmetric offset
-
-	-- Punch out light for right chicken
-	local chicken_x = SCREEN_W / 2 + chicken_offset_from_center
+	-- Center chicken light
+	local chicken_x = SCREEN_W / 2
 	local chicken_y = cfg.chicken_y + menu.chicken_y_offset + (cfg.chicken_offset_y or 0)
 	circfill(chicken_x, chicken_y, chicken_light_radius, 0)
-
-	-- Punch out light for left chicken (symmetric, independent bob)
-	local chicken2_x = SCREEN_W / 2 - chicken_offset_from_center
-	local chicken2_y = cfg.chicken_y + menu.chicken2_y_offset + (cfg.chicken2_y_offset or 10)
-	circfill(chicken2_x, chicken2_y, chicken_light_radius, 0)
 
 	-- Punch out lights for street lamps
 	local lamp_spacing = cfg.lamp_spacing or 150
@@ -492,8 +481,6 @@ function draw_menu_chicken()
 
 	-- Update bobbing (main chicken)
 	menu.chicken_y_offset = sin(now * cfg.bob_speed) * cfg.bob_amount
-	-- Update bobbing for second chicken (different rate - 0.7x speed for variety)
-	menu.chicken2_y_offset = sin(now * cfg.bob_speed * 0.7) * cfg.bob_amount
 
 	-- Update thruster animation
 	if now >= menu.thruster_timer + cfg.thruster_animation_speed then
@@ -504,19 +491,15 @@ function draw_menu_chicken()
 	-- Update pulsation (oscillates between 0.8 and 1.0)
 	menu.thruster_scale_pulse = sin(now * cfg.thruster_pulse_speed) * cfg.thruster_pulse_amount
 
-	-- Calculate symmetric chicken positions
 	local chicken_scale = cfg.chicken_scale or 2.0
 	local scaled_chicken_size = cfg.chicken_size * chicken_scale
-	local chicken_margin = scaled_chicken_size / 2 + 20  -- distance from edge
-	local chicken_offset_from_center = SCREEN_W / 2 - chicken_margin  -- symmetric offset
 
-	-- Right chicken position
-	local chicken_x = SCREEN_W / 2 + chicken_offset_from_center
+	-- Center chicken position
+	local chicken_x = SCREEN_W / 2
 	local chicken_y = cfg.chicken_y + menu.chicken_y_offset + (cfg.chicken_offset_y or 0)
 
 	-- Get sprites
 	local thruster_sprite_id = cfg.thruster_sprites[menu.thruster_frame + 1]
-	local chicken_spr = get_spr(cfg.chicken_sprite)
 
 	-- Calculate thruster scale with pulsation (range 0.8 to 1.0)
 	local thruster_scale_x = cfg.thruster_base_scale_x * chicken_scale
@@ -524,36 +507,31 @@ function draw_menu_chicken()
 
 	-- RENDER ORDER: Thrusters FIRST, then chicken on top
 
-	-- Right thruster position (below scaled chicken) with local offset
+	-- Thruster position (below scaled chicken) with local offset
 	local thruster_cx = chicken_x + (cfg.thruster_offset_x or 0)
 	local thruster_cy = chicken_y + scaled_chicken_size / 2 - 4 * chicken_scale + (cfg.thruster_offset_y or 0)
 
-	-- Draw right thruster using rspr (scaled, flipped vertically)
+	-- Draw thruster using rspr (scaled, flipped vertically)
 	if cfg.thruster_flip_y then
 		rspr(thruster_sprite_id, thruster_cx, thruster_cy, thruster_scale_x, thruster_scale_y, 0.5, true)
 	else
 		rspr(thruster_sprite_id, thruster_cx, thruster_cy, thruster_scale_x, thruster_scale_y, 0, false)
 	end
 
-	-- Right chicken spaceship using rspr for proper quad scaling
+	-- Chicken spaceship using rspr for proper quad scaling
 	rspr(cfg.chicken_sprite, chicken_x, chicken_y, chicken_scale, chicken_scale, 0, false)
 
-	-- === LEFT CHICKEN (mirrored, symmetric from center) ===
-	local chicken2_x = SCREEN_W / 2 - chicken_offset_from_center  -- symmetric left position
-	local chicken2_y = cfg.chicken_y + menu.chicken2_y_offset + (cfg.chicken2_y_offset or 10)  -- independent bob
-
-	-- Left thruster (mirrored - flip the x offset for mirror effect)
-	local thruster2_cx = chicken2_x - (cfg.thruster_offset_x or 0)  -- mirror x offset
-	local thruster2_cy = chicken2_y + scaled_chicken_size / 2 - 4 * chicken_scale + (cfg.thruster_offset_y or 0)
-
-	if cfg.thruster_flip_y then
-		rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0.5, true)
-	else
-		rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0, false)
-	end
-
-	-- Second chicken spaceship (mirrored with flip_x = true)
-	rspr(cfg.chicken_sprite, chicken2_x, chicken2_y, chicken_scale, chicken_scale, 0, true)
+	-- === LEFT CHICKEN (commented out) ===
+	-- local chicken2_x = SCREEN_W / 2 - chicken_offset_from_center  -- symmetric left position
+	-- local chicken2_y = cfg.chicken_y + menu.chicken2_y_offset + (cfg.chicken2_y_offset or 10)  -- independent bob
+	-- local thruster2_cx = chicken2_x - (cfg.thruster_offset_x or 0)  -- mirror x offset
+	-- local thruster2_cy = chicken2_y + scaled_chicken_size / 2 - 4 * chicken_scale + (cfg.thruster_offset_y or 0)
+	-- if cfg.thruster_flip_y then
+	-- 	rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0.5, true)
+	-- else
+	-- 	rspr(thruster_sprite_id, thruster2_cx, thruster2_cy, thruster_scale_x, thruster_scale_y, 0, false)
+	-- end
+	-- rspr(cfg.chicken_sprite, chicken2_x, chicken2_y, chicken_scale, chicken_scale, 0, true)
 end
 
 function draw_menu_title()
