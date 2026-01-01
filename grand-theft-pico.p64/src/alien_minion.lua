@@ -91,8 +91,8 @@ function update_alien_minions()
 	local mcfg = MOTHERSHIP_CONFIG
 	local now = time()
 
-	-- Check if we need to spawn more minions
-	if #alien_minions < mcfg.max_minions then
+	-- Check if we need to spawn more minions (don't spawn if mothership is dying or dead)
+	if #alien_minions < mcfg.max_minions and mothership.state ~= "dying" and mothership.state ~= "dead" then
 		if now >= last_minion_spawn_time + mcfg.minion_respawn_delay then
 			spawn_alien_minion()
 			last_minion_spawn_time = now
@@ -428,6 +428,27 @@ function draw_alien_minion_bullets()
 			sspr(sprite, 0, 0, 16, 16, sx - 8, sy - 8, 16, 16)
 		end
 	end
+end
+
+-- ============================================
+-- EXPLODE ALL MINIONS
+-- ============================================
+
+function explode_all_alien_minions()
+	-- Explode each minion with an effect
+	for _, m in ipairs(alien_minions) do
+		if m.state ~= "dead" then
+			-- Add explosion effect at each minion
+			add_collision_effect(m.x, m.y, 0.6)
+		end
+	end
+
+	-- Clear all minions and bullets
+	alien_minions = {}
+	alien_minion_bullets = {}
+	last_minion_spawn_time = 0
+
+	printh("All alien minions exploded with mothership!")
 end
 
 -- ============================================

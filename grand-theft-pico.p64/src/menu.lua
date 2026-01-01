@@ -827,8 +827,64 @@ function load_game()
 	-- Store companion count to restore after world init
 	menu.saved_companion_count = data.companion_count or 0
 
+	-- Infer completed quest flags based on quest progression
+	-- This ensures compatibility with old saves that don't have these flags
+	infer_quest_completion_flags()
+
 	printh("Game loaded successfully")
 	return true
+end
+
+-- Infer quest completion flags based on current quest position
+-- This ensures old saves without these flags still work properly
+function infer_quest_completion_flags()
+	local current = mission.current_quest
+	if not current then return end
+
+	-- Get the quest chain order
+	local quest_chain = QUEST_CONFIG.quest_chain
+	local current_index = 0
+
+	-- Find current quest position in chain
+	for i, quest in ipairs(quest_chain) do
+		if quest == current then
+			current_index = i
+			break
+		end
+	end
+
+	-- If current quest is find_missions, player has completed everything
+	if current == "find_missions" then
+		current_index = #quest_chain + 1
+	end
+
+	-- Check if protect_city (fox hunt) was completed
+	-- protect_city is at index 2 in quest_chain
+	local protect_city_index = 0
+	for i, quest in ipairs(quest_chain) do
+		if quest == "protect_city" then
+			protect_city_index = i
+			break
+		end
+	end
+	if current_index > protect_city_index then
+		mission.fox_hunt_completed_once = true
+		printh("Inferred fox_hunt_completed_once = true (past protect_city)")
+	end
+
+	-- Check if mega_race was completed
+	-- mega_race is at index 12 in quest_chain
+	local mega_race_index = 0
+	for i, quest in ipairs(quest_chain) do
+		if quest == "mega_race" then
+			mega_race_index = i
+			break
+		end
+	end
+	if current_index > mega_race_index then
+		mission.race_completed_once = true
+		printh("Inferred race_completed_once = true (past mega_race)")
+	end
 end
 
 function restore_companions()

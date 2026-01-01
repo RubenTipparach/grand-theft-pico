@@ -332,6 +332,11 @@ function update_mothership_death()
 		end
 		add_collision_effect(visual_x, visual_y, 1.5)
 
+		-- Explode all alien minions when mothership dies
+		if explode_all_alien_minions then
+			explode_all_alien_minions()
+		end
+
 		mothership.state = "dead"
 		mothership_dying = false
 

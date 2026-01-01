@@ -1473,6 +1473,12 @@ function init_game_world()
 		printh("Resuming quest: " .. mission.current_quest)
 	end
 
+	-- Infer quest completion flags based on current quest position
+	-- This ensures replay missions are available if player has progressed past them
+	if infer_quest_completion_flags then
+		infer_quest_completion_flags()
+	end
+
 	-- Enable profiler (detailed=true, cpu=true)
 	profile.enabled(true, true)
 
@@ -2065,12 +2071,28 @@ function start_dialog(npc, fan_data)
 		elseif mission.current_quest == "talk_to_companion_9" and not mission.talked_to_companion_9 then
 			add(dialog.options, { text = "What's new?", action = "offer_companion_9" })
 		end
-		-- Race replay option (available after completing mega_race once, only when no main quest active)
-		-- Only show when current quest is find_missions (all main quests complete) or nil
-		local can_race = mission.race_completed_once and
-			(mission.current_quest == "find_missions" or mission.current_quest == nil)
+		-- Race replay option (available after completing mega_race once)
+		-- Show during find_missions, talk_to_companion quests, or nil
+		local is_idle_quest = mission.current_quest == "find_missions" or
+			mission.current_quest == nil or
+			(mission.current_quest and sub(mission.current_quest, 1, 18) == "talk_to_companion_")
+
+		-- Debug logging for replay options
+		printh("[DIALOG] Opened with companion. current_quest=" .. tostring(mission.current_quest))
+		printh("[DIALOG] is_idle_quest=" .. tostring(is_idle_quest))
+		printh("[DIALOG] race_completed_once=" .. tostring(mission.race_completed_once))
+		printh("[DIALOG] fox_hunt_completed_once=" .. tostring(mission.fox_hunt_completed_once))
+
+		local can_race = mission.race_completed_once and is_idle_quest
 		if can_race then
 			add(dialog.options, { text = "Let's race again!", action = "start_race" })
+			printh("[DIALOG] Added race replay option")
+		end
+		-- Fox hunt replay option (available after completing protect_city once)
+		local can_fox_hunt = mission.fox_hunt_completed_once and is_idle_quest
+		if can_fox_hunt then
+			add(dialog.options, { text = "Let's hunt foxes!", action = "start_fox_hunt" })
+			printh("[DIALOG] Added fox hunt replay option")
 		end
 		-- Retry car wrecker if failed
 		if mission.current_quest == "car_wrecker" and mission.wrecker_failed then
@@ -2470,6 +2492,17 @@ function select_dialog_option()
 		dialog.result_start_time = time()
 		-- Start the race without changing quest chain
 		start_race_replay()
+		return
+	end
+
+	-- Start fox hunt replay (after completing protect_city once)
+	if opt.action == "start_fox_hunt" then
+		dialog.phase = "result"
+		dialog.result_text = "More foxes? They're everywhere! Go get 'em!"
+		dialog.mission_dialog = true
+		dialog.result_start_time = time()
+		-- Start the fox hunt without changing quest chain
+		start_fox_hunt_replay()
 		return
 	end
 

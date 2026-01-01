@@ -235,6 +235,9 @@ end
 
 -- Update all foxes
 function update_foxes()
+	-- Check if fox hunt replay needs to finish
+	check_fox_hunt_replay_finish()
+
 	if not foxes_spawned then return end
 
 	local now = time()
@@ -483,4 +486,65 @@ function draw_fox_defeated_message()
 	local name_w = print(name, 0, -100)
 	local name_x = (SCREEN_W - name_w) / 2
 	print_shadow(name, name_x, text_y + 12, 33)  -- white
+end
+
+-- ============================================
+-- FOX HUNT REPLAY
+-- ============================================
+
+-- Clean up all foxes (for replay or quest reset)
+function cleanup_foxes()
+	foxes = {}
+	foxes_spawned = false
+	printh("Cleaned up foxes")
+end
+
+-- Start a fox hunt replay (called from companion dialog)
+function start_fox_hunt_replay()
+	-- Clean up any existing foxes first
+	cleanup_foxes()
+
+	-- Store current quest to restore later
+	mission.pre_fox_hunt_quest = mission.current_quest
+	mission.fox_hunt_restore_timer = nil
+
+	-- Set quest to protect_city
+	mission.current_quest = "protect_city"
+	mission.foxes_killed = 0
+	mission.has_weapon = true  -- assume player has weapon for replay
+
+	-- Spawn fresh foxes
+	spawn_foxes()
+
+	printh("Fox hunt replay started, will restore quest: " .. tostring(mission.pre_fox_hunt_quest))
+end
+
+-- Finish fox hunt replay and restore previous quest
+function finish_fox_hunt_replay()
+	printh("Fox hunt replay finished, restoring quest: " .. tostring(mission.pre_fox_hunt_quest))
+
+	-- Clean up foxes
+	cleanup_foxes()
+
+	-- Restore previous quest
+	if mission.pre_fox_hunt_quest then
+		mission.current_quest = mission.pre_fox_hunt_quest
+	else
+		mission.current_quest = "find_missions"
+	end
+
+	-- Clear replay state
+	mission.pre_fox_hunt_quest = nil
+	mission.fox_hunt_restore_timer = nil
+	mission.foxes_killed = 0
+	mission.total_foxes = 0
+
+	printh("Restored quest to: " .. tostring(mission.current_quest))
+end
+
+-- Check if fox hunt replay needs to finish (called from update_foxes)
+function check_fox_hunt_replay_finish()
+	if mission.fox_hunt_restore_timer and time() >= mission.fox_hunt_restore_timer then
+		finish_fox_hunt_replay()
+	end
 end

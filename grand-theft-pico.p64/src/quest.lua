@@ -208,6 +208,8 @@ mission = {
 	has_weapon = false,          -- objective 1: bought a weapon
 	foxes_killed = 0,            -- objective 2: kill all foxes
 	total_foxes = 0,             -- total foxes spawned
+	fox_hunt_completed_once = false,  -- has player completed fox hunt? (enables replay)
+	pre_fox_hunt_quest = nil,    -- quest to restore after fox hunt replay
 
 	-- Quest 2: Make Friends
 	fans_at_quest_start = 0,     -- fans when quest started
@@ -396,8 +398,14 @@ function check_quest_completion()
 		local foxes_done = mission.foxes_killed >= mission.total_foxes and mission.total_foxes > 0
 
 		-- Quest complete when both objectives done
-		if mission.has_weapon and foxes_done then
+		-- Don't complete if this is a replay (pre_fox_hunt_quest is set)
+		if mission.has_weapon and foxes_done and not mission.pre_fox_hunt_quest then
 			complete_current_quest()
+		end
+		-- Handle replay completion (only set timer once)
+		if mission.has_weapon and foxes_done and mission.pre_fox_hunt_quest and not mission.fox_hunt_restore_timer then
+			mission.fox_hunt_restore_timer = time() + 2  -- restore quest after 2 seconds
+			printh("Fox hunt replay complete! Restoring quest in 2 seconds...")
 		end
 
 	elseif mission.current_quest == "make_friends" then
@@ -555,6 +563,10 @@ function complete_current_quest()
 		-- Fox mission rewards popularity
 		change_popularity(QUEST_CONFIG.protect_city.popularity_reward)
 		printh("Rewarded " .. QUEST_CONFIG.protect_city.popularity_reward .. " popularity for completing fox mission!")
+		-- Mark fox hunt as completed once (enables replay) - but only if not a replay
+		if not mission.pre_fox_hunt_quest then
+			mission.fox_hunt_completed_once = true
+		end
 	end
 
 	printh("Quest complete: " .. quest_name)
