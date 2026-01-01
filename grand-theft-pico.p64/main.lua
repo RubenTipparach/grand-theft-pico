@@ -2600,13 +2600,13 @@ function update_dialog()
 		-- For non-mission dialogs, X also closes or timer auto-closes
 		local should_close = false
 		if dialog.mission_dialog then
-			-- Mission dialogs require X to close (with small delay to avoid instant close)
+			-- Mission dialogs require E or X to close (with small delay to avoid instant close)
 			if dialog.result_start_time and time() > dialog.result_start_time + 0.2 then
-				if input_utils.key_pressed("x") then
+				if input_utils.key_pressed("e") or input_utils.key_pressed("x") then
 					should_close = true
 				end
 			end
-		elseif btnp(5) then
+		elseif input_utils.key_pressed("x") then
 			-- Non-mission dialogs: X to skip
 			should_close = true
 		else
@@ -2633,11 +2633,11 @@ function update_dialog()
 		return
 	end
 
-	-- Navigate options with up/down
-	if btnp(2) then  -- up
+	-- Navigate options with up/down (use key_pressed_repeat for instant response at any framerate)
+	if input_utils.key_pressed_repeat("up") then
 		dialog.selected = dialog.selected - 1
 		if dialog.selected < 1 then dialog.selected = #dialog.options end
-	elseif btnp(3) then  -- down
+	elseif input_utils.key_pressed_repeat("down") then
 		dialog.selected = dialog.selected + 1
 		if dialog.selected > #dialog.options then dialog.selected = 1 end
 	end
@@ -2647,8 +2647,8 @@ function update_dialog()
 		select_dialog_option()
 	end
 
-	-- Cancel with X button
-	if btnp(5) then
+	-- Cancel with X button (use key_pressed for instant response at any framerate)
+	if input_utils.key_pressed("x") then
 		if dialog.npc then dialog.npc.in_dialog = false end
 		dialog.active = false
 		dialog.close_cooldown = time() + 0.1  -- prevent weapon fire for 0.1s
